@@ -1,0 +1,250 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../features/auth/bloc/auth_bloc.dart';
+import '../../../features/auth/bloc/auth_state.dart';
+import '../../../core/models/user_model.dart';
+import '../../../shared/widgets/app_drawer.dart';
+
+class MeseroDashboard extends StatelessWidget {
+  const MeseroDashboard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        final user = state is AuthAuthenticated ? state.user : null;
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('Panel Mesero'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {},
+              ),
+            ],
+          ),
+          drawer: user != null ? AppDrawer(user: user) : null,
+          body: _MeseroBody(user: user),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => context.go('/mesero/mesas'),
+            icon: const Icon(Icons.table_restaurant),
+            label: const Text('Ver Mesas', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MeseroBody extends StatelessWidget {
+  final UserModel? user;
+  const _MeseroBody({this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildGreeting(context),
+          const SizedBox(height: 24),
+          _buildQuickActions(context),
+          const SizedBox(height: 24),
+          _buildActiveOrdersSummary(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGreeting(BuildContext context) {
+    final hora = DateTime.now().hour;
+    final saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryVariant],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$saludo,',
+                  style: const TextStyle(color: Colors.white70, fontSize: 14, fontFamily: 'Poppins'),
+                ),
+                Text(
+                  user?.nombre ?? 'Mesero',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Listo para tomar órdenes',
+                  style: TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Poppins'),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.room_service_outlined, color: Colors.white, size: 32),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Acciones rápidas', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.table_restaurant_outlined,
+                label: 'Mesas',
+                subtitle: 'Ver estado',
+                color: AppColors.primary,
+                onTap: () => context.go('/mesero/mesas'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.add_shopping_cart_outlined,
+                label: 'Nueva Orden',
+                subtitle: 'Para llevar',
+                color: AppColors.earth2,
+                onTap: () => context.go('/mesero/mesas'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActiveOrdersSummary(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Mis órdenes activas', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            TextButton(
+              onPressed: () => context.go('/mesero/mesas'),
+              child: const Text('Ver todo'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildEmptyOrders(context),
+      ],
+    );
+  }
+
+  Widget _buildEmptyOrders(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.textHint),
+            const SizedBox(height: 12),
+            Text(
+              'No hay órdenes activas',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ve a Mesas para comenzar',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionCard({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(color: const Color(0x14000000), blurRadius: 8, offset: Offset(0, 2))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 12),
+            Text(label, style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
+            Text(subtitle, style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
