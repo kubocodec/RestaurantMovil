@@ -97,8 +97,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   double get _subtotalSeleccionado {
-    if (_orden == null) return 0;
-    return _orden!.detallesNoFacturados
+    final orden = _orden;
+    if (orden == null) return 0;
+    return orden.detallesNoFacturados
         .where((d) => _itemsSeleccionados.contains(d.ordenDetalleId))
         .fold(0.0, (sum, d) => sum + d.subtotal);
   }
@@ -122,23 +123,28 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       return;
     }
 
+    final orden = _orden;
+    final aperturaCierreCajaId = _aperturaCierreCajaId;
+    final metodoPagoId = _selectedMetodoPagoId;
+    if (orden == null || aperturaCierreCajaId == null || metodoPagoId == null) return;
+
     setState(() => _emitiendo = true);
     try {
-      final detalles = _orden!.detallesNoFacturados
+      final detalles = orden.detallesNoFacturados
           .where((d) => _itemsSeleccionados.contains(d.ordenDetalleId))
           .map((d) => {'ordenDetalleId': d.ordenDetalleId, 'cantidad': d.cantidad})
           .toList();
 
       final factura = await _factRepo.emitirFactura(
         ordenId: widget.ordenId,
-        aperturaCierreCajaId: _aperturaCierreCajaId!,
+        aperturaCierreCajaId: aperturaCierreCajaId,
         clienteId: _clienteEncontrado?.clienteId,
         detalles: detalles,
       );
 
       await _factRepo.registrarPago(
         facturaVentaId: factura.facturaVentaId,
-        metodoPagoId: _selectedMetodoPagoId!,
+        metodoPagoId: metodoPagoId,
         monto: factura.total,
         referencia: _refCtrl.text.trim().isNotEmpty ? _refCtrl.text.trim() : null,
       );

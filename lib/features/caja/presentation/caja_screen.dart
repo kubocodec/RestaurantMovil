@@ -54,7 +54,6 @@ class _CajaScreenState extends State<CajaScreen> {
   }
 
   Future<void> _abrirCaja() async {
-    // Si por algún motivo _caja aún no cargó, intentar recargar primero
     if (_caja == null) {
       await _loadCaja();
       if (_caja == null) {
@@ -67,6 +66,8 @@ class _CajaScreenState extends State<CajaScreen> {
         return;
       }
     }
+    final caja = _caja;
+    if (caja == null) return;
     final ctrl = TextEditingController(text: '50.00');
     final confirm = await showDialog<bool>(
       context: context,
@@ -93,7 +94,7 @@ class _CajaScreenState extends State<CajaScreen> {
     if (confirm != true) return;
     try {
       await _repo.abrirCaja(
-        cajaId: _caja!.cajaId,
+        cajaId: caja.cajaId,
         montoInicial: double.tryParse(ctrl.text) ?? 50.0,
       );
       if (mounted) {
@@ -112,7 +113,8 @@ class _CajaScreenState extends State<CajaScreen> {
   }
 
   Future<void> _cerrarCaja() async {
-    if (_apertura == null) return;
+    final apertura = _apertura;
+    if (apertura == null) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -131,8 +133,8 @@ class _CajaScreenState extends State<CajaScreen> {
     if (confirm != true) return;
     try {
       await _repo.cerrarCaja(
-        aperturaCierreCajaId: _apertura!.aperturaCierreCajaId,
-        montoFinal: _apertura!.montoInicial,
+        aperturaCierreCajaId: apertura.aperturaCierreCajaId,
+        montoFinal: apertura.montoInicial,
         observaciones: 'Cierre de turno',
       );
       if (mounted) {
@@ -151,7 +153,8 @@ class _CajaScreenState extends State<CajaScreen> {
   }
 
   Future<void> _registrarMovimiento(String tipo) async {
-    if (_apertura == null) return;
+    final apertura = _apertura;
+    if (apertura == null) return;
     final conceptoCtrl = TextEditingController();
     final montoCtrl    = TextEditingController();
 
@@ -181,7 +184,7 @@ class _CajaScreenState extends State<CajaScreen> {
               Navigator.pop(ctx);
               try {
                 await _repo.registrarMovimiento(
-                  aperturaCierreCajaId: _apertura!.aperturaCierreCajaId,
+                  aperturaCierreCajaId: apertura.aperturaCierreCajaId,
                   tipo: tipo,
                   monto: double.tryParse(montoCtrl.text) ?? 0.0,
                   concepto: conceptoCtrl.text.trim(),
@@ -243,7 +246,9 @@ class _CajaScreenState extends State<CajaScreen> {
   }
 
   Widget _buildStatusCard() {
-    final isAbierta = _apertura?.isAbierta == true;
+    final apertura = _apertura;
+    final caja = _caja;
+    final isAbierta = apertura?.isAbierta == true;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -281,26 +286,26 @@ class _CajaScreenState extends State<CajaScreen> {
                       isAbierta ? 'Caja ABIERTA' : 'Caja CERRADA',
                       style: const TextStyle(color: Colors.white, fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 18),
                     ),
-                    if (_apertura != null)
+                    if (apertura != null)
                       Text(
-                        'Desde: ${DateFormat('HH:mm', 'es').format(_apertura!.fechaApertura)}',
+                        'Desde: ${DateFormat('HH:mm', 'es').format(apertura.fechaApertura)}',
                         style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 12),
                       ),
-                    if (_caja != null)
-                      Text(_caja!.nombre, style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 12)),
+                    if (caja != null)
+                      Text(caja.nombre, style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 12)),
                   ],
                 ),
               ),
             ],
           ),
-          if (_apertura != null) ...[
+          if (apertura != null) ...[
             const SizedBox(height: 16),
             const Divider(color: Colors.white24),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _CajaStatItem(label: 'Monto inicial', value: '\$${_fmt.format(_apertura!.montoInicial)}'),
+                _CajaStatItem(label: 'Monto inicial', value: '\$${_fmt.format(apertura.montoInicial)}'),
               ],
             ),
           ],

@@ -74,7 +74,10 @@ class ApiClient {
       if (error.type == DioExceptionType.connectionError) {
         return 'No se puede conectar al servidor';
       }
+      return 'Error del servidor';
     }
-    return 'Error inesperado';
+    // Show the actual exception message so errors are diagnosable in the UI
+    final msg = error?.toString() ?? 'Error inesperado';
+    return msg.startsWith('Exception: ') ? msg.substring(11) : msg;
   }
 }

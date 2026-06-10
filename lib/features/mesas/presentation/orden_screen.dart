@@ -233,7 +233,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
     return Column(
       children: [
         _buildTipoOrden(),
-        if (_ordenExistente != null) _buildOrdenActivaBanner(),
+        if (_ordenExistente != null) _buildOrdenActivaBanner(_ordenExistente!),
         Expanded(child: _buildPlatosList()),
       ],
     );
@@ -263,8 +263,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
     );
   }
 
-  Widget _buildOrdenActivaBanner() {
-    final o = _ordenExistente!;
+  Widget _buildOrdenActivaBanner(OrdenModel o) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

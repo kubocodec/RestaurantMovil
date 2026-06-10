@@ -29,8 +29,11 @@ class _SalonesMesasScreenState extends State<SalonesMesasScreen> {
     try {
       setState(() { _loading = true; _error = null; });
       final salones = await _repo.getSalones(widget.sucursalId);
+      if (!mounted) return;
       setState(() { _salones = salones; _loading = false; });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('SalonesMesasScreen._load error: $e\n$st');
+      if (!mounted) return;
       setState(() { _loading = false; _error = ApiClient.parseError(e); });
     }
   }

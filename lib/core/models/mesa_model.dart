@@ -24,7 +24,7 @@ class MesaModel {
     salonId:     j['salonId']?.toString() ?? '',
     nombreSalon: j['nombreSalon']?.toString() ?? '',
     numeroMesa:  j['numeroMesa']?.toString() ?? '',
-    capacidad:   (j['capacidad'] ?? 4) as int,
+    capacidad:   (j['capacidad'] as num?)?.toInt() ?? 4,
     estado:      j['estado']?.toString() ?? 'LIBRE',
     activo:      j['activo'] ?? true,
     tokenSesion: j['tokenSesion']?.toString(),

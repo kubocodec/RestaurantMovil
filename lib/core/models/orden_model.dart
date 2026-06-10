@@ -27,7 +27,7 @@ class DetalleOrdenModel {
     ordenDetalleId: j['ordenDetalleId']?.toString() ?? '',
     platoId:        j['platoId']?.toString() ?? '',
     nombrePlato:    j['nombrePlato']?.toString() ?? '',
-    cantidad:       (j['cantidad'] ?? 1) as int,
+    cantidad:       (j['cantidad'] as num?)?.toInt() ?? 1,
     precioUnitario: _toDouble(j['precioUnitario']),
     subtotal:       _toDouble(j['subtotal']),
     estado:         j['estado']?.toString() ?? 'PENDIENTE',
@@ -80,7 +80,7 @@ class OrdenModel {
     final List detallesRaw = j['detalles'] ?? [];
     return OrdenModel(
       ordenId:       j['ordenId']?.toString() ?? '',
-      numeroOrden:   (j['numeroOrden'] ?? 0) as int,
+      numeroOrden:   (j['numeroOrden'] as num?)?.toInt() ?? 0,
       mesaId:        j['mesaId']?.toString() ?? '',
       numeroMesa:    j['numeroMesa']?.toString() ?? '',
       sucursalId:    j['sucursalId']?.toString() ?? '',

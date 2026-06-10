@@ -28,8 +28,10 @@ class _TasaIvaScreenState extends State<TasaIvaScreen> {
     try {
       setState(() { _loading = true; _error = null; });
       final data = await _repo.getTasasIva(widget.tenantId);
+      if (!mounted) return;
       setState(() { _tasas = data; _loading = false; });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _loading = false; _error = ApiClient.parseError(e); });
     }
   }

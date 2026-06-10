@@ -68,8 +68,10 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
         tenantId:     _tenantId,
         restaurantId: _restaurantId,
       );
+      if (!mounted) return;
       setState(() { _status = status; _loading = false; });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _loading = false; _error = ApiClient.parseError(e); });
     }
   }
@@ -114,7 +116,8 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
   }
 
   Widget _buildBody() {
-    final s = _status!;
+    final s = _status;
+    if (s == null) return const SizedBox.shrink();
     return RefreshIndicator(
       onRefresh: _loadStatus,
       child: SingleChildScrollView(

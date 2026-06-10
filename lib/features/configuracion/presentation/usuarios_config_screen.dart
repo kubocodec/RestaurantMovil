@@ -32,6 +32,7 @@ class _UsuariosConfigScreenState extends State<UsuariosConfigScreen> {
         _repo.getUsuarios(widget.sucursalId),
         _repo.getRoles(),
       ]);
+      if (!mounted) return;
       setState(() {
         _usuarios = results[0] as List<UsuarioListModel>;
         _roles    = (results[1] as List<RolModel>)
@@ -40,6 +41,7 @@ class _UsuariosConfigScreenState extends State<UsuariosConfigScreen> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _loading = false; _error = ApiClient.parseError(e); });
     }
   }

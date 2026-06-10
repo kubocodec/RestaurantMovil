@@ -15,7 +15,7 @@ class MesasScreen extends StatefulWidget {
   State<MesasScreen> createState() => _MesasScreenState();
 }
 
-class _MesasScreenState extends State<MesasScreen> with SingleTickerProviderStateMixin {
+class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin {
   final _repo = MesasRepository();
   List<SalonModel> _salones = [];
   List<MesaModel> _todasMesas = [];
@@ -41,15 +41,16 @@ class _MesasScreenState extends State<MesasScreen> with SingleTickerProviderStat
       final salones = await _repo.getSalonesBySucursal(sid);
       final mesas   = await _repo.getMesasBySucursal(sid);
       if (!mounted) return;
+      final len = salones.isEmpty ? 1 : salones.length + 1;
+      _tabCtrl.dispose();
+      _tabCtrl = TabController(length: len, vsync: this);
       setState(() {
         _salones    = salones;
         _todasMesas = mesas;
         _loading    = false;
-        final len = salones.isEmpty ? 1 : salones.length + 1;
-        _tabCtrl.dispose();
-        _tabCtrl = TabController(length: len, vsync: this);
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('MesasScreen._load error: $e\n$st');
       if (!mounted) return;
       setState(() { _error = ApiClient.parseError(e); _loading = false; });
     }

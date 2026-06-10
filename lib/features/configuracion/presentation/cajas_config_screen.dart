@@ -28,8 +28,10 @@ class _CajasConfigScreenState extends State<CajasConfigScreen> {
     try {
       setState(() { _loading = true; _error = null; });
       final data = await _repo.getCajas(widget.sucursalId);
+      if (!mounted) return;
       setState(() { _cajas = data; _loading = false; });
     } catch (e) {
+      if (!mounted) return;
       setState(() { _loading = false; _error = ApiClient.parseError(e); });
     }
   }
@@ -250,8 +252,8 @@ class _CajaCard extends StatelessWidget {
                     style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
                 Text('Punto emisión: ${caja.codigoPuntoEmision}',
                     style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
-                if (caja.descripcion != null && caja.descripcion!.isNotEmpty)
-                  Text(caja.descripcion!,
+                if (caja.descripcion?.isNotEmpty ?? false)
+                  Text(caja.descripcion ?? '',
                       style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
               ],
             ),
