@@ -1,8 +1,8 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl = 'http://10.0.2.2:8080'; // Android emulator → localhost
-  // Para dispositivo físico: cambiar a la IP de tu máquina, ej: 'http://192.168.1.100:8080'
+  // Emulador Android: usar 'http://10.0.2.2:8080'
+  static const String baseUrl = 'https://api-restaurante.soprintserver.duckdns.org';
 
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 30);

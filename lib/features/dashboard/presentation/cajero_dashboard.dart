@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
+import '../../../features/caja/data/caja_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/stat_card.dart';
 
@@ -29,30 +30,65 @@ class CajeroDashboard extends StatelessWidget {
   }
 }
 
-class _CajeroBody extends StatelessWidget {
+class _CajeroBody extends StatefulWidget {
   final UserModel? user;
   const _CajeroBody({this.user});
 
   @override
+  State<_CajeroBody> createState() => _CajeroBodyState();
+}
+
+class _CajeroBodyState extends State<_CajeroBody> {
+  final _cajaRepo = CajaRepository();
+  bool? _cajaAbierta; // null = cargando
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCajaStatus();
+  }
+
+  Future<void> _checkCajaStatus() async {
+    final sucursalId = widget.user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) {
+      setState(() => _cajaAbierta = false);
+      return;
+    }
+    try {
+      final cajas = await _cajaRepo.getCajasBySucursal(sucursalId);
+      if (cajas.isEmpty) {
+        setState(() => _cajaAbierta = false);
+        return;
+      }
+      final apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
+      setState(() => _cajaAbierta = apertura?.isAbierta == true);
+    } catch (_) {
+      setState(() => _cajaAbierta = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildGreeting(context),
-          const SizedBox(height: 24),
-          _buildCajaStatus(context),
-          const SizedBox(height: 24),
-          _buildStats(context),
-          const SizedBox(height: 24),
-          _buildActions(context),
-        ],
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildGreeting(),
+            const SizedBox(height: 24),
+            _buildCajaStatus(context),
+            const SizedBox(height: 24),
+            _buildStats(context),
+            const SizedBox(height: 24),
+            _buildActions(context),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildGreeting(BuildContext context) {
+  Widget _buildGreeting() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -77,12 +113,12 @@ class _CajeroBody extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hola, ${user?.nombre ?? 'Cajero'}',
+                  'Hola, ${widget.user?.nombre ?? 'Cajero'}',
                   style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, fontFamily: 'Poppins'),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  user?.sucursalNombre ?? 'Sucursal principal',
+                  widget.user?.sucursalNombre ?? 'Sucursal principal',
                   style: const TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Poppins'),
                 ),
               ],
@@ -95,6 +131,42 @@ class _CajeroBody extends StatelessWidget {
   }
 
   Widget _buildCajaStatus(BuildContext context) {
+    if (_cajaAbierta == null) {
+      return const SizedBox(
+        height: 52,
+        child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+
+    if (_cajaAbierta == true) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.successLight,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.success.withOpacity(0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_outline, color: AppColors.success),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Caja abierta y lista para operar',
+                style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, color: AppColors.success, fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                context.go('/cajero/caja');
+              },
+              child: const Text('Ver caja', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -195,7 +267,7 @@ class _ActionTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.cardBackground,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: const [BoxShadow(color: const Color(0x14000000), blurRadius: 8, offset: Offset(0, 2))],
+          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2))],
         ),
         child: Row(
           children: [
