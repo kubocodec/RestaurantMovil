@@ -26,6 +26,8 @@ class AperturaCajaModel {
   final String estado;
   final double montoInicial;
   final double? montoFinal;
+  final double? montoEsperado;
+  final double? diferencia;
   final DateTime fechaApertura;
   final DateTime? fechaCierre;
 
@@ -36,6 +38,8 @@ class AperturaCajaModel {
     required this.estado,
     required this.montoInicial,
     this.montoFinal,
+    this.montoEsperado,
+    this.diferencia,
     required this.fechaApertura,
     this.fechaCierre,
   });
@@ -47,6 +51,8 @@ class AperturaCajaModel {
     estado:               j['estado']?.toString() ?? 'ABIERTA',
     montoInicial:         _toDouble(j['montoInicial']),
     montoFinal:           j['montoFinal'] != null ? _toDouble(j['montoFinal']) : null,
+    montoEsperado:        j['montoEsperado'] != null ? _toDouble(j['montoEsperado']) : null,
+    diferencia:           j['diferencia'] != null ? _toDouble(j['diferencia']) : null,
     fechaApertura:        DateTime.tryParse(j['fechaApertura']?.toString() ?? '') ?? DateTime.now(),
     fechaCierre:          j['fechaCierre'] != null ? DateTime.tryParse(j['fechaCierre'].toString()) : null,
   );

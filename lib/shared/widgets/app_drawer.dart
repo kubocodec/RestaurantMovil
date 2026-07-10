@@ -150,14 +150,18 @@ class AppDrawer extends StatelessWidget {
         return [
           _MenuItem(Icons.dashboard_outlined, 'Panel principal', '/admin'),
           _MenuItem(Icons.settings_outlined, 'Configuración', '/admin/configuracion'),
+          _MenuItem(Icons.bar_chart_outlined, 'Reportes', '/admin/reportes'),
           _MenuItem(Icons.table_restaurant_outlined, 'Mesas', '/mesero/mesas'),
           _MenuItem(Icons.receipt_long_outlined, 'Órdenes activas', '/mesero'),
+          _MenuItem(Icons.receipt_outlined, 'Facturación', '/cajero/ordenes'),
           _MenuItem(Icons.point_of_sale_outlined, 'Caja', '/cajero/caja'),
         ];
       case UserRole.cajero:
         return [
           _MenuItem(Icons.dashboard_outlined, 'Panel principal', '/cajero'),
           _MenuItem(Icons.point_of_sale_outlined, 'Caja', '/cajero/caja'),
+          _MenuItem(Icons.receipt_long_outlined, 'Facturación', '/cajero/ordenes'),
+          _MenuItem(Icons.table_restaurant_outlined, 'Tomar pedidos', '/mesero/mesas'),
         ];
       case UserRole.mesero:
         return [

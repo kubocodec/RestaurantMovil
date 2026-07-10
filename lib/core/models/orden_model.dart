@@ -9,6 +9,9 @@ class DetalleOrdenModel {
   final String tipoServicio;
   final String? observaciones;
   final bool facturado;
+  final String? impresoraNombre;
+  final String? impresoraIp;
+  final int? impresoraPuerto;
 
   const DetalleOrdenModel({
     required this.ordenDetalleId,
@@ -21,6 +24,9 @@ class DetalleOrdenModel {
     required this.tipoServicio,
     this.observaciones,
     required this.facturado,
+    this.impresoraNombre,
+    this.impresoraIp,
+    this.impresoraPuerto,
   });
 
   factory DetalleOrdenModel.fromJson(Map<String, dynamic> j) => DetalleOrdenModel(
@@ -34,6 +40,9 @@ class DetalleOrdenModel {
     tipoServicio:   j['tipoServicio']?.toString() ?? 'EN_MESA',
     observaciones:  j['observaciones']?.toString(),
     facturado:      j['facturado'] ?? false,
+    impresoraNombre: j['impresoraNombre']?.toString(),
+    impresoraIp:     j['impresoraIp']?.toString(),
+    impresoraPuerto: (j['impresoraPuerto'] as num?)?.toInt(),
   );
 
   bool get isPendiente     => estado == 'PENDIENTE' || estado == 'ENVIADO';

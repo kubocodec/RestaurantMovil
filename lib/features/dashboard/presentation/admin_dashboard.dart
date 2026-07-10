@@ -5,6 +5,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
+import '../../../features/mesas/data/mesas_repository.dart';
+import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../features/reportes/data/reportes_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/stat_card.dart';
 
@@ -32,23 +35,78 @@ class AdminDashboard extends StatelessWidget {
   }
 }
 
-class _AdminBody extends StatelessWidget {
+class _AdminBody extends StatefulWidget {
   final UserModel? user;
   const _AdminBody({this.user});
 
   @override
+  State<_AdminBody> createState() => _AdminBodyState();
+}
+
+class _AdminBodyState extends State<_AdminBody> {
+  final _reportesRepo = ReportesRepository();
+  final _mesasRepo = MesasRepository();
+  final _ordenesRepo = OrdenesRepository();
+
+  UserModel? get user => widget.user;
+
+  double _ventasHoy = 0;
+  int _facturasHoy = 0;
+  int _mesasOcupadas = 0;
+  int _ordenesActivas = 0;
+  bool _cargandoStats = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final sucursalId = user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) {
+      setState(() => _cargandoStats = false);
+      return;
+    }
+    try {
+      final results = await Future.wait([
+        _reportesRepo.getResumenDiario(sucursalId),
+        _mesasRepo.getMesasBySucursal(sucursalId),
+        _ordenesRepo.getOrdenesActivas(sucursalId),
+      ]);
+      if (!mounted) return;
+      final resumen = results[0] as ResumenDiarioModel;
+      final mesas = results[1] as List;
+      final ordenes = results[2] as List;
+      setState(() {
+        _ventasHoy = resumen.totalVentas;
+        _facturasHoy = resumen.totalFacturas;
+        _mesasOcupadas = mesas.where((m) => m.estado == 'OCUPADA').length;
+        _ordenesActivas = ordenes.length;
+        _cargandoStats = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _cargandoStats = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(context),
-          const SizedBox(height: 24),
-          _buildStats(context),
-          const SizedBox(height: 24),
-          _buildModules(context),
-        ],
+    return RefreshIndicator(
+      onRefresh: _loadStats,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context),
+            const SizedBox(height: 24),
+            _buildStats(context),
+            const SizedBox(height: 24),
+            _buildModules(context),
+          ],
+        ),
       ),
     );
   }
@@ -119,11 +177,23 @@ class _AdminBody extends StatelessWidget {
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.25,
-          children: const [
-            StatCard(title: 'Ventas totales', value: '\$0.00', icon: Icons.attach_money, color: AppColors.success),
-            StatCard(title: 'Mesas activas', value: '0', icon: Icons.table_restaurant_outlined, color: AppColors.primary),
-            StatCard(title: 'Órdenes en curso', value: '0', icon: Icons.receipt_outlined, color: AppColors.warning),
-            StatCard(title: 'Facturas emitidas', value: '0', icon: Icons.receipt_long_outlined, color: AppColors.cajeroColor),
+          children: [
+            StatCard(
+              title: 'Ventas totales',
+              value: _cargandoStats ? '...' : '\$${_ventasHoy.toStringAsFixed(2)}',
+              icon: Icons.attach_money, color: AppColors.success),
+            StatCard(
+              title: 'Mesas ocupadas',
+              value: _cargandoStats ? '...' : '$_mesasOcupadas',
+              icon: Icons.table_restaurant_outlined, color: AppColors.primary),
+            StatCard(
+              title: 'Órdenes en curso',
+              value: _cargandoStats ? '...' : '$_ordenesActivas',
+              icon: Icons.receipt_outlined, color: AppColors.warning),
+            StatCard(
+              title: 'Facturas emitidas',
+              value: _cargandoStats ? '...' : '$_facturasHoy',
+              icon: Icons.receipt_long_outlined, color: AppColors.cajeroColor),
           ],
         ),
       ],
@@ -136,7 +206,7 @@ class _AdminBody extends StatelessWidget {
       _Module(Icons.receipt_long_outlined, 'Órdenes', 'Órdenes activas', AppColors.earth2, () => context.go('/mesero/mesas')),
       _Module(Icons.point_of_sale_outlined, 'Caja', 'Aperturas y cierres', AppColors.cajeroColor, () => context.go('/cajero/caja')),
       _Module(Icons.kitchen_outlined, 'Cocina', 'Estado de platos', AppColors.cocineroColor, () => context.go('/cocina')),
-      _Module(Icons.bar_chart_outlined, 'Reportes', 'Estadísticas del día', AppColors.info, () {}),
+      _Module(Icons.bar_chart_outlined, 'Reportes', 'Estadísticas del día', AppColors.info, () => context.go('/admin/reportes')),
       _Module(Icons.settings_outlined, 'Configuración', 'Sucursal y menú', AppColors.textSecondary, () => context.go('/admin/configuracion')),
     ];
 

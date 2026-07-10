@@ -3,6 +3,8 @@ class PlatoModel {
   final String platoId;
   final String nombrePlato;
   final String? imagenPlato;
+  final String categoria;
+  final String subcategoria;
   final double precio;
   final bool disponible;
 
@@ -11,6 +13,8 @@ class PlatoModel {
     required this.platoId,
     required this.nombrePlato,
     this.imagenPlato,
+    this.categoria = '',
+    this.subcategoria = '',
     required this.precio,
     required this.disponible,
   });
@@ -20,6 +24,8 @@ class PlatoModel {
     platoId:         j['platoId']?.toString() ?? '',
     nombrePlato:     j['nombrePlato']?.toString() ?? '',
     imagenPlato:     j['imagenPlato']?.toString(),
+    categoria:       j['categoria']?.toString() ?? '',
+    subcategoria:    j['subcategoria']?.toString() ?? '',
     precio:          _toDouble(j['precio']),
     disponible:      j['disponible'] ?? true,
   );

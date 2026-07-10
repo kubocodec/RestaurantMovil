@@ -21,6 +21,22 @@ class FacturacionRepository {
     }
   }
 
+  // Registrar cliente nuevo (queda vinculado a la sucursal del usuario)
+  Future<ClienteModel> crearCliente({
+    required String nombre,
+    String? cedulaRuc,
+    String? email,
+    String? telefono,
+  }) async {
+    final r = await _dio.post('/api/clientes', data: {
+      'nombre': nombre,
+      if (cedulaRuc != null && cedulaRuc.isNotEmpty) 'cedulaRuc': cedulaRuc,
+      if (email != null && email.isNotEmpty)         'email':     email,
+      if (telefono != null && telefono.isNotEmpty)   'telefono':  telefono,
+    });
+    return ClienteModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   // Emitir factura (requiere aperturaCierreCajaId)
   Future<FacturaModel> emitirFactura({
     required String ordenId,

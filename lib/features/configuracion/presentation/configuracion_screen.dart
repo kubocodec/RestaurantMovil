@@ -12,6 +12,7 @@ import 'salones_mesas_screen.dart';
 import 'menu_config_screen.dart';
 import 'cajas_config_screen.dart';
 import 'usuarios_config_screen.dart';
+import 'impresoras_config_screen.dart';
 
 class ConfiguracionScreen extends StatefulWidget {
   final String? overrideSucursalId;
@@ -173,6 +174,17 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
               done: s.tieneUsuarios,
               color: AppColors.info,
               onTap: () => _goTo(UsuariosConfigScreen(sucursalId: _sucursalId)),
+            ),
+            _buildItem(
+              icon: Icons.print_outlined,
+              label: 'Impresoras de comandas',
+              subtitle: 'Cocina, barra: comandas por categoría',
+              done: true,
+              color: AppColors.earth2,
+              onTap: () => _goTo(ImpresorasConfigScreen(
+                sucursalId:   _sucursalId,
+                restaurantId: _restaurantId,
+              )),
             ),
             const SizedBox(height: 24),
             if (s.isComplete)

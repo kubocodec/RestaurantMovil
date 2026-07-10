@@ -62,6 +62,14 @@ class OrdenesRepository {
     return DetalleOrdenModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  // Paso 3: Enviar todos los ítems pendientes a cocina.
+  // Devuelve los detalles con los datos de su impresora para imprimir comandas.
+  Future<List<DetalleOrdenModel>> enviarACocina(String ordenId) async {
+    final r = await _dio.post('/api/ordenes/$ordenId/enviar-cocina');
+    final List data = r.data['data'] ?? [];
+    return data.map((j) => DetalleOrdenModel.fromJson(j)).toList();
+  }
+
   // Cambiar estado de orden: usa query param ?estado=
   Future<void> cambiarEstadoOrden(String ordenId, String estado) async {
     await _dio.patch('/api/ordenes/$ordenId/estado', queryParameters: {'estado': estado});

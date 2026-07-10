@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/orden_model.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
@@ -43,6 +44,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
   String? _error;
   final List<_CartItem> _carrito = [];
   String _tipoOrden = 'EN_MESA';
+  String? _categoriaFiltro;
 
   @override
   void initState() {
@@ -155,22 +157,23 @@ class _OrdenScreenState extends State<OrdenScreen> {
 
   Future<void> _enviarOrden() async {
     setState(() => _enviando = true);
+    final authState = context.read<AuthBloc>().state;
+    final mesero = authState is AuthAuthenticated ? authState.user.nombre : '';
     try {
-      String ordenId;
+      OrdenModel orden;
       if (_ordenExistente != null) {
-        ordenId = _ordenExistente!.ordenId;
+        orden = _ordenExistente!;
       } else {
-        final orden = await _repo.crearOrden(
+        orden = await _repo.crearOrden(
           mesaId: widget.mesaId,
           tipoOrden: _tipoOrden,
           tipoOrigen: 'MESERO',
         );
-        ordenId = orden.ordenId;
       }
 
       for (final item in _carrito) {
         await _repo.agregarDetalle(
-          ordenId: ordenId,
+          ordenId: orden.ordenId,
           platoId: item.plato.platoId,
           cantidad: item.cantidad,
           tipoServicio: _tipoOrden == 'EN_MESA' ? 'EN_MESA' : 'PARA_LLEVAR',
@@ -178,10 +181,34 @@ class _OrdenScreenState extends State<OrdenScreen> {
         );
       }
 
+      // Marca los ítems como ENVIADO y obtiene su impresora asignada
+      final enviados = await _repo.enviarACocina(orden.ordenId);
+
+      // Imprime las comandas agrupadas por impresora (cocina, barra, etc.)
+      final resultados = await ComandaPrinter.imprimirComandas(
+        mesa: widget.mesaNombre,
+        numeroOrden: orden.numeroOrden,
+        mesero: mesero,
+        detalles: enviados,
+      );
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Orden enviada a cocina!'), backgroundColor: AppColors.success),
-        );
+        final fallidas = resultados.where((r) => !r.ok).toList();
+        if (fallidas.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(resultados.isEmpty
+                ? '¡Orden enviada a cocina!'
+                : '¡Orden enviada! Comandas impresas: ${resultados.map((r) => r.impresora).join(', ')}'),
+            backgroundColor: AppColors.success,
+          ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              'Orden enviada, pero falló la impresión en: ${fallidas.map((r) => r.impresora).join(', ')}. Revisa la impresora.'),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 5),
+          ));
+        }
         context.go('/mesero/mesas');
       }
     } catch (e) {
@@ -234,8 +261,48 @@ class _OrdenScreenState extends State<OrdenScreen> {
       children: [
         _buildTipoOrden(),
         if (_ordenExistente != null) _buildOrdenActivaBanner(_ordenExistente!),
+        _buildCategorias(),
         Expanded(child: _buildPlatosList()),
       ],
+    );
+  }
+
+  List<String> get _categorias =>
+      _platos.map((p) => p.categoria).where((c) => c.isNotEmpty).toSet().toList()..sort();
+
+  Widget _buildCategorias() {
+    final categorias = _categorias;
+    if (categorias.isEmpty) return const SizedBox.shrink();
+    return Container(
+      color: AppColors.cardBackground,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _TipoChip(
+                label: 'Todos',
+                icon: Icons.restaurant_menu_outlined,
+                selected: _categoriaFiltro == null,
+                onTap: () => setState(() => _categoriaFiltro = null),
+              ),
+            ),
+            ...categorias.map((c) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _TipoChip(
+                label: c,
+                icon: Icons.label_outline,
+                selected: _categoriaFiltro == c,
+                onTap: () => setState(() => _categoriaFiltro = c),
+              ),
+            )),
+          ],
+        ),
+      ),
     );
   }
 
@@ -288,7 +355,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
   }
 
   Widget _buildPlatosList() {
-    if (_platos.isEmpty) {
+    final visibles = _categoriaFiltro == null
+        ? _platos
+        : _platos.where((p) => p.categoria == _categoriaFiltro).toList();
+    if (visibles.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -303,12 +373,12 @@ class _OrdenScreenState extends State<OrdenScreen> {
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _platos.length,
+      itemCount: visibles.length,
       itemBuilder: (_, i) => _PlatoTile(
-        plato: _platos[i],
-        cantidad: _inCart(_platos[i]),
-        onAdd: () => _addToCart(_platos[i]),
-        onRemove: () => _removeFromCart(_platos[i]),
+        plato: visibles[i],
+        cantidad: _inCart(visibles[i]),
+        onAdd: () => _addToCart(visibles[i]),
+        onRemove: () => _removeFromCart(visibles[i]),
       ),
     );
   }
@@ -379,8 +449,43 @@ class _OrdenScreenState extends State<OrdenScreen> {
           total: _total,
           scrollController: ctrl,
           onRemove: (plato) { Navigator.pop(ctx); _removeFromCart(plato); },
+          onNota: (item) { Navigator.pop(ctx); _editarNota(item); },
           onConfirm: () { Navigator.pop(ctx); _confirmarOrden(); },
         ),
+      ),
+    );
+  }
+
+  void _editarNota(_CartItem item) {
+    final ctrl = TextEditingController(text: item.notas ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(item.plato.nombrePlato,
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Nota para cocina',
+            hintText: 'ej: sin cebolla, término medio',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                final texto = ctrl.text.trim();
+                item.notas = texto.isEmpty ? null : texto;
+              });
+              _mostrarCarrito();
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
       ),
     );
   }
@@ -501,6 +606,7 @@ class _CarritoSheet extends StatelessWidget {
   final double total;
   final ScrollController scrollController;
   final Function(PlatoModel) onRemove;
+  final Function(_CartItem) onNota;
   final VoidCallback onConfirm;
 
   const _CarritoSheet({
@@ -508,6 +614,7 @@ class _CarritoSheet extends StatelessWidget {
     required this.total,
     required this.scrollController,
     required this.onRemove,
+    required this.onNota,
     required this.onConfirm,
   });
 
@@ -557,11 +664,25 @@ class _CarritoSheet extends StatelessWidget {
                           style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
                         Text('\$${i.plato.precio.toStringAsFixed(2)} c/u',
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                        if (i.notas != null && i.notas!.isNotEmpty)
+                          Text('Nota: ${i.notas}',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins', fontSize: 11,
+                              color: AppColors.warning, fontStyle: FontStyle.italic)),
                       ],
                     ),
                   ),
                   Text('\$${i.subtotal.toStringAsFixed(2)}',
                     style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () => onNota(i),
+                    child: Icon(
+                      (i.notas?.isNotEmpty ?? false) ? Icons.edit_note : Icons.note_add_outlined,
+                      size: 20,
+                      color: (i.notas?.isNotEmpty ?? false) ? AppColors.warning : AppColors.textHint,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => onRemove(i.plato),

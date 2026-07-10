@@ -238,6 +238,14 @@ class _CajeroBodyState extends State<_CajeroBody> {
           color: AppColors.primary,
           onTap: () => context.go('/cajero/ordenes'),
         ),
+        const SizedBox(height: 8),
+        _ActionTile(
+          icon: Icons.table_restaurant_outlined,
+          label: 'Tomar pedidos',
+          subtitle: 'Crear órdenes en las mesas',
+          color: AppColors.earth2,
+          onTap: () => context.go('/mesero/mesas'),
+        ),
       ],
     );
   }

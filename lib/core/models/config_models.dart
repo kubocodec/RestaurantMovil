@@ -265,3 +265,39 @@ class SetupStatus {
     tieneTasaIva, tieneSalones, tieneMesas, tienePlatos, tieneCaja, tieneUsuarios
   ].where((v) => v).length;
 }
+
+class ImpresoraModel {
+  final String impresoraId;
+  final String sucursalId;
+  final String nombre;
+  final String? area;
+  final String? ip;
+  final int? puerto;
+  final bool activo;
+  final List<String> categorias;
+  final List<String> categoriaIds;
+
+  const ImpresoraModel({
+    required this.impresoraId,
+    required this.sucursalId,
+    required this.nombre,
+    this.area,
+    this.ip,
+    this.puerto,
+    required this.activo,
+    required this.categorias,
+    required this.categoriaIds,
+  });
+
+  factory ImpresoraModel.fromJson(Map<String, dynamic> j) => ImpresoraModel(
+    impresoraId: j['impresoraId']?.toString() ?? '',
+    sucursalId:  j['sucursalId']?.toString() ?? '',
+    nombre:      j['nombre']?.toString() ?? '',
+    area:        j['area']?.toString(),
+    ip:          j['ip']?.toString(),
+    puerto:      (j['puerto'] as num?)?.toInt(),
+    activo:      j['activo'] ?? true,
+    categorias:  ((j['categorias'] as List?) ?? []).map((e) => e.toString()).toList(),
+    categoriaIds: ((j['categoriaIds'] as List?) ?? []).map((e) => e.toString()).toList(),
+  );
+}

@@ -391,4 +391,56 @@ class ConfiguracionRepository {
     });
     return SucursalModel.fromJson(r.data['data'] ?? r.data);
   }
+
+  // ── Impresoras de comandas ──────────────────────────────────────────────
+  Future<List<ImpresoraModel>> getImpresoras(String sucursalId) async {
+    final r = await _dio.get('/api/impresoras/sucursal/$sucursalId');
+    final List data = r.data['data'] ?? [];
+    return data.map((j) => ImpresoraModel.fromJson(j)).toList();
+  }
+
+  Future<ImpresoraModel> crearImpresora({
+    required String sucursalId,
+    required String nombre,
+    String? area,
+    String? ip,
+    int? puerto,
+    List<String> categoriaIds = const [],
+  }) async {
+    final r = await _dio.post('/api/impresoras', data: {
+      'sucursalId': sucursalId,
+      'nombre':     nombre,
+      if (area != null && area.isNotEmpty) 'area': area,
+      if (ip != null && ip.isNotEmpty)     'ip':   ip,
+      if (puerto != null)                  'puerto': puerto,
+      'categoriaIds': categoriaIds,
+    });
+    return ImpresoraModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<ImpresoraModel> actualizarImpresora({
+    required String impresoraId,
+    required String sucursalId,
+    required String nombre,
+    String? area,
+    String? ip,
+    int? puerto,
+  }) async {
+    final r = await _dio.put('/api/impresoras/$impresoraId', data: {
+      'sucursalId': sucursalId,
+      'nombre':     nombre,
+      if (area != null && area.isNotEmpty) 'area': area,
+      if (ip != null && ip.isNotEmpty)     'ip':   ip,
+      if (puerto != null)                  'puerto': puerto,
+    });
+    return ImpresoraModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<void> asignarCategoriasImpresora(String impresoraId, List<String> categoriaIds) async {
+    await _dio.patch('/api/impresoras/$impresoraId/categorias', data: categoriaIds);
+  }
+
+  Future<void> toggleImpresora(String impresoraId) async {
+    await _dio.patch('/api/impresoras/$impresoraId/toggle-activo');
+  }
 }

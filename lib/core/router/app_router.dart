@@ -15,6 +15,7 @@ import '../../features/facturacion/presentation/facturacion_screen.dart';
 import '../../features/facturacion/presentation/ordenes_para_facturar_screen.dart';
 import '../../features/superadmin/presentation/superadmin_dashboard.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
+import '../../features/reportes/presentation/reportes_screen.dart';
 import '../models/user_model.dart';
 
 class AppRouter {
@@ -50,6 +51,7 @@ class AppRouter {
           builder: (_, __) => const AdminDashboard(),
           routes: [
             GoRoute(path: 'configuracion', builder: (_, __) => const ConfiguracionScreen()),
+            GoRoute(path: 'reportes', builder: (_, __) => const ReportesScreen()),
           ],
         ),
 

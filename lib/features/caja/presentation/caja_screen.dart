@@ -67,7 +67,7 @@ class _CajaScreenState extends State<CajaScreen> {
       }
     }
     final caja = _caja;
-    if (caja == null) return;
+    if (caja == null || !mounted) return;
     final ctrl = TextEditingController(text: '50.00');
     final confirm = await showDialog<bool>(
       context: context,
@@ -115,11 +115,34 @@ class _CajaScreenState extends State<CajaScreen> {
   Future<void> _cerrarCaja() async {
     final apertura = _apertura;
     if (apertura == null) return;
+    final montoCtrl = TextEditingController();
+    final obsCtrl = TextEditingController();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cerrar caja'),
-        content: const Text('¿Deseas cerrar la caja para este turno? Esta acción genera el arqueo final.'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Cuenta el efectivo de la caja e ingresa el total. El sistema calculará el arqueo (esperado vs. contado).',
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: montoCtrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Efectivo contado', prefixText: '\$ '),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: obsCtrl,
+              decoration: const InputDecoration(labelText: 'Observaciones (opcional)'),
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
           ElevatedButton(
@@ -130,17 +153,23 @@ class _CajaScreenState extends State<CajaScreen> {
         ],
       ),
     );
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
+    final montoFinal = double.tryParse(montoCtrl.text.replaceAll(',', '.'));
+    if (montoFinal == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Ingresa el efectivo contado para cerrar la caja'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
     try {
-      await _repo.cerrarCaja(
+      final cierre = await _repo.cerrarCaja(
         aperturaCierreCajaId: apertura.aperturaCierreCajaId,
-        montoFinal: apertura.montoInicial,
-        observaciones: 'Cierre de turno',
+        montoFinal: montoFinal,
+        observaciones: obsCtrl.text.trim().isEmpty ? 'Cierre de turno' : obsCtrl.text.trim(),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Caja cerrada correctamente'), backgroundColor: AppColors.success),
-        );
+        await _mostrarArqueo(cierre);
         _loadCaja();
       }
     } catch (e) {
@@ -150,6 +179,48 @@ class _CajaScreenState extends State<CajaScreen> {
         );
       }
     }
+  }
+
+  Future<void> _mostrarArqueo(AperturaCajaModel cierre) async {
+    final diferencia = cierre.diferencia ?? 0;
+    final cuadra = diferencia.abs() < 0.01;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              cuadra ? Icons.check_circle : Icons.warning_amber_rounded,
+              color: cuadra ? AppColors.success : AppColors.warning,
+            ),
+            const SizedBox(width: 8),
+            const Text('Arqueo de caja'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ArqueoRow(label: 'Monto inicial', value: cierre.montoInicial),
+            _ArqueoRow(label: 'Monto esperado', value: cierre.montoEsperado ?? 0),
+            _ArqueoRow(label: 'Efectivo contado', value: cierre.montoFinal ?? 0),
+            const Divider(),
+            _ArqueoRow(
+              label: cuadra
+                  ? 'Caja cuadrada'
+                  : diferencia > 0 ? 'Sobrante' : 'Faltante',
+              value: diferencia,
+              color: cuadra
+                  ? AppColors.success
+                  : diferencia > 0 ? AppColors.warning : AppColors.error,
+              bold: true,
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Entendido')),
+        ],
+      ),
+    );
   }
 
   Future<void> _registrarMovimiento(String tipo) async {
@@ -398,6 +469,34 @@ class _CajaScreenState extends State<CajaScreen> {
             style: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Poppins')),
           const SizedBox(height: 24),
           ElevatedButton.icon(onPressed: _loadCaja, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArqueoRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final Color? color;
+  final bool bold;
+  const _ArqueoRow({required this.label, required this.value, this.color, this.bold = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontFamily: 'Poppins',
+      fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+      color: color ?? AppColors.textPrimary,
+      fontSize: bold ? 15 : 13,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text('\$${value.toStringAsFixed(2)}', style: style),
         ],
       ),
     );
