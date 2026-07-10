@@ -43,13 +43,24 @@ class ApiClient {
       try {
         final refreshToken = await AuthStorage.getRefreshToken();
         if (refreshToken != null) {
-          final response = await _dio.post(
+          // Dio limpio: sin interceptores, para no inyectar el token vencido
+          // ni re-entrar en este handler si el refresh también falla.
+          final refreshDio = Dio(BaseOptions(
+            baseUrl: ApiConstants.baseUrl,
+            connectTimeout: ApiConstants.connectTimeout,
+            receiveTimeout: ApiConstants.receiveTimeout,
+            headers: {'Content-Type': 'application/json'},
+          ));
+          final response = await refreshDio.post(
             ApiConstants.refresh,
             data: {'refreshToken': refreshToken},
-            options: Options(headers: {}),
           );
-          final newToken = response.data['data']['accessToken'];
+          final data = response.data['data'];
+          final newToken = data['accessToken'];
           await AuthStorage.updateAccessToken(newToken);
+          if (data['refreshToken'] != null) {
+            await AuthStorage.updateRefreshToken(data['refreshToken']);
+          }
           err.requestOptions.headers['Authorization'] = 'Bearer $newToken';
           final retryResponse = await _dio.fetch(err.requestOptions);
           return handler.resolve(retryResponse);

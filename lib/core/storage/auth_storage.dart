@@ -37,6 +37,9 @@ class AuthStorage {
   static Future<void> updateAccessToken(String token) =>
       _storage.write(key: _keyAccessToken, value: token);
 
+  static Future<void> updateRefreshToken(String token) =>
+      _storage.write(key: _keyRefreshToken, value: token);
+
   static Future<void> clear() async {
     await Future.wait([
       _storage.delete(key: _keyUser),
