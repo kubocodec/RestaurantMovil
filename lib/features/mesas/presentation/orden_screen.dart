@@ -64,7 +64,11 @@ class _OrdenScreenState extends State<OrdenScreen> {
       OrdenModel? existente;
       if (!widget.isLibre) {
         final activas = await _repo.getOrdenesActivas(_sucursalId);
-        existente = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
+        final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
+        if (resumen != null) {
+          // El listado de activas no incluye los ítems: cargar la orden completa
+          existente = await _repo.getOrden(resumen.ordenId);
+        }
       }
       if (!mounted) return;
       setState(() {
@@ -333,23 +337,60 @@ class _OrdenScreenState extends State<OrdenScreen> {
   Widget _buildOrdenActivaBanner(OrdenModel o) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.mesaOcupada.withValues(alpha: 0.1),
+        color: AppColors.mesaOcupada.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.mesaOcupada.withValues(alpha: 0.4)),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Orden #${o.numeroOrden} activa (${o.detalles.length} items). Puedes agregar más.',
-              style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.mesaOcupada),
-            ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          leading: const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 20),
+          title: Text(
+            'Orden #${o.numeroOrden} · ${o.detalles.length} items · \$${o.total.toStringAsFixed(2)}',
+            style: const TextStyle(
+              fontFamily: 'Poppins', fontSize: 13,
+              fontWeight: FontWeight.w600, color: AppColors.mesaOcupada),
           ),
-        ],
+          subtitle: const Text(
+            'Toca para ver el pedido. Puedes agregar más platos.',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
+          ),
+          children: o.detalles.map((d) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                Text('${d.cantidad}x',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                    fontSize: 12, color: AppColors.mesaOcupada)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(d.nombrePlato,
+                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5)),
+                      if (d.observaciones != null && d.observaciones!.isNotEmpty)
+                        Text('Nota: ${d.observaciones}',
+                          style: const TextStyle(
+                            fontFamily: 'Poppins', fontSize: 10.5,
+                            color: AppColors.warning, fontStyle: FontStyle.italic)),
+                    ],
+                  ),
+                ),
+                _EstadoDetalleChip(estado: d.estado),
+                const SizedBox(width: 8),
+                Text('\$${d.subtotal.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12)),
+              ],
+            ),
+          )).toList(),
+        ),
       ),
     );
   }
@@ -492,6 +533,35 @@ class _OrdenScreenState extends State<OrdenScreen> {
 }
 
 // ── Subwidgets ───────────────────────────────────────────────────────────────
+
+class _EstadoDetalleChip extends StatelessWidget {
+  final String estado;
+  const _EstadoDetalleChip({required this.estado});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (estado) {
+      'PENDIENTE'      => ('Pendiente', AppColors.textSecondary),
+      'ENVIADO'        => ('En cocina', AppColors.warning),
+      'EN_PREPARACION' => ('Preparando', AppColors.estadoEnProceso),
+      'LISTO'          => ('Listo', AppColors.estadoListo),
+      'ENTREGADO'      => ('Entregado', AppColors.success),
+      'CANCELADO'      => ('Cancelado', AppColors.error),
+      _                => (estado, AppColors.textSecondary),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label,
+        style: TextStyle(
+          fontFamily: 'Poppins', fontSize: 9.5,
+          fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+}
 
 class _TipoChip extends StatelessWidget {
   final String label;
