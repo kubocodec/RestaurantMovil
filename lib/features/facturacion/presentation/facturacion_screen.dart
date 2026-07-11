@@ -8,7 +8,10 @@ import '../../../core/models/orden_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../core/models/config_models.dart';
+import '../../../core/printing/comanda_printer.dart';
 import '../../../features/caja/data/caja_repository.dart';
+import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../data/facturacion_repository.dart';
 
@@ -37,6 +40,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   final _refCtrl    = TextEditingController();
   ClienteModel? _clienteEncontrado;
   Set<String> _itemsSeleccionados = {};
+
+  // false = recibo a consumidor final; true = factura con datos del cliente
+  bool _esFactura = false;
 
   @override
   void initState() {
@@ -193,7 +199,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   bool get _puedeEmitir =>
       _itemsSeleccionados.isNotEmpty &&
       _selectedMetodoPagoId != null &&
-      _aperturaCierreCajaId != null;
+      _aperturaCierreCajaId != null &&
+      (!_esFactura || _clienteEncontrado != null);
 
   MetodoPagoModel? get _metodoPagoSeleccionado =>
       _metodosPago.where((m) => m.metodoPagoId == _selectedMetodoPagoId).firstOrNull;
@@ -216,19 +223,25 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
     setState(() => _emitiendo = true);
     try {
-      final detalles = orden.detallesNoFacturados
+      final seleccionados = orden.detallesNoFacturados
           .where((d) => _itemsSeleccionados.contains(d.ordenDetalleId))
+          .toList();
+      final detalles = seleccionados
           .map((d) => {'ordenDetalleId': d.ordenDetalleId, 'cantidad': d.cantidad})
+          .toList();
+      // Copia para el comprobante (tras emitir quedan marcados facturados)
+      final itemsRecibo = seleccionados
+          .map((d) => ReciboItem(nombre: d.nombrePlato, cantidad: d.cantidad, subtotal: d.subtotal))
           .toList();
 
       final factura = await _factRepo.emitirFactura(
         ordenId: widget.ordenId,
         aperturaCierreCajaId: aperturaCierreCajaId,
-        clienteId: _clienteEncontrado?.clienteId,
+        clienteId: _esFactura ? _clienteEncontrado?.clienteId : null,
         detalles: detalles,
       );
 
-      await _factRepo.registrarPago(
+      final facturaPagada = await _factRepo.registrarPago(
         facturaVentaId: factura.facturaVentaId,
         metodoPagoId: metodoPagoId,
         monto: factura.total,
@@ -236,10 +249,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Factura emitida correctamente!'), backgroundColor: AppColors.success),
-        );
-        Navigator.pop(context);
+        await _mostrarComprobante(facturaPagada, itemsRecibo);
+        if (mounted) Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -250,6 +261,21 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     } finally {
       if (mounted) setState(() => _emitiendo = false);
     }
+  }
+
+  Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {
+    final metodoPago = _metodoPagoSeleccionado?.nombre ?? '';
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ComprobanteDialog(
+        factura: factura,
+        items: items,
+        metodoPago: metodoPago,
+        esFactura: _esFactura,
+        sucursalId: _sucursalId,
+      ),
+    );
   }
 
   @override
@@ -407,8 +433,48 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Datos del cliente (opcional)',
+        const Text('Tipo de comprobante',
           style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Recibo (consumidor final)'),
+                selected: !_esFactura,
+                onSelected: (_) => setState(() => _esFactura = false),
+                selectedColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12,
+                  color: !_esFactura ? Colors.white : AppColors.textPrimary),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ChoiceChip(
+                label: const Text('Factura (con datos)'),
+                selected: _esFactura,
+                onSelected: (_) => setState(() => _esFactura = true),
+                selectedColor: AppColors.primary,
+                labelStyle: TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12,
+                  color: _esFactura ? Colors.white : AppColors.textPrimary),
+              ),
+            ),
+          ],
+        ),
+        if (_esFactura) _buildDatosCliente(),
+      ],
+    );
+  }
+
+  Widget _buildDatosCliente() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        const Text('Datos del cliente (requeridos para la factura)',
+          style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 14)),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -515,8 +581,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         onPressed: (_puedeEmitir && !_emitiendo) ? _emitirFactura : null,
         icon: _emitiendo
             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.receipt_rounded),
-        label: Text(_emitiendo ? 'Emitiendo...' : 'Emitir Factura'),
+            : const Icon(Icons.point_of_sale_rounded),
+        label: Text(_emitiendo
+            ? 'Cobrando...'
+            : _esFactura ? 'Cobrar y emitir factura' : 'Cobrar (recibo)'),
       ),
     );
   }
@@ -535,6 +603,173 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Comprobante emitido: vista tipo ticket con opción de imprimir en una
+/// impresora de la sucursal.
+class _ComprobanteDialog extends StatefulWidget {
+  final FacturaModel factura;
+  final List<ReciboItem> items;
+  final String metodoPago;
+  final bool esFactura;
+  final String sucursalId;
+
+  const _ComprobanteDialog({
+    required this.factura,
+    required this.items,
+    required this.metodoPago,
+    required this.esFactura,
+    required this.sucursalId,
+  });
+
+  @override
+  State<_ComprobanteDialog> createState() => _ComprobanteDialogState();
+}
+
+class _ComprobanteDialogState extends State<_ComprobanteDialog> {
+  final _configRepo = ConfiguracionRepository();
+  bool _imprimiendo = false;
+
+  static const _ticketStyle = TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35);
+  static const _ticketBold =
+      TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35, fontWeight: FontWeight.w700);
+
+  @override
+  Widget build(BuildContext context) {
+    final f = widget.factura;
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.check_circle, color: AppColors.success),
+          const SizedBox(width: 8),
+          Text(widget.esFactura ? 'Factura emitida' : 'Recibo emitido',
+              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 17)),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(f.nombreRestaurant.isNotEmpty ? f.nombreRestaurant : f.nombreSucursal,
+                    textAlign: TextAlign.center, style: _ticketBold),
+                if (f.razonSocial?.isNotEmpty ?? false)
+                  Text(f.razonSocial!, textAlign: TextAlign.center, style: _ticketStyle),
+                if (f.rucSucursal?.isNotEmpty ?? false)
+                  Text('RUC: ${f.rucSucursal}', textAlign: TextAlign.center, style: _ticketStyle),
+                if (f.nombreSucursal.isNotEmpty)
+                  Text(f.nombreSucursal, textAlign: TextAlign.center, style: _ticketStyle),
+                if (f.direccionSucursal?.isNotEmpty ?? false)
+                  Text(f.direccionSucursal!, textAlign: TextAlign.center, style: _ticketStyle),
+                if (f.telefonoSucursal?.isNotEmpty ?? false)
+                  Text('Tel: ${f.telefonoSucursal}', textAlign: TextAlign.center, style: _ticketStyle),
+                const Divider(),
+                Text('${widget.esFactura ? 'FACTURA' : 'RECIBO'} No. ${f.numeroFactura}', style: _ticketBold),
+                Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(f.fecha.toLocal())}', style: _ticketStyle),
+                Text('Orden: #${f.numeroOrden}', style: _ticketStyle),
+                Text('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}', style: _ticketStyle),
+                if (f.cedulaRucCliente?.isNotEmpty ?? false)
+                  Text('CI/RUC: ${f.cedulaRucCliente}', style: _ticketStyle),
+                const Divider(),
+                ...widget.items.map((it) => _filaTicket('${it.cantidad} x ${it.nombre}', it.subtotal)),
+                const Divider(),
+                _filaTicket('Subtotal', f.subtotal),
+                if (f.descuento > 0) _filaTicket('Descuento', -f.descuento),
+                _filaTicket('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva),
+                if (f.propina > 0) _filaTicket('Propina', f.propina),
+                _filaTicket('TOTAL', f.total, bold: true),
+                Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: _imprimiendo ? null : _imprimir,
+          icon: _imprimiendo
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.print_outlined, size: 18),
+          label: Text(_imprimiendo ? 'Imprimiendo...' : 'Imprimir'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Listo'),
+        ),
+      ],
+    );
+  }
+
+  Widget _filaTicket(String concepto, double monto, {bool bold = false}) {
+    final style = bold ? _ticketBold : _ticketStyle;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(child: Text(concepto, style: style)),
+        Text('\$${monto.toStringAsFixed(2)}', style: style),
+      ],
+    );
+  }
+
+  Future<void> _imprimir() async {
+    setState(() => _imprimiendo = true);
+    try {
+      final impresoras = (await _configRepo.getImpresoras(widget.sucursalId))
+          .where((i) => i.activo && (i.ip?.isNotEmpty ?? false))
+          .toList();
+      if (!mounted) return;
+      if (impresoras.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No hay impresoras configuradas en la sucursal'),
+          backgroundColor: AppColors.warning,
+        ));
+        return;
+      }
+      ImpresoraModel? elegida = impresoras.length == 1 ? impresoras.first : null;
+      elegida ??= await showDialog<ImpresoraModel>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Imprimir en', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+          children: impresoras.map((i) => SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, i),
+            child: Text('${i.nombre}${i.area?.isNotEmpty == true ? ' (${i.area})' : ''}',
+                style: const TextStyle(fontFamily: 'Poppins')),
+          )).toList(),
+        ),
+      );
+      if (elegida == null) return;
+
+      await ComandaPrinter.imprimirRecibo(
+        ip: elegida.ip!,
+        puerto: elegida.puerto ?? 9100,
+        factura: widget.factura,
+        items: widget.items,
+        metodoPago: widget.metodoPago,
+        esFactura: widget.esFactura,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Comprobante impreso'), backgroundColor: AppColors.success,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo imprimir: ${ApiClient.parseError(e)}'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _imprimiendo = false);
+    }
   }
 }
 

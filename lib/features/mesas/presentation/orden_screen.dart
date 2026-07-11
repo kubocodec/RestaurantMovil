@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/orden_model.dart';
 import '../../../core/models/plato_model.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
@@ -55,6 +56,14 @@ class _OrdenScreenState extends State<OrdenScreen> {
   String get _sucursalId {
     final s = context.read<AuthBloc>().state;
     return s is AuthAuthenticated ? s.user.sucursalId : '';
+  }
+
+  /// Solo cajero y admin pueden cobrar (el mesero toma pedidos).
+  bool get _puedeCobrar {
+    final s = context.read<AuthBloc>().state;
+    if (s is! AuthAuthenticated) return false;
+    final rol = s.user.rol;
+    return rol == UserRole.cajero || rol == UserRole.admin || rol == UserRole.superadmin;
   }
 
   Future<void> _load() async {
@@ -256,7 +265,55 @@ class _OrdenScreenState extends State<OrdenScreen> {
           : _error != null
               ? _buildError()
               : _buildBody(),
-      bottomNavigationBar: _totalItems > 0 ? _buildBottomBar() : null,
+      bottomNavigationBar: _totalItems > 0
+          ? _buildBottomBar()
+          : (_mostrarCobrar ? _buildCobrarBar() : null),
+    );
+  }
+
+  bool get _mostrarCobrar =>
+      !_loading &&
+      _ordenExistente != null &&
+      _ordenExistente!.detallesNoFacturados.isNotEmpty &&
+      _puedeCobrar;
+
+  Widget _buildCobrarBar() {
+    final orden = _ordenExistente!;
+    final totalPorCobrar = orden.detallesNoFacturados.fold(0.0, (s, d) => s + d.subtotal);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: const BoxDecoration(
+        color: AppColors.cardBackground,
+        boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2))],
+      ),
+      child: Row(
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Por cobrar',
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
+              Text('\$${totalPorCobrar.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                  fontSize: 18, color: AppColors.cajeroColor)),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.cajeroColor),
+              onPressed: () async {
+                await context.push('/cajero/factura/${orden.ordenId}');
+                if (mounted) _load();
+              },
+              icon: const Icon(Icons.point_of_sale_rounded),
+              label: const Text('Cobrar'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

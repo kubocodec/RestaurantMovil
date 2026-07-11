@@ -47,10 +47,22 @@ class FacturaModel {
   final int numeroOrden;
   final String estado;
   final double subtotal;
+  final double descuento;
+  final double ivaPorcentaje;
   final double iva;
+  final double propina;
   final double total;
   final String? nombreCliente;
+  final String? cedulaRucCliente;
   final DateTime fecha;
+
+  // Cabecera del comprobante
+  final String nombreRestaurant;
+  final String nombreSucursal;
+  final String? razonSocial;
+  final String? rucSucursal;
+  final String? direccionSucursal;
+  final String? telefonoSucursal;
 
   const FacturaModel({
     required this.facturaVentaId,
@@ -59,10 +71,20 @@ class FacturaModel {
     required this.numeroOrden,
     required this.estado,
     required this.subtotal,
+    this.descuento = 0,
+    this.ivaPorcentaje = 0,
     required this.iva,
+    this.propina = 0,
     required this.total,
     this.nombreCliente,
+    this.cedulaRucCliente,
     required this.fecha,
+    this.nombreRestaurant = '',
+    this.nombreSucursal = '',
+    this.razonSocial,
+    this.rucSucursal,
+    this.direccionSucursal,
+    this.telefonoSucursal,
   });
 
   factory FacturaModel.fromJson(Map<String, dynamic> j) => FacturaModel(
@@ -72,10 +94,20 @@ class FacturaModel {
     numeroOrden:    (j['numeroOrden'] ?? 0) as int,
     estado:         j['estado']?.toString() ?? '',
     subtotal:       _toDouble(j['subtotal']),
+    descuento:      _toDouble(j['descuento']),
+    ivaPorcentaje:  _toDouble(j['ivaPorcentaje']),
     iva:            _toDouble(j['iva']),
+    propina:        _toDouble(j['propina']),
     total:          _toDouble(j['total']),
     nombreCliente:  j['nombreCliente']?.toString(),
+    cedulaRucCliente: j['cedulaRucCliente']?.toString(),
     fecha:          DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
+    nombreRestaurant:  j['nombreRestaurant']?.toString() ?? '',
+    nombreSucursal:    j['nombreSucursal']?.toString() ?? '',
+    razonSocial:       j['razonSocial']?.toString(),
+    rucSucursal:       j['rucSucursal']?.toString(),
+    direccionSucursal: j['direccionSucursal']?.toString(),
+    telefonoSucursal:  j['telefonoSucursal']?.toString(),
   );
 
   static double _toDouble(dynamic v) {

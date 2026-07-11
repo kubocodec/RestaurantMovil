@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../models/factura_model.dart';
 import '../models/orden_model.dart';
 
 /// Resultado de la impresión de una comanda.
@@ -9,6 +10,14 @@ class ResultadoImpresion {
   final bool ok;
   final String? error;
   const ResultadoImpresion(this.impresora, this.ok, [this.error]);
+}
+
+/// Línea de detalle para el recibo/factura impresa.
+class ReciboItem {
+  final String nombre;
+  final int cantidad;
+  final double subtotal;
+  const ReciboItem({required this.nombre, required this.cantidad, required this.subtotal});
 }
 
 /// Imprime comandas en impresoras térmicas de red (ESC/POS por TCP, puerto
@@ -102,6 +111,81 @@ class ComandaPrinter {
       await socket.close();
     }
   }
+
+  /// Imprime el recibo o factura del cliente en la impresora indicada,
+  /// con la cabecera del restaurant y su sucursal.
+  static Future<void> imprimirRecibo({
+    required String ip,
+    int puerto = 9100,
+    required FacturaModel factura,
+    required List<ReciboItem> items,
+    required String metodoPago,
+    required bool esFactura,
+  }) async {
+    final socket = await Socket.connect(ip, puerto, timeout: const Duration(seconds: 5));
+    try {
+      final f = factura;
+      final bytes = <int>[
+        ..._init,
+        // ── Cabecera: restaurant y sucursal ──
+        ..._center, ..._doubleSize, ..._boldOn,
+        ..._texto('${f.nombreRestaurant.isNotEmpty ? f.nombreRestaurant : f.nombreSucursal}\n'),
+        ..._normalSize, ..._boldOff,
+        if (f.razonSocial?.isNotEmpty ?? false) ..._texto('${f.razonSocial}\n'),
+        if (f.rucSucursal?.isNotEmpty ?? false) ..._texto('RUC: ${f.rucSucursal}\n'),
+        if (f.nombreSucursal.isNotEmpty) ..._texto('${f.nombreSucursal}\n'),
+        if (f.direccionSucursal?.isNotEmpty ?? false) ..._texto('${f.direccionSucursal}\n'),
+        if (f.telefonoSucursal?.isNotEmpty ?? false) ..._texto('Tel: ${f.telefonoSucursal}\n'),
+        ..._left,
+        ..._texto('${'-' * 32}\n'),
+        ..._boldOn,
+        ..._texto('${esFactura ? 'FACTURA' : 'RECIBO'} No. ${f.numeroFactura}\n'),
+        ..._boldOff,
+        ..._texto('Fecha: ${_fechaHora(f.fecha.toLocal())}\n'),
+        ..._texto('Orden: #${f.numeroOrden}\n'),
+        ..._texto('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}\n'),
+        if (f.cedulaRucCliente?.isNotEmpty ?? false)
+          ..._texto('CI/RUC: ${f.cedulaRucCliente}\n'),
+        ..._texto('${'-' * 32}\n'),
+      ];
+      for (final it in items) {
+        bytes.addAll(_texto(_lineaMonto('${it.cantidad} x ${it.nombre}', it.subtotal)));
+      }
+      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto(_lineaMonto('Subtotal', f.subtotal)));
+      if (f.descuento > 0) bytes.addAll(_texto(_lineaMonto('Descuento', -f.descuento)));
+      bytes.addAll(_texto(_lineaMonto('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva)));
+      if (f.propina > 0) bytes.addAll(_texto(_lineaMonto('Propina', f.propina)));
+      bytes.addAll(_boldOn);
+      bytes.addAll(_texto(_lineaMonto('TOTAL', f.total)));
+      bytes.addAll(_boldOff);
+      bytes.addAll(_texto('Pago: $metodoPago\n'));
+      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_center);
+      bytes.addAll(_texto('¡Gracias por su visita!\n'));
+      bytes.addAll(_left);
+      bytes.addAll(_feed);
+      bytes.addAll(_cut);
+
+      socket.add(bytes);
+      await socket.flush();
+    } finally {
+      await socket.close();
+    }
+  }
+
+  /// Concepto a la izquierda y monto alineado a la derecha (32 columnas).
+  static String _lineaMonto(String concepto, double monto) {
+    final valor = monto.toStringAsFixed(2);
+    var nombre = concepto;
+    final ancho = 32 - valor.length - 1;
+    if (nombre.length > ancho) nombre = nombre.substring(0, ancho);
+    return '$nombre${' ' * (32 - nombre.length - valor.length)}$valor\n';
+  }
+
+  static String _fechaHora(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
   /// Latin-1 cubre acentos y ñ en la página de códigos por defecto (CP437/850
   /// difieren en algunos signos, pero letras acentuadas comunes coinciden).
