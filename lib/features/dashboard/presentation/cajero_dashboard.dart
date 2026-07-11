@@ -6,6 +6,8 @@ import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
 import '../../../features/caja/data/caja_repository.dart';
+import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../features/reportes/data/reportes_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/stat_card.dart';
 
@@ -40,7 +42,14 @@ class _CajeroBody extends StatefulWidget {
 
 class _CajeroBodyState extends State<_CajeroBody> {
   final _cajaRepo = CajaRepository();
+  final _reportesRepo = ReportesRepository();
+  final _ordenesRepo = OrdenesRepository();
   bool? _cajaAbierta; // null = cargando
+  double _ventasHoy = 0;
+  int _facturasHoy = 0;
+  int _ordenesHoy = 0;
+  int _ordenesActivas = 0;
+  bool _cargandoStats = true;
 
   @override
   void initState() {
@@ -51,38 +60,61 @@ class _CajeroBodyState extends State<_CajeroBody> {
   Future<void> _checkCajaStatus() async {
     final sucursalId = widget.user?.sucursalId ?? '';
     if (sucursalId.isEmpty) {
-      setState(() => _cajaAbierta = false);
+      setState(() { _cajaAbierta = false; _cargandoStats = false; });
       return;
     }
     try {
       final cajas = await _cajaRepo.getCajasBySucursal(sucursalId);
       if (cajas.isEmpty) {
         setState(() => _cajaAbierta = false);
-        return;
+      } else {
+        final apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
+        if (mounted) setState(() => _cajaAbierta = apertura?.isAbierta == true);
       }
-      final apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
-      setState(() => _cajaAbierta = apertura?.isAbierta == true);
     } catch (_) {
-      setState(() => _cajaAbierta = false);
+      if (mounted) setState(() => _cajaAbierta = false);
+    }
+    // Estadísticas del día (independientes del estado de la caja)
+    try {
+      final results = await Future.wait([
+        _reportesRepo.getResumenDiario(sucursalId),
+        _ordenesRepo.getOrdenesActivas(sucursalId),
+      ]);
+      if (!mounted) return;
+      final resumen = results[0] as ResumenDiarioModel;
+      final activas = results[1] as List;
+      setState(() {
+        _ventasHoy = resumen.totalVentas;
+        _facturasHoy = resumen.totalFacturas;
+        _ordenesHoy = resumen.totalOrdenes;
+        _ordenesActivas = activas.length;
+        _cargandoStats = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _cargandoStats = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildGreeting(),
-            const SizedBox(height: 24),
-            _buildCajaStatus(context),
-            const SizedBox(height: 24),
-            _buildStats(context),
-            const SizedBox(height: 24),
-            _buildActions(context),
-          ],
+      child: RefreshIndicator(
+        onRefresh: _checkCajaStatus,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildGreeting(),
+              const SizedBox(height: 24),
+              _buildCajaStatus(context),
+              const SizedBox(height: 24),
+              _buildStats(context),
+              const SizedBox(height: 24),
+              _buildActions(context),
+            ],
+          ),
         ),
       ),
     );
@@ -130,6 +162,11 @@ class _CajeroBodyState extends State<_CajeroBody> {
     );
   }
 
+  Future<void> _irACaja(BuildContext context) async {
+    await context.push('/cajero/caja');
+    if (mounted) _checkCajaStatus(); // refleja apertura/cierre al volver
+  }
+
   Widget _buildCajaStatus(BuildContext context) {
     if (_cajaAbierta == null) {
       return const SizedBox(
@@ -157,9 +194,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
               ),
             ),
             TextButton(
-              onPressed: () {
-                context.go('/cajero/caja');
-              },
+              onPressed: () => _irACaja(context),
               child: const Text('Ver caja', style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700)),
             ),
           ],
@@ -185,7 +220,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
             ),
           ),
           TextButton(
-            onPressed: () => context.go('/cajero/caja'),
+            onPressed: () => _irACaja(context),
             child: const Text('Abrir caja', style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w700)),
           ),
         ],
@@ -202,15 +237,27 @@ class _CajeroBodyState extends State<_CajeroBody> {
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
+          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.3,
-          children: const [
-            StatCard(title: 'Ventas del día', value: '\$0.00', icon: Icons.attach_money, color: AppColors.success),
-            StatCard(title: 'Facturas emitidas', value: '0', icon: Icons.receipt_outlined, color: AppColors.primary),
-            StatCard(title: 'Órdenes cerradas', value: '0', icon: Icons.check_circle_outline, color: AppColors.cajeroColor),
-            StatCard(title: 'Pendientes de pago', value: '0', icon: Icons.pending_outlined, color: AppColors.warning),
+          children: [
+            StatCard(
+              title: 'Ventas del día',
+              value: _cargandoStats ? '...' : '\$${_ventasHoy.toStringAsFixed(2)}',
+              icon: Icons.attach_money, color: AppColors.success),
+            StatCard(
+              title: 'Facturas emitidas',
+              value: _cargandoStats ? '...' : '$_facturasHoy',
+              icon: Icons.receipt_outlined, color: AppColors.primary),
+            StatCard(
+              title: 'Órdenes del día',
+              value: _cargandoStats ? '...' : '$_ordenesHoy',
+              icon: Icons.check_circle_outline, color: AppColors.cajeroColor),
+            StatCard(
+              title: 'Órdenes por cobrar',
+              value: _cargandoStats ? '...' : '$_ordenesActivas',
+              icon: Icons.pending_outlined, color: AppColors.warning),
           ],
         ),
       ],
@@ -228,7 +275,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
           label: 'Gestión de Caja',
           subtitle: 'Aperturas, cierres y movimientos',
           color: AppColors.cajeroColor,
-          onTap: () => context.go('/cajero/caja'),
+          onTap: () => _irACaja(context),
         ),
         const SizedBox(height: 8),
         _ActionTile(

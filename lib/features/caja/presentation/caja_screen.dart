@@ -20,6 +20,7 @@ class _CajaScreenState extends State<CajaScreen> {
   final _fmt  = NumberFormat('#,##0.00', 'es');
   CajaModel? _caja;
   AperturaCajaModel? _apertura;
+  ResumenCajaModel? _resumen;
   bool _loading = true;
   bool _sinCaja = false;
   String? _error;
@@ -47,7 +48,22 @@ class _CajaScreenState extends State<CajaScreen> {
       }
       final caja = cajas.first;
       final apertura = await _repo.getAperturaActiva(caja.cajaId);
-      if (mounted) setState(() { _caja = caja; _apertura = apertura; _loading = false; });
+      ResumenCajaModel? resumen;
+      if (apertura != null && apertura.isAbierta) {
+        try {
+          resumen = await _repo.getResumen(apertura.aperturaCierreCajaId);
+        } catch (_) {
+          resumen = null;
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _caja = caja;
+          _apertura = apertura;
+          _resumen = resumen;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _error = ApiClient.parseError(e); _loading = false; });
     }
@@ -300,18 +316,24 @@ class _CajaScreenState extends State<CajaScreen> {
   }
 
   Widget _buildBody() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          _buildStatusCard(),
-          const SizedBox(height: 20),
-          if (_apertura?.isAbierta == true) ...[
-            _buildActions(),
-            const SizedBox(height: 20),
-            _buildMovimientosEmpty(),
-          ],
-        ],
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _loadCaja,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              _buildStatusCard(),
+              const SizedBox(height: 20),
+              if (_apertura?.isAbierta == true) ...[
+                _buildActions(),
+                const SizedBox(height: 20),
+                _buildMovimientos(),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -376,9 +398,35 @@ class _CajaScreenState extends State<CajaScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _CajaStatItem(label: 'Monto inicial', value: '\$${_fmt.format(apertura.montoInicial)}'),
+                _CajaStatItem(label: 'Inicial', value: '\$${_fmt.format(apertura.montoInicial)}'),
+                if (_resumen != null) ...[
+                  _CajaStatItem(label: 'Ventas', value: '\$${_fmt.format(_resumen!.totalVentas)}'),
+                  _CajaStatItem(label: 'Ingresos', value: '\$${_fmt.format(_resumen!.totalIngresos)}'),
+                  _CajaStatItem(label: 'Egresos', value: '-\$${_fmt.format(_resumen!.totalEgresos)}'),
+                ],
               ],
             ),
+            if (_resumen != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Debe haber en caja',
+                      style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 13)),
+                    Text('\$${_fmt.format(_resumen!.montoEsperado)}',
+                      style: const TextStyle(
+                        color: Colors.white, fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700, fontSize: 18)),
+                  ],
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 16),
           SizedBox(
@@ -410,23 +458,70 @@ class _CajaScreenState extends State<CajaScreen> {
     );
   }
 
-  Widget _buildMovimientosEmpty() {
+  Widget _buildMovimientos() {
+    final movimientos = _resumen?.movimientos ?? [];
+    if (movimientos.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: const Center(
+          child: Column(
+            children: [
+              Icon(Icons.receipt_long_outlined, size: 40, color: AppColors.textHint),
+              SizedBox(height: 8),
+              Text('Sin movimientos registrados',
+                style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      );
+    }
     return Container(
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.divider),
       ),
-      child: const Center(
-        child: Column(
-          children: [
-            Icon(Icons.receipt_long_outlined, size: 40, color: AppColors.textHint),
-            SizedBox(height: 8),
-            Text('Sin movimientos registrados',
-              style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Text('Movimientos del turno (${movimientos.length})',
+              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+          const Divider(height: 1),
+          ...movimientos.map((m) => ListTile(
+            dense: true,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (m.esIngreso ? AppColors.success : AppColors.error).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                m.esIngreso ? Icons.add_circle_outline : Icons.remove_circle_outline,
+                color: m.esIngreso ? AppColors.success : AppColors.error,
+                size: 18,
+              ),
+            ),
+            title: Text(m.concepto,
+              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(
+              '${m.usuario} · ${DateFormat('HH:mm', 'es').format(m.fecha.toLocal())}',
+              style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+            trailing: Text(
+              '${m.esIngreso ? '+' : '-'}\$${_fmt.format(m.monto)}',
+              style: TextStyle(
+                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 14,
+                color: m.esIngreso ? AppColors.success : AppColors.error)),
+          )),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }

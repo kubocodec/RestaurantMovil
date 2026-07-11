@@ -92,7 +92,8 @@ class _AdminBodyState extends State<_AdminBody> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
+    return SafeArea(
+      child: RefreshIndicator(
       onRefresh: _loadStats,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -107,6 +108,7 @@ class _AdminBodyState extends State<_AdminBody> {
             _buildModules(context),
           ],
         ),
+      ),
       ),
     );
   }
@@ -173,7 +175,7 @@ class _AdminBodyState extends State<_AdminBody> {
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
+          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.25,
@@ -218,8 +220,8 @@ class _AdminBodyState extends State<_AdminBody> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: MediaQuery.of(context).size.width > 600 ? 5 : 3,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
             childAspectRatio: 0.9,

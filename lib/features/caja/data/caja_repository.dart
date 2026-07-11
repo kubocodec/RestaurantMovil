@@ -47,6 +47,12 @@ class CajaRepository {
     return AperturaCajaModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  // Estado en vivo de la apertura: esperado + movimientos
+  Future<ResumenCajaModel> getResumen(String aperturaCierreCajaId) async {
+    final r = await _dio.get('/api/caja/apertura/$aperturaCierreCajaId/resumen');
+    return ResumenCajaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<void> registrarMovimiento({
     required String aperturaCierreCajaId,
     required String tipo,    // INGRESO | EGRESO

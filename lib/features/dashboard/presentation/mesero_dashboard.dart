@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../core/models/orden_model.dart';
 import '../../../core/models/user_model.dart';
+import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
 
 class MeseroDashboard extends StatelessWidget {
@@ -39,23 +41,62 @@ class MeseroDashboard extends StatelessWidget {
   }
 }
 
-class _MeseroBody extends StatelessWidget {
+class _MeseroBody extends StatefulWidget {
   final UserModel? user;
   const _MeseroBody({this.user});
 
   @override
+  State<_MeseroBody> createState() => _MeseroBodyState();
+}
+
+class _MeseroBodyState extends State<_MeseroBody> {
+  final _ordenesRepo = OrdenesRepository();
+  List<OrdenModel> _activas = [];
+  bool _cargando = true;
+
+  UserModel? get user => widget.user;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final sucursalId = user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) {
+      setState(() => _cargando = false);
+      return;
+    }
+    try {
+      final activas = await _ordenesRepo.getOrdenesActivas(sucursalId);
+      if (!mounted) return;
+      setState(() { _activas = activas; _cargando = false; });
+    } catch (_) {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildGreeting(context),
-          const SizedBox(height: 24),
-          _buildQuickActions(context),
-          const SizedBox(height: 24),
-          _buildActiveOrdersSummary(context),
-        ],
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _load,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildGreeting(context),
+              const SizedBox(height: 24),
+              _buildQuickActions(context),
+              const SizedBox(height: 24),
+              _buildActiveOrdersSummary(context),
+              const SizedBox(height: 80), // espacio para el FAB
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -160,7 +201,8 @@ class _MeseroBody extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Mis órdenes activas', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text('Órdenes activas (${_activas.length})',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             TextButton(
               onPressed: () => context.go('/mesero/mesas'),
               child: const Text('Ver todo'),
@@ -168,7 +210,15 @@ class _MeseroBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        _buildEmptyOrders(context),
+        if (_cargando)
+          const Center(child: Padding(
+            padding: EdgeInsets.all(24),
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ))
+        else if (_activas.isEmpty)
+          _buildEmptyOrders(context)
+        else
+          ..._activas.take(5).map((o) => _OrdenResumenTile(orden: o)),
       ],
     );
   }
@@ -197,6 +247,61 @@ class _MeseroBody extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _OrdenResumenTile extends StatelessWidget {
+  final OrdenModel orden;
+  const _OrdenResumenTile({required this.orden});
+
+  @override
+  Widget build(BuildContext context) {
+    final hora = orden.fechaCreacion.toLocal();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.mesaOcupada.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${orden.numeroMesa} · Orden #${orden.numeroOrden}',
+                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(
+                  'Desde ${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}',
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(orden.estado,
+              style: const TextStyle(
+                fontFamily: 'Poppins', fontSize: 10,
+                fontWeight: FontWeight.w600, color: AppColors.warning)),
+          ),
+        ],
       ),
     );
   }

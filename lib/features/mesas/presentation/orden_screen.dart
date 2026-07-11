@@ -286,7 +286,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
         color: AppColors.cardBackground,
         boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2))],
       ),
-      child: Row(
+      child: SafeArea(
+        top: false,
+        child: Row(
         children: [
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -313,6 +315,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -488,7 +491,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
         color: AppColors.cardBackground,
         boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2))],
       ),
-      child: Row(
+      child: SafeArea(
+        top: false,
+        child: Row(
         children: [
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -511,6 +516,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

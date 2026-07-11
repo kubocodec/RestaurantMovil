@@ -108,21 +108,22 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
     );
   }
 
-  void _onMesaTap(MesaModel mesa) {
+  Future<void> _onMesaTap(MesaModel mesa) async {
     if (mesa.isMantenimiento) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Mesa ${mesa.numeroMesa} en mantenimiento'), backgroundColor: AppColors.warning),
       );
       return;
     }
-    context.push('/mesero/orden/${mesa.mesaId}?nombre=${Uri.encodeComponent(mesa.numeroMesa)}&libre=${mesa.isLibre}');
+    await context.push('/mesero/orden/${mesa.mesaId}?nombre=${Uri.encodeComponent(mesa.numeroMesa)}&libre=${mesa.isLibre}');
+    if (mounted) _load(); // refleja el nuevo estado de la mesa al volver
   }
 }
 
 // ── Grid de mesas ────────────────────────────────────────────────────────────
 class _MesasGrid extends StatelessWidget {
   final List<MesaModel> mesas;
-  final void Function(MesaModel) onTap;
+  final Future<void> Function(MesaModel) onTap;
   final Future<void> Function() onRefresh;
 
   const _MesasGrid({required this.mesas, required this.onTap, required this.onRefresh});
@@ -152,14 +153,15 @@ class _MesasGrid extends StatelessWidget {
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + MediaQuery.of(context).padding.bottom),
             sliver: SliverGrid(
               delegate: SliverChildBuilderDelegate(
                 (_, i) => _MesaCard(mesa: mesas[i], onTap: () => onTap(mesas[i])),
                 childCount: mesas.length,
               ),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              // Columnas según el ancho disponible (responsive)
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 130,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
                 childAspectRatio: 1.0,

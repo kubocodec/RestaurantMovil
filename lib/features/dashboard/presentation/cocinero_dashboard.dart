@@ -41,7 +41,8 @@ class _CocinaBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return SafeArea(
+      child: SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,6 +53,7 @@ class _CocinaBody extends StatelessWidget {
           const SizedBox(height: 24),
           _buildGoToKitchen(context),
         ],
+      ),
       ),
     );
   }

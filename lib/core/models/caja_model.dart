@@ -80,3 +80,59 @@ class MovimientoCajaModel {
 
   Map<String, dynamic> toJson() => {'tipo': tipo, 'monto': monto, 'concepto': concepto};
 }
+
+/// Estado en vivo de la apertura: cuánto debería haber en caja y por qué.
+class ResumenCajaModel {
+  final double montoInicial;
+  final double totalVentas;
+  final double totalIngresos;
+  final double totalEgresos;
+  final double montoEsperado;
+  final List<MovimientoItemModel> movimientos;
+
+  const ResumenCajaModel({
+    required this.montoInicial,
+    required this.totalVentas,
+    required this.totalIngresos,
+    required this.totalEgresos,
+    required this.montoEsperado,
+    required this.movimientos,
+  });
+
+  factory ResumenCajaModel.fromJson(Map<String, dynamic> j) => ResumenCajaModel(
+    montoInicial:  AperturaCajaModel._toDouble(j['montoInicial']),
+    totalVentas:   AperturaCajaModel._toDouble(j['totalVentas']),
+    totalIngresos: AperturaCajaModel._toDouble(j['totalIngresos']),
+    totalEgresos:  AperturaCajaModel._toDouble(j['totalEgresos']),
+    montoEsperado: AperturaCajaModel._toDouble(j['montoEsperado']),
+    movimientos: ((j['movimientos'] as List?) ?? [])
+        .map((m) => MovimientoItemModel.fromJson(m))
+        .toList(),
+  );
+}
+
+class MovimientoItemModel {
+  final String tipo;
+  final double monto;
+  final String concepto;
+  final String usuario;
+  final DateTime fecha;
+
+  const MovimientoItemModel({
+    required this.tipo,
+    required this.monto,
+    required this.concepto,
+    required this.usuario,
+    required this.fecha,
+  });
+
+  bool get esIngreso => tipo == 'INGRESO';
+
+  factory MovimientoItemModel.fromJson(Map<String, dynamic> j) => MovimientoItemModel(
+    tipo:     j['tipo']?.toString() ?? '',
+    monto:    AperturaCajaModel._toDouble(j['monto']),
+    concepto: j['concepto']?.toString() ?? '',
+    usuario:  j['usuario']?.toString() ?? '',
+    fecha:    DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
+  );
+}

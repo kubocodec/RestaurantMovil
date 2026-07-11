@@ -181,7 +181,7 @@ class _CocinaScreenState extends State<CocinaScreen> with SingleTickerProviderSt
       color: AppColors.cocineroColor,
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
         itemCount: detalles.length,
         itemBuilder: (_, i) => _DetalleCard(
           detalle: detalles[i],
@@ -199,7 +199,7 @@ class _CocinaScreenState extends State<CocinaScreen> with SingleTickerProviderSt
       return _buildEmpty('No hay platos listos en este momento', Icons.restaurant_outlined, AppColors.textHint);
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
       itemCount: _ordenesParaListos.length,
       itemBuilder: (_, i) {
         final orden = _ordenesParaListos[i];
