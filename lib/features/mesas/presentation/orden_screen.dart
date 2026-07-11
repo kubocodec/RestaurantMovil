@@ -419,37 +419,50 @@ class _OrdenScreenState extends State<OrdenScreen> {
             'Toca para ver el pedido. Puedes agregar más platos.',
             style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
           ),
-          children: o.detalles.map((d) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              children: [
-                Text('${d.cantidad}x',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins', fontWeight: FontWeight.w700,
-                    fontSize: 12, color: AppColors.mesaOcupada)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(d.nombrePlato,
-                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5)),
-                      if (d.observaciones != null && d.observaciones!.isNotEmpty)
-                        Text('Nota: ${d.observaciones}',
+          children: [
+            // Altura acotada con scroll interno: con muchos ítems el panel
+            // no debe comerse la pantalla ni solaparse con el menú.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.3,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: o.detalles.map((d) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        Text('${d.cantidad}x',
                           style: const TextStyle(
-                            fontFamily: 'Poppins', fontSize: 10.5,
-                            color: AppColors.warning, fontStyle: FontStyle.italic)),
-                    ],
-                  ),
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                            fontSize: 12, color: AppColors.mesaOcupada)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(d.nombrePlato,
+                                style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5)),
+                              if (d.observaciones != null && d.observaciones!.isNotEmpty)
+                                Text('Nota: ${d.observaciones}',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins', fontSize: 10.5,
+                                    color: AppColors.warning, fontStyle: FontStyle.italic)),
+                            ],
+                          ),
+                        ),
+                        _EstadoDetalleChip(estado: d.estado),
+                        const SizedBox(width: 8),
+                        Text('\$${d.subtotal.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12)),
+                      ],
+                    ),
+                  )).toList(),
                 ),
-                _EstadoDetalleChip(estado: d.estado),
-                const SizedBox(width: 8),
-                Text('\$${d.subtotal.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12)),
-              ],
+              ),
             ),
-          )).toList(),
+          ],
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -53,6 +54,7 @@ class _MeseroBodyState extends State<_MeseroBody> {
   final _ordenesRepo = OrdenesRepository();
   List<OrdenModel> _activas = [];
   bool _cargando = true;
+  Timer? _timer;
 
   UserModel? get user => widget.user;
 
@@ -60,6 +62,14 @@ class _MeseroBodyState extends State<_MeseroBody> {
   void initState() {
     super.initState();
     _load();
+    // Mantener las órdenes activas al día sin depender del pull-to-refresh
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -175,7 +185,7 @@ class _MeseroBodyState extends State<_MeseroBody> {
                 label: 'Mesas',
                 subtitle: 'Ver estado',
                 color: AppColors.primary,
-                onTap: () => context.go('/mesero/mesas'),
+                onTap: () => _irAMesas(context),
               ),
             ),
             const SizedBox(width: 12),
@@ -185,13 +195,18 @@ class _MeseroBodyState extends State<_MeseroBody> {
                 label: 'Nueva Orden',
                 subtitle: 'Para llevar',
                 color: AppColors.earth2,
-                onTap: () => context.go('/mesero/mesas'),
+                onTap: () => _irAMesas(context),
               ),
             ),
           ],
         ),
       ],
     );
+  }
+
+  Future<void> _irAMesas(BuildContext context) async {
+    await context.push('/mesero/mesas');
+    if (mounted) _load(); // refleja las órdenes creadas/cobradas al volver
   }
 
   Widget _buildActiveOrdersSummary(BuildContext context) {

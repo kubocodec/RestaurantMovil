@@ -108,15 +108,15 @@ class AppDrawer extends StatelessWidget {
             fontFamily: 'Poppins',
           ),
         ),
-        onTap: () {
-          Navigator.pop(context);
-          _showLogoutDialog(context);
-        },
+        onTap: () => _showLogoutDialog(context),
       ),
     );
   }
 
   void _showLogoutDialog(BuildContext context) {
+    // Capturar el bloc ANTES de cerrar diálogos/drawer: sus context dejan
+    // de ser válidos al desmontarse y el logout nunca se disparaba.
+    final authBloc = context.read<AuthBloc>();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -130,7 +130,7 @@ class AppDrawer extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<AuthBloc>().add(AuthLogoutRequested());
+              authBloc.add(AuthLogoutRequested());
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Salir'),

@@ -86,7 +86,10 @@ class _OrdenesParaFacturarScreenState extends State<OrdenesParaFacturarScreen> {
         itemBuilder: (_, i) => _OrdenCard(
           orden: _ordenes[i],
           fmt: _fmt,
-          onTap: () => context.push('/cajero/factura/${_ordenes[i].ordenId}'),
+          onTap: () async {
+            await context.push('/cajero/factura/${_ordenes[i].ordenId}');
+            if (mounted) _load(); // la orden cobrada desaparece de la lista
+          },
         ),
       ),
     );

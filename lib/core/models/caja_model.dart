@@ -89,6 +89,7 @@ class ResumenCajaModel {
   final double totalEgresos;
   final double montoEsperado;
   final List<MovimientoItemModel> movimientos;
+  final List<VentaPlatoModel> ventasPorPlato;
 
   const ResumenCajaModel({
     required this.montoInicial,
@@ -97,6 +98,7 @@ class ResumenCajaModel {
     required this.totalEgresos,
     required this.montoEsperado,
     required this.movimientos,
+    required this.ventasPorPlato,
   });
 
   factory ResumenCajaModel.fromJson(Map<String, dynamic> j) => ResumenCajaModel(
@@ -108,6 +110,24 @@ class ResumenCajaModel {
     movimientos: ((j['movimientos'] as List?) ?? [])
         .map((m) => MovimientoItemModel.fromJson(m))
         .toList(),
+    ventasPorPlato: ((j['ventasPorPlato'] as List?) ?? [])
+        .map((v) => VentaPlatoModel.fromJson(v))
+        .toList(),
+  );
+}
+
+/// Desglose de lo vendido en el turno: cuántos de cada plato y por cuánto.
+class VentaPlatoModel {
+  final String plato;
+  final int cantidad;
+  final double total;
+
+  const VentaPlatoModel({required this.plato, required this.cantidad, required this.total});
+
+  factory VentaPlatoModel.fromJson(Map<String, dynamic> j) => VentaPlatoModel(
+    plato:    j['plato']?.toString() ?? '',
+    cantidad: (j['cantidad'] as num?)?.toInt() ?? 0,
+    total:    AperturaCajaModel._toDouble(j['total']),
   );
 }
 

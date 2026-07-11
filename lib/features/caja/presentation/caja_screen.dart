@@ -329,6 +329,8 @@ class _CajaScreenState extends State<CajaScreen> {
               if (_apertura?.isAbierta == true) ...[
                 _buildActions(),
                 const SizedBox(height: 20),
+                _buildVentasPorPlato(),
+                const SizedBox(height: 20),
                 _buildMovimientos(),
               ],
             ],
@@ -455,6 +457,64 @@ class _CajaScreenState extends State<CajaScreen> {
         const SizedBox(width: 12),
         Expanded(child: _ActionBtn(icon: Icons.remove_circle_outline, label: 'Egreso', color: AppColors.error, onTap: () => _registrarMovimiento('EGRESO'))),
       ],
+    );
+  }
+
+  Widget _buildVentasPorPlato() {
+    final ventas = _resumen?.ventasPorPlato ?? [];
+    if (ventas.isEmpty) return const SizedBox.shrink();
+    final totalPlatos = ventas.fold(0, (s, v) => s + v.cantidad);
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Ventas por plato',
+                  style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 14)),
+                Text('$totalPlatos platos',
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          ...ventas.map((v) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+            child: Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('${v.cantidad}',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                      fontSize: 13, color: AppColors.primary)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(v.plato,
+                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+                Text('\$${_fmt.format(v.total)}',
+                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+              ],
+            ),
+          )),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
