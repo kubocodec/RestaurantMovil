@@ -59,8 +59,13 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
   Future<void> _fetch() async {
     final sid = _sucursalId;
     if (sid.isEmpty) throw Exception('Sin sucursal asignada');
-    final salones = await _repo.getSalonesBySucursal(sid);
-    final mesas   = await _repo.getMesasBySucursal(sid);
+    // En paralelo: la pantalla carga en un viaje de red, no en dos
+    final resultados = await Future.wait([
+      _repo.getSalonesBySucursal(sid),
+      _repo.getMesasBySucursal(sid),
+    ]);
+    final salones = resultados[0] as List<SalonModel>;
+    final mesas   = resultados[1] as List<MesaModel>;
     if (!mounted) return;
     final len = salones.isEmpty ? 1 : salones.length + 1;
     // Conservar la pestaña seleccionada: solo recrear si cambió el número

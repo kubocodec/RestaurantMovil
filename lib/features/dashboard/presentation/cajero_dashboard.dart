@@ -305,6 +305,14 @@ class _CajeroBodyState extends State<_CajeroBody> {
         ),
         const SizedBox(height: 8),
         _ActionTile(
+          icon: Icons.history_rounded,
+          label: 'Recibos y facturas',
+          subtitle: 'Consultar y reimprimir comprobantes',
+          color: AppColors.info,
+          onTap: () => _irARuta('/cajero/comprobantes'),
+        ),
+        const SizedBox(height: 8),
+        _ActionTile(
           icon: Icons.table_restaurant_outlined,
           label: 'Tomar pedidos',
           subtitle: 'Crear órdenes en las mesas',

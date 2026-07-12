@@ -253,6 +253,11 @@ class _CategoriaExpansionState extends State<_CategoriaExpansion> {
                   const SizedBox(width: 12),
                   Expanded(child: Text(widget.categoria.nombre, style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14))),
                   IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 18),
+                    onPressed: () => _showEditarCatDialog(context),
+                    tooltip: 'Editar categoría',
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.playlist_add_rounded, color: AppColors.primary, size: 20),
                     onPressed: () => _showCrearSubDialog(context),
                     tooltip: 'Agregar subcategoría',
@@ -294,6 +299,49 @@ class _CategoriaExpansionState extends State<_CategoriaExpansion> {
         sucursalId: widget.sucursalId,
         onChanged:  () { _loadSubs(); widget.onChanged(); },
       )).toList(),
+    );
+  }
+
+  void _showEditarCatDialog(BuildContext context) {
+    final ctrl = TextEditingController(text: widget.categoria.nombre);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar categoría', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          textCapitalization: TextCapitalization.sentences,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Nombre *'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final nombre = ctrl.text.trim();
+              if (nombre.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.actualizarCategoria(
+                  categoriaId:  widget.categoria.categoriaId,
+                  restaurantId: widget.categoria.restaurantId,
+                  nombre:       nombre,
+                  descripcion:  widget.categoria.descripcion,
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Categoría actualizada'), backgroundColor: AppColors.success),
+                );
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -381,6 +429,14 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
                 const SizedBox(width: 8),
                 Expanded(child: Text(widget.sub.nombre, style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.textPrimary))),
                 IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 16),
+                  onPressed: () => _showEditarSubDialog(context),
+                  tooltip: 'Editar subcategoría',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
                   icon: const Icon(Icons.add_box_outlined, color: AppColors.cocineroColor, size: 18),
                   onPressed: () => _showCrearPlatoDialog(context),
                   tooltip: 'Agregar plato',
@@ -447,6 +503,48 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
             ],
           ),
         )).toList(),
+      ),
+    );
+  }
+
+  void _showEditarSubDialog(BuildContext context) {
+    final ctrl = TextEditingController(text: widget.sub.nombre);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar subcategoría', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          textCapitalization: TextCapitalization.sentences,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Nombre *'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final nombre = ctrl.text.trim();
+              if (nombre.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.actualizarSubcategoria(
+                  subcategoriaId: widget.sub.subcategoriaId,
+                  categoriaId:    widget.sub.categoriaId,
+                  nombre:         nombre,
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Subcategoría actualizada'), backgroundColor: AppColors.success),
+                );
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
       ),
     );
   }

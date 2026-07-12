@@ -18,7 +18,8 @@ class AppDrawer extends StatelessWidget {
         children: [
           _buildHeader(context),
           Expanded(child: _buildMenu(context)),
-          _buildLogout(context),
+          // El botón de salir no debe quedar bajo los botones del sistema
+          SafeArea(top: false, child: _buildLogout(context)),
         ],
       ),
     );

@@ -40,6 +40,34 @@ class ClienteModel {
   );
 }
 
+/// Línea vendida dentro de un comprobante emitido.
+class ItemVendidoModel {
+  final String nombre;
+  final int cantidad;
+  final double subtotal;
+
+  const ItemVendidoModel({required this.nombre, required this.cantidad, required this.subtotal});
+
+  factory ItemVendidoModel.fromJson(Map<String, dynamic> j) => ItemVendidoModel(
+    nombre:   j['nombre']?.toString() ?? '',
+    cantidad: (j['cantidad'] as num?)?.toInt() ?? 0,
+    subtotal: FacturaModel._toDouble(j['subtotal']),
+  );
+}
+
+/// Pago registrado en un comprobante.
+class PagoModel {
+  final String nombreMetodoPago;
+  final double monto;
+
+  const PagoModel({required this.nombreMetodoPago, required this.monto});
+
+  factory PagoModel.fromJson(Map<String, dynamic> j) => PagoModel(
+    nombreMetodoPago: j['nombreMetodoPago']?.toString() ?? '',
+    monto:            FacturaModel._toDouble(j['monto']),
+  );
+}
+
 class FacturaModel {
   final String facturaVentaId;
   final String numeroFactura;
@@ -55,6 +83,8 @@ class FacturaModel {
   final String? nombreCliente;
   final String? cedulaRucCliente;
   final DateTime fecha;
+  final List<ItemVendidoModel> items;
+  final List<PagoModel> pagos;
 
   // Cabecera del comprobante
   final String nombreRestaurant;
@@ -79,6 +109,8 @@ class FacturaModel {
     this.nombreCliente,
     this.cedulaRucCliente,
     required this.fecha,
+    this.items = const [],
+    this.pagos = const [],
     this.nombreRestaurant = '',
     this.nombreSucursal = '',
     this.razonSocial,
@@ -102,6 +134,8 @@ class FacturaModel {
     nombreCliente:  j['nombreCliente']?.toString(),
     cedulaRucCliente: j['cedulaRucCliente']?.toString(),
     fecha:          DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
+    items: ((j['items'] as List?) ?? []).map((e) => ItemVendidoModel.fromJson(e)).toList(),
+    pagos: ((j['pagos'] as List?) ?? []).map((e) => PagoModel.fromJson(e)).toList(),
     nombreRestaurant:  j['nombreRestaurant']?.toString() ?? '',
     nombreSucursal:    j['nombreSucursal']?.toString() ?? '',
     razonSocial:       j['razonSocial']?.toString(),
@@ -109,6 +143,12 @@ class FacturaModel {
     direccionSucursal: j['direccionSucursal']?.toString(),
     telefonoSucursal:  j['telefonoSucursal']?.toString(),
   );
+
+  /// Con cédula/RUC de cliente es factura; sin cliente es recibo
+  /// (consumidor final).
+  bool get esFactura => cedulaRucCliente?.isNotEmpty ?? false;
+
+  bool get isAnulada => estado == 'ANULADA';
 
   static double _toDouble(dynamic v) {
     if (v == null) return 0.0;

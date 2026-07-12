@@ -11,6 +11,7 @@ import '../../features/mesas/presentation/mesas_screen.dart';
 import '../../features/mesas/presentation/orden_screen.dart';
 import '../../features/cocina/presentation/cocina_screen.dart';
 import '../../features/caja/presentation/caja_screen.dart';
+import '../../features/facturacion/presentation/comprobantes_screen.dart';
 import '../../features/facturacion/presentation/facturacion_screen.dart';
 import '../../features/facturacion/presentation/ordenes_para_facturar_screen.dart';
 import '../../features/superadmin/presentation/superadmin_dashboard.dart';
@@ -62,6 +63,7 @@ class AppRouter {
           routes: [
             GoRoute(path: 'caja',    builder: (_, __) => const CajaScreen()),
             GoRoute(path: 'ordenes', builder: (_, __) => const OrdenesParaFacturarScreen()),
+            GoRoute(path: 'comprobantes', builder: (_, __) => const ComprobantesScreen()),
             GoRoute(
               path: 'factura/:ordenId',
               builder: (_, state) => FacturacionScreen(

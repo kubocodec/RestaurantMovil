@@ -69,12 +69,17 @@ class _OrdenScreenState extends State<OrdenScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final platos = await _repo.getPlatosBySucursal(_sucursalId);
-      // Buscar SIEMPRE la orden activa de la mesa (no confiar en el query
+      // En paralelo: menú y órdenes activas en un solo viaje de red.
+      // La orden activa de la mesa se busca SIEMPRE (no confiar en el query
       // param 'libre': la pantalla anterior puede tener el estado desfasado
       // y crearíamos una orden duplicada sobre una mesa ocupada).
+      final resultados = await Future.wait([
+        _repo.getPlatosBySucursal(_sucursalId),
+        _repo.getOrdenesActivas(_sucursalId),
+      ]);
+      final platos  = resultados[0] as List<PlatoModel>;
+      final activas = resultados[1] as List<OrdenModel>;
       OrdenModel? existente;
-      final activas = await _repo.getOrdenesActivas(_sucursalId);
       final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
       if (resumen != null) {
         // El listado de activas no incluye los ítems: cargar la orden completa
@@ -928,7 +933,8 @@ class _CarritoSheet extends StatelessWidget {
           ),
         ),
         Container(
-          padding: const EdgeInsets.all(20),
+          // Deja libre la franja de los botones de navegación del sistema
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).padding.bottom),
           decoration: const BoxDecoration(
             color: AppColors.cardBackground,
             border: Border(top: BorderSide(color: AppColors.divider)),

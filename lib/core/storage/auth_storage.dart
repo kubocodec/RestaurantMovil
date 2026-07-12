@@ -11,7 +11,13 @@ class AuthStorage {
   static const _keyAccessToken = 'access_token';
   static const _keyRefreshToken = 'refresh_token';
 
+  /// Cache en memoria: leer el secure storage implica una llamada al canal
+  /// nativo + descifrado en CADA request HTTP; con el token cacheado la
+  /// petición sale directo a la red.
+  static String? _accessTokenCache;
+
   static Future<void> saveUser(UserModel user) async {
+    _accessTokenCache = user.accessToken;
     await Future.wait([
       _storage.write(key: _keyUser, value: jsonEncode(user.toJson())),
       _storage.write(key: _keyAccessToken, value: user.accessToken),
@@ -31,16 +37,23 @@ class AuthStorage {
     }
   }
 
-  static Future<String?> getAccessToken() => _storage.read(key: _keyAccessToken);
+  static Future<String?> getAccessToken() async {
+    _accessTokenCache ??= await _storage.read(key: _keyAccessToken);
+    return _accessTokenCache;
+  }
+
   static Future<String?> getRefreshToken() => _storage.read(key: _keyRefreshToken);
 
-  static Future<void> updateAccessToken(String token) =>
-      _storage.write(key: _keyAccessToken, value: token);
+  static Future<void> updateAccessToken(String token) {
+    _accessTokenCache = token;
+    return _storage.write(key: _keyAccessToken, value: token);
+  }
 
   static Future<void> updateRefreshToken(String token) =>
       _storage.write(key: _keyRefreshToken, value: token);
 
   static Future<void> clear() async {
+    _accessTokenCache = null;
     await Future.wait([
       _storage.delete(key: _keyUser),
       _storage.delete(key: _keyAccessToken),

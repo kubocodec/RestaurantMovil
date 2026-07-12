@@ -251,6 +251,20 @@ class ConfiguracionRepository {
     return CategoriaModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  Future<CategoriaModel> actualizarCategoria({
+    required String categoriaId,
+    required String restaurantId,
+    required String nombre,
+    String? descripcion,
+  }) async {
+    final r = await _dio.put('/api/categorias/$categoriaId', data: {
+      'restaurantId': restaurantId,
+      'nombre':       nombre,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
+    });
+    return CategoriaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   // ── SUBCATEGORÍAS ────────────────────────────────────────────────────────────
 
   Future<List<SubcategoriaModel>> getSubcategorias(String categoriaId) async {
@@ -265,6 +279,20 @@ class ConfiguracionRepository {
     String? descripcion,
   }) async {
     final r = await _dio.post('/api/categorias/subcategorias', data: {
+      'categoriaId': categoriaId,
+      'nombre':      nombre,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
+    });
+    return SubcategoriaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<SubcategoriaModel> actualizarSubcategoria({
+    required String subcategoriaId,
+    required String categoriaId,
+    required String nombre,
+    String? descripcion,
+  }) async {
+    final r = await _dio.put('/api/categorias/subcategorias/$subcategoriaId', data: {
       'categoriaId': categoriaId,
       'nombre':      nombre,
       if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,

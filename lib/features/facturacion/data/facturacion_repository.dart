@@ -59,6 +59,18 @@ class FacturacionRepository {
     return FacturaModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Historial de comprobantes (facturas y recibos) de la sucursal en un día.
+  Future<List<FacturaModel>> getComprobantes(String sucursalId, {DateTime? fecha}) async {
+    final r = await _dio.get('/api/facturas/sucursal/$sucursalId', queryParameters: {
+      if (fecha != null)
+        'fecha': '${fecha.year.toString().padLeft(4, '0')}-'
+            '${fecha.month.toString().padLeft(2, '0')}-'
+            '${fecha.day.toString().padLeft(2, '0')}',
+    });
+    final List data = r.data['data'] ?? [];
+    return data.map((j) => FacturaModel.fromJson(j)).toList();
+  }
+
   // Registrar pago de factura
   Future<FacturaModel> registrarPago({
     required String facturaVentaId,
