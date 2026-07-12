@@ -214,6 +214,18 @@ class _MeseroBodyState extends State<_MeseroBody> {
     if (mounted) _load();
   }
 
+  /// Abre la orden tocada: la de mesa entra por su mesa (como siempre)
+  /// y la de para llevar directo por su id.
+  Future<void> _abrirOrden(OrdenModel o) async {
+    if (o.mesaId.isEmpty) {
+      await context.push('/mesero/para-llevar?ordenId=${o.ordenId}');
+    } else {
+      await context.push(
+        '/mesero/orden/${o.mesaId}?nombre=${Uri.encodeComponent(o.numeroMesa)}&libre=false');
+    }
+    if (mounted) _load();
+  }
+
   Widget _buildActiveOrdersSummary(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,7 +250,7 @@ class _MeseroBodyState extends State<_MeseroBody> {
         else if (_activas.isEmpty)
           _buildEmptyOrders(context)
         else
-          ..._activas.take(5).map((o) => _OrdenResumenTile(orden: o)),
+          ..._activas.take(5).map((o) => _OrdenResumenTile(orden: o, onTap: () => _abrirOrden(o))),
       ],
     );
   }
@@ -274,12 +286,15 @@ class _MeseroBodyState extends State<_MeseroBody> {
 
 class _OrdenResumenTile extends StatelessWidget {
   final OrdenModel orden;
-  const _OrdenResumenTile({required this.orden});
+  final VoidCallback onTap;
+  const _OrdenResumenTile({required this.orden, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final hora = orden.fechaCreacion.toLocal();
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -323,7 +338,10 @@ class _OrdenResumenTile extends StatelessWidget {
                 fontFamily: 'Poppins', fontSize: 10,
                 fontWeight: FontWeight.w600, color: AppColors.warning)),
           ),
+          const SizedBox(width: 6),
+          const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.textHint),
         ],
+      ),
       ),
     );
   }

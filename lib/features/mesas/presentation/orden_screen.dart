@@ -31,11 +31,16 @@ class OrdenScreen extends StatefulWidget {
   final String mesaNombre;
   final bool isLibre;
 
+  /// Orden para llevar ya creada: se abre para verla, agregar platos o
+  /// cobrarla (las órdenes de mesa se encuentran por la mesa, no por id).
+  final String? ordenId;
+
   const OrdenScreen({
     super.key,
     this.mesaId,
     this.mesaNombre = 'Para llevar',
     this.isLibre = true,
+    this.ordenId,
   });
 
   bool get esParaLlevar => mesaId == null;
@@ -96,14 +101,17 @@ class _OrdenScreenState extends State<OrdenScreen> {
       final platos  = resultados[0] as List<PlatoModel>;
       final activas = resultados[1] as List<OrdenModel>;
       OrdenModel? existente;
-      // Para llevar no reutiliza órdenes: cada pedido es independiente
-      if (!widget.esParaLlevar) {
+      if (widget.ordenId != null) {
+        // Orden para llevar existente: se abre directo por su id
+        existente = await _repo.getOrden(widget.ordenId!);
+      } else if (!widget.esParaLlevar) {
         final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
         if (resumen != null) {
           // El listado de activas no incluye los ítems: cargar la orden completa
           existente = await _repo.getOrden(resumen.ordenId);
         }
       }
+      // Sin ordenId y sin mesa: pedido para llevar nuevo, no reutiliza órdenes
       if (!mounted) return;
       setState(() {
         _platos = platos;
@@ -274,7 +282,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(widget.mesaNombre),
+        title: Text(widget.esParaLlevar && _ordenExistente != null
+            ? 'Para llevar · #${_ordenExistente!.numeroOrden}'
+            : widget.mesaNombre),
         actions: [
           if (_totalItems > 0)
             Stack(

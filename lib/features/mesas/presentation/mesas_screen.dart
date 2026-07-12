@@ -4,10 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/mesa_model.dart';
+import '../../../core/models/orden_model.dart';
 import '../../../core/models/salon_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../data/mesas_repository.dart';
 
 class MesasScreen extends StatefulWidget {
@@ -18,8 +20,10 @@ class MesasScreen extends StatefulWidget {
 
 class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin {
   final _repo = MesasRepository();
+  final _ordenesRepo = OrdenesRepository();
   List<SalonModel> _salones = [];
   List<MesaModel> _todasMesas = [];
+  List<OrdenModel> _paraLlevar = [];
   bool _loading = true;
   String? _error;
   late TabController _tabCtrl;
@@ -59,13 +63,15 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
   Future<void> _fetch() async {
     final sid = _sucursalId;
     if (sid.isEmpty) throw Exception('Sin sucursal asignada');
-    // En paralelo: la pantalla carga en un viaje de red, no en dos
+    // En paralelo: la pantalla carga en un viaje de red, no en tres
     final resultados = await Future.wait([
       _repo.getSalonesBySucursal(sid),
       _repo.getMesasBySucursal(sid),
+      _ordenesRepo.getOrdenesActivas(sid),
     ]);
     final salones = resultados[0] as List<SalonModel>;
     final mesas   = resultados[1] as List<MesaModel>;
+    final ordenes = resultados[2] as List<OrdenModel>;
     if (!mounted) return;
     final len = salones.isEmpty ? 1 : salones.length + 1;
     // Conservar la pestaña seleccionada: solo recrear si cambió el número
@@ -80,6 +86,8 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
     setState(() {
       _salones    = salones;
       _todasMesas = mesas;
+      // Órdenes sin mesa: pedidos para llevar aún abiertos (ver/cobrar)
+      _paraLlevar = ordenes.where((o) => o.mesaId.isEmpty).toList();
     });
   }
 
@@ -142,9 +150,22 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
       controller: _tabCtrl,
       children: List.generate(
         _salones.isEmpty ? 1 : _salones.length + 1,
-        (i) => _MesasGrid(mesas: _mesasDelTab(i), onTap: _onMesaTap, onRefresh: _load),
+        (i) => _MesasGrid(
+          mesas: _mesasDelTab(i),
+          paraLlevar: _paraLlevar,
+          onTap: _onMesaTap,
+          onLlevarTap: _onLlevarTap,
+          onRefresh: _load,
+        ),
       ),
     );
+  }
+
+  /// Abre una orden para llevar existente: ver el pedido, agregar
+  /// platos o cobrarla (cajero/admin), igual que al tocar una mesa.
+  Future<void> _onLlevarTap(OrdenModel o) async {
+    await context.push('/mesero/para-llevar?ordenId=${o.ordenId}');
+    if (mounted) _load();
   }
 
   Future<void> _onMesaTap(MesaModel mesa) async {
@@ -162,10 +183,18 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
 // ── Grid de mesas ────────────────────────────────────────────────────────────
 class _MesasGrid extends StatelessWidget {
   final List<MesaModel> mesas;
+  final List<OrdenModel> paraLlevar;
   final Future<void> Function(MesaModel) onTap;
+  final Future<void> Function(OrdenModel) onLlevarTap;
   final Future<void> Function() onRefresh;
 
-  const _MesasGrid({required this.mesas, required this.onTap, required this.onRefresh});
+  const _MesasGrid({
+    required this.mesas,
+    required this.paraLlevar,
+    required this.onTap,
+    required this.onLlevarTap,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +220,40 @@ class _MesasGrid extends StatelessWidget {
               ),
             ),
           ),
+          // Pedidos para llevar abiertos: sin mesa que tocar, se ven aquí
+          if (paraLlevar.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.takeout_dining_outlined, size: 16, color: AppColors.earth2),
+                        const SizedBox(width: 6),
+                        Text('Para llevar (${paraLlevar.length})',
+                          style: const TextStyle(
+                            fontFamily: 'Poppins', fontSize: 13,
+                            fontWeight: FontWeight.w700, color: AppColors.earth2)),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: 62,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: paraLlevar.length,
+                      itemBuilder: (_, i) => _ParaLlevarCard(
+                        orden: paraLlevar[i],
+                        onTap: () => onLlevarTap(paraLlevar[i]),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + MediaQuery.of(context).padding.bottom),
             sliver: SliverGrid(
@@ -262,6 +325,51 @@ class _MesaCard extends StatelessWidget {
               const SizedBox(width: 2),
               Text('${mesa.capacidad}', style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: _color)),
             ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta compacta de un pedido para llevar abierto.
+class _ParaLlevarCard extends StatelessWidget {
+  final OrdenModel orden;
+  final VoidCallback onTap;
+  const _ParaLlevarCard({required this.orden, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final hora = orden.fechaCreacion.toLocal();
+    final horaTxt =
+        '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.earth2.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.earth2, width: 1.2),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.takeout_dining_outlined, color: AppColors.earth2, size: 22),
+            const SizedBox(width: 10),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Orden #${orden.numeroOrden}',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                    fontSize: 13, color: AppColors.earth2)),
+                Text('Desde $horaTxt',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+              ],
+            ),
           ],
         ),
       ),

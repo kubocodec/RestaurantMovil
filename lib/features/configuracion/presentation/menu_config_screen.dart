@@ -106,7 +106,7 @@ class _MenuConfigScreenState extends State<MenuConfigScreen> with SingleTickerPr
 
 // ─── TAB 1: CATEGORÍAS ──────────────────────────────────────────────────────
 
-class _CategoriasTab extends StatelessWidget {
+class _CategoriasTab extends StatefulWidget {
   final List<CategoriaModel> categorias;
   final bool loading;
   final ConfiguracionRepository repo;
@@ -126,8 +126,31 @@ class _CategoriasTab extends StatelessWidget {
   });
 
   @override
+  State<_CategoriasTab> createState() => _CategoriasTabState();
+}
+
+class _CategoriasTabState extends State<_CategoriasTab> {
+  ConfiguracionRepository get repo => widget.repo;
+  String get restaurantId => widget.restaurantId;
+  VoidCallback get onChanged => widget.onChanged;
+  final _busquedaCtrl = TextEditingController();
+  String _busqueda = '';
+
+  @override
+  void dispose() {
+    _busquedaCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
+    if (widget.loading) return const Center(child: CircularProgressIndicator());
+
+    final visibles = _busqueda.isEmpty
+        ? widget.categorias
+        : widget.categorias
+            .where((c) => c.nombre.toLowerCase().contains(_busqueda))
+            .toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -137,21 +160,39 @@ class _CategoriasTab extends StatelessWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nueva categoría'),
       ),
-      body: categorias.isEmpty
+      body: widget.categorias.isEmpty
           ? _empty(context)
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-              itemCount: categorias.length,
-              itemBuilder: (_, i) => _CategoriaExpansion(
-                categoria:  categorias[i],
-                repo:       repo,
-                sucursalId: sucursalId,
-                asignados:  asignados,
-                onChanged:  onChanged,
-              ),
+          : Column(
+              children: [
+                _BusquedaField(
+                  controller: _busquedaCtrl,
+                  hint: 'Buscar categoría...',
+                  onChanged: (v) => setState(() => _busqueda = v.trim().toLowerCase()),
+                ),
+                Expanded(
+                  child: visibles.isEmpty
+                      ? _sinResultados()
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                          itemCount: visibles.length,
+                          itemBuilder: (_, i) => _CategoriaExpansion(
+                            categoria:  visibles[i],
+                            repo:       repo,
+                            sucursalId: widget.sucursalId,
+                            asignados:  widget.asignados,
+                            onChanged:  widget.onChanged,
+                          ),
+                        ),
+                ),
+              ],
             ),
     );
   }
+
+  Widget _sinResultados() => Center(
+    child: Text('Sin resultados para "$_busqueda"',
+      style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
+  );
 
   Widget _empty(BuildContext context) => Center(
     child: Column(
@@ -807,9 +848,60 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
   }
 }
 
+// ─── Campo de búsqueda compartido por ambas pestañas ────────────────────────
+
+class _BusquedaField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  const _BusquedaField({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.cardBackground,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: SizedBox(
+        height: 40,
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.textHint),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),
+            suffixIcon: controller.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondary),
+                    onPressed: () {
+                      controller.clear();
+                      onChanged('');
+                    },
+                  ),
+            filled: true,
+            fillColor: AppColors.surfaceVariant,
+            contentPadding: EdgeInsets.zero,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── TAB 2: PLATOS EN SUCURSAL ───────────────────────────────────────────────
 
-class _PlatosSucursalTab extends StatelessWidget {
+class _PlatosSucursalTab extends StatefulWidget {
   final List<PlatoModel> platos;
   final bool loading;
   final ConfiguracionRepository repo;
@@ -823,6 +915,23 @@ class _PlatosSucursalTab extends StatelessWidget {
     required this.sucursalId,
     required this.onChanged,
   });
+
+  @override
+  State<_PlatosSucursalTab> createState() => _PlatosSucursalTabState();
+}
+
+class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
+  ConfiguracionRepository get repo => widget.repo;
+  String get sucursalId => widget.sucursalId;
+  VoidCallback get onChanged => widget.onChanged;
+  final _busquedaCtrl = TextEditingController();
+  String _busqueda = '';
+
+  @override
+  void dispose() {
+    _busquedaCtrl.dispose();
+    super.dispose();
+  }
 
   void _showEditarPrecioDialog(BuildContext context, PlatoModel p) {
     final precioCtrl = TextEditingController(text: p.precio.toStringAsFixed(2));
@@ -870,9 +979,9 @@ class _PlatosSucursalTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
+    if (widget.loading) return const Center(child: CircularProgressIndicator());
 
-    if (platos.isEmpty) {
+    if (widget.platos.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -887,13 +996,32 @@ class _PlatosSucursalTab extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
+    final visibles = _busqueda.isEmpty
+        ? widget.platos
+        : widget.platos
+            .where((p) => p.nombrePlato.toLowerCase().contains(_busqueda))
+            .toList();
+
+    return Column(
+      children: [
+        _BusquedaField(
+          controller: _busquedaCtrl,
+          hint: 'Buscar plato...',
+          onChanged: (v) => setState(() => _busqueda = v.trim().toLowerCase()),
+        ),
+        Expanded(
+          child: visibles.isEmpty
+              ? Center(
+                  child: Text('Sin resultados para "$_busqueda"',
+                    style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
+                )
+              : RefreshIndicator(
       onRefresh: () async => onChanged(),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: platos.length,
+        itemCount: visibles.length,
         itemBuilder: (_, i) {
-          final p = platos[i];
+          final p = visibles[i];
           return InkWell(
             onTap: () => _showEditarPrecioDialog(context, p),
             borderRadius: BorderRadius.circular(12),
@@ -957,6 +1085,9 @@ class _PlatosSucursalTab extends StatelessWidget {
           );
         },
       ),
+    ),
+        ),
+      ],
     );
   }
 }
