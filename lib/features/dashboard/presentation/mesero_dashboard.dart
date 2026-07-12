@@ -191,11 +191,11 @@ class _MeseroBodyState extends State<_MeseroBody> {
             const SizedBox(width: 12),
             Expanded(
               child: _ActionCard(
-                icon: Icons.add_shopping_cart_outlined,
-                label: 'Nueva Orden',
-                subtitle: 'Para llevar',
+                icon: Icons.takeout_dining_outlined,
+                label: 'Para llevar',
+                subtitle: 'Pedido sin mesa',
                 color: AppColors.earth2,
-                onTap: () => _irAMesas(context),
+                onTap: () => _irAParaLlevar(context),
               ),
             ),
           ],
@@ -207,6 +207,11 @@ class _MeseroBodyState extends State<_MeseroBody> {
   Future<void> _irAMesas(BuildContext context) async {
     await context.push('/mesero/mesas');
     if (mounted) _load(); // refleja las órdenes creadas/cobradas al volver
+  }
+
+  Future<void> _irAParaLlevar(BuildContext context) async {
+    await context.push('/mesero/para-llevar');
+    if (mounted) _load();
   }
 
   Widget _buildActiveOrdersSummary(BuildContext context) {
@@ -290,14 +295,16 @@ class _OrdenResumenTile extends StatelessWidget {
               color: AppColors.mesaOcupada.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 18),
+            child: Icon(
+              orden.esParaLlevar ? Icons.takeout_dining_outlined : Icons.receipt_outlined,
+              color: AppColors.mesaOcupada, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${orden.numeroMesa} · Orden #${orden.numeroOrden}',
+                Text('${orden.lugar} · Orden #${orden.numeroOrden}',
                   style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
                 Text(
                   'Desde ${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}',

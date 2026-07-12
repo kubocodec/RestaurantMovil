@@ -79,6 +79,8 @@ class AppRouter {
           builder: (_, __) => const MeseroDashboard(),
           routes: [
             GoRoute(path: 'mesas', builder: (_, __) => const MesasScreen()),
+            // Pedido para llevar: orden sin mesa
+            GoRoute(path: 'para-llevar', builder: (_, __) => const OrdenScreen()),
             GoRoute(
               path: 'orden/:mesaId',
               builder: (_, state) => OrdenScreen(

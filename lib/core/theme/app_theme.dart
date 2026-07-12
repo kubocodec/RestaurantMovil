@@ -53,6 +53,54 @@ class AppTheme {
         iconTheme: IconThemeData(color: AppColors.textOnPrimary),
       ),
 
+      // TabBar: siempre va dentro del AppBar (fondo oscuro), por eso las
+      // pestañas son blancas; sin esto Material 3 usa marrón sobre marrón
+      // y los títulos de las secciones apenas se ven.
+      tabBarTheme: const TabBarTheme(
+        labelColor: Colors.white,
+        unselectedLabelColor: Colors.white60,
+        indicatorColor: Colors.white,
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        labelStyle: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        unselectedLabelStyle: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+
+      // Diálogos: fondo blanco y títulos oscuros bien contrastados
+      dialogTheme: DialogTheme(
+        backgroundColor: AppColors.cardBackground,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titleTextStyle: const TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+        contentTextStyle: const TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 14,
+          color: AppColors.textPrimary,
+        ),
+      ),
+
+      // BottomSheet: mismo fondo que la app, sin tinte M3
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+      ),
+
       // Cards
       cardTheme: CardTheme(
         color: AppColors.cardBackground,

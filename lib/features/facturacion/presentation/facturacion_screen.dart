@@ -359,7 +359,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   Widget _buildOrdenInfo() {
-    final mesa = _orden?.numeroMesa ?? 'Mesa ?';
+    final lugar = _orden?.lugar ?? 'Mesa ?';
     final estado = _orden?.estado ?? '';
     final numero = _orden?.numeroOrden.toString() ?? '';
     return Container(
@@ -377,7 +377,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Orden #$numero', style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
-              Text('Mesa: $mesa', style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
+              Text(
+                _orden?.esParaLlevar == true ? 'Para llevar' : 'Mesa: $lugar',
+                style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
               Text('Estado: $estado', style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
             ],
           ),

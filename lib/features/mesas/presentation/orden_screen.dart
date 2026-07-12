@@ -26,16 +26,19 @@ class _CartItem {
 }
 
 class OrdenScreen extends StatefulWidget {
-  final String mesaId;
+  /// Null cuando el cliente no ocupa mesa: pedido solo para llevar.
+  final String? mesaId;
   final String mesaNombre;
   final bool isLibre;
 
   const OrdenScreen({
     super.key,
-    required this.mesaId,
-    required this.mesaNombre,
-    required this.isLibre,
+    this.mesaId,
+    this.mesaNombre = 'Para llevar',
+    this.isLibre = true,
   });
+
+  bool get esParaLlevar => mesaId == null;
 
   @override
   State<OrdenScreen> createState() => _OrdenScreenState();
@@ -49,7 +52,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
   bool _enviando = false;
   String? _error;
   final List<_CartItem> _carrito = [];
-  String _tipoOrden = 'EN_MESA';
+  late String _tipoOrden = widget.esParaLlevar ? 'PARA_LLEVAR' : 'EN_MESA';
   String? _categoriaFiltro;
   final _busquedaCtrl = TextEditingController();
   String _busqueda = '';
@@ -93,10 +96,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
       final platos  = resultados[0] as List<PlatoModel>;
       final activas = resultados[1] as List<OrdenModel>;
       OrdenModel? existente;
-      final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
-      if (resumen != null) {
-        // El listado de activas no incluye los ítems: cargar la orden completa
-        existente = await _repo.getOrden(resumen.ordenId);
+      // Para llevar no reutiliza órdenes: cada pedido es independiente
+      if (!widget.esParaLlevar) {
+        final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
+        if (resumen != null) {
+          // El listado de activas no incluye los ítems: cargar la orden completa
+          existente = await _repo.getOrden(resumen.ordenId);
+        }
       }
       if (!mounted) return;
       setState(() {
@@ -153,7 +159,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Mesa: ${widget.mesaNombre}'),
+            Text(widget.esParaLlevar ? 'Pedido para llevar' : 'Mesa: ${widget.mesaNombre}'),
             const Divider(),
             ..._carrito.map((i) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
@@ -199,7 +205,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
       } else {
         orden = await _repo.crearOrden(
           mesaId: widget.mesaId,
-          tipoOrden: _tipoOrden,
+          // Sin mesa el backend necesita la sucursal para la orden
+          sucursalId: widget.esParaLlevar ? _sucursalId : null,
+          tipoOrden: widget.esParaLlevar ? 'PARA_LLEVAR' : _tipoOrden,
           tipoOrigen: 'MESERO',
         );
       }
@@ -437,6 +445,30 @@ class _OrdenScreenState extends State<OrdenScreen> {
   }
 
   Widget _buildTipoOrden() {
+    // Pedido sin mesa: todo va para llevar, no hay nada que elegir
+    if (widget.esParaLlevar) {
+      return Container(
+        color: AppColors.cardBackground,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.earth2.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.takeout_dining_outlined, color: AppColors.earth2, size: 18),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text('Pedido para llevar · sin mesa',
+                style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12.5, color: AppColors.earth2)),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       color: AppColors.cardBackground,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -719,6 +751,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
         builder: (_, ctrl) => _CarritoSheet(
           carrito: _carrito,
           total: _total,
+          soloParaLlevar: widget.esParaLlevar,
           scrollController: ctrl,
           onRemove: (plato) { Navigator.pop(ctx); _removeFromCart(plato); },
           onNota: (item) { Navigator.pop(ctx); _editarNota(item); },
@@ -905,6 +938,8 @@ class _PlatoTile extends StatelessWidget {
 class _CarritoSheet extends StatefulWidget {
   final List<_CartItem> carrito;
   final double total;
+  /// Pedido sin mesa: no se puede cambiar ningún plato a "en mesa".
+  final bool soloParaLlevar;
   final ScrollController scrollController;
   final Function(PlatoModel) onRemove;
   final Function(_CartItem) onNota;
@@ -913,6 +948,7 @@ class _CarritoSheet extends StatefulWidget {
   const _CarritoSheet({
     required this.carrito,
     required this.total,
+    this.soloParaLlevar = false,
     required this.scrollController,
     required this.onRemove,
     required this.onNota,
@@ -979,8 +1015,9 @@ class _CarritoSheetState extends State<_CarritoSheet> {
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
                         const SizedBox(height: 4),
                         // Cada plato puede ir en mesa o para llevar
+                        // (salvo pedidos sin mesa: todo va para llevar)
                         GestureDetector(
-                          onTap: () => setState(() =>
+                          onTap: widget.soloParaLlevar ? null : () => setState(() =>
                             i.tipoServicio = i.esParaLlevar ? 'EN_MESA' : 'PARA_LLEVAR'),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

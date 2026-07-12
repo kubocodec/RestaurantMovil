@@ -15,6 +15,7 @@ class _DetalleFlat {
   final int cantidad;
   final String estado;
   final String? notas;
+  final bool paraLlevar;
 
   const _DetalleFlat({
     required this.detalleId,
@@ -23,15 +24,18 @@ class _DetalleFlat {
     required this.cantidad,
     required this.estado,
     this.notas,
+    this.paraLlevar = false,
   });
 
   factory _DetalleFlat.from(DetalleOrdenModel d, OrdenModel o) => _DetalleFlat(
     detalleId:   d.ordenDetalleId,
-    mesaNombre:  o.numeroMesa,
+    mesaNombre:  o.lugar,
     platoNombre: d.nombrePlato,
     cantidad:    d.cantidad,
     estado:      d.estado,
     notas:       d.observaciones,
+    // El ítem puede ir para llevar aunque la orden sea de mesa
+    paraLlevar:  o.esParaLlevar || d.tipoServicio == 'PARA_LLEVAR',
   );
 
   bool get isPendiente     => estado == 'PENDIENTE' || estado == 'ENVIADO';
@@ -94,7 +98,7 @@ class _CocinaScreenState extends State<CocinaScreen> with SingleTickerProviderSt
         final listos  = detalles.where((d) => d.isListo).toList();
         todos.addAll(activos);
         if (listos.isNotEmpty) {
-          listaListos.add(_OrdenFlat(mesaNombre: o.numeroMesa, detalles: listos));
+          listaListos.add(_OrdenFlat(mesaNombre: o.lugar, detalles: listos));
         }
       }
 
@@ -333,10 +337,19 @@ class _DetalleCard extends StatelessWidget {
                   style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
                 Row(
                   children: [
-                    const Icon(Icons.table_restaurant_outlined, size: 12, color: AppColors.textSecondary),
+                    Icon(
+                      detalle.paraLlevar ? Icons.takeout_dining_outlined : Icons.table_restaurant_outlined,
+                      size: 12,
+                      color: detalle.paraLlevar ? AppColors.earth2 : AppColors.textSecondary),
                     const SizedBox(width: 4),
-                    Text(detalle.mesaNombre,
-                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
+                    Text(
+                      detalle.paraLlevar && detalle.mesaNombre != 'Para llevar'
+                          ? '${detalle.mesaNombre} · llevar'
+                          : detalle.mesaNombre,
+                      style: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 12,
+                        fontWeight: detalle.paraLlevar ? FontWeight.w600 : FontWeight.w400,
+                        color: detalle.paraLlevar ? AppColors.earth2 : AppColors.textSecondary)),
                   ],
                 ),
                 if (detalle.notas != null && detalle.notas!.isNotEmpty)

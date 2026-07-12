@@ -121,6 +121,16 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
                 ? _ErrorView(error: _error!, onRetry: _load)
                 : _buildContent(),
       ),
+      // El cliente que no ocupa mesa pide desde aquí su orden para llevar
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppColors.earth2,
+        onPressed: () async {
+          await context.push('/mesero/para-llevar');
+          if (mounted) _load();
+        },
+        icon: const Icon(Icons.takeout_dining_outlined),
+        label: const Text('Para llevar'),
+      ),
     );
   }
 

@@ -111,6 +111,12 @@ class OrdenModel {
     );
   }
 
+  bool get esParaLlevar => tipoOrden == 'PARA_LLEVAR';
+
+  /// Dónde mostrar la orden: el número de mesa, o "Para llevar" cuando
+  /// no ocupa mesa (el backend no envía numeroMesa en ese caso).
+  String get lugar => numeroMesa.isNotEmpty ? numeroMesa : 'Para llevar';
+
   double get total => detalles.fold(0.0, (s, d) => s + d.subtotal);
 
   List<DetalleOrdenModel> get detallesNoFacturados =>

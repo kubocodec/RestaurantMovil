@@ -154,7 +154,9 @@ class _OrdenCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
-              child: const Icon(Icons.table_restaurant_outlined, color: AppColors.primary, size: 24),
+              child: Icon(
+                orden.esParaLlevar ? Icons.takeout_dining_outlined : Icons.table_restaurant_outlined,
+                color: AppColors.primary, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -163,7 +165,7 @@ class _OrdenCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(orden.numeroMesa,
+                      Text(orden.lugar,
                         style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
                       const SizedBox(width: 8),
                       Container(
