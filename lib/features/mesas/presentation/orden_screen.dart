@@ -104,6 +104,24 @@ class _OrdenScreenState extends State<OrdenScreen> {
       if (widget.ordenId != null) {
         // Orden para llevar existente: se abre directo por su id
         existente = await _repo.getOrden(widget.ordenId!);
+        // Ya cobrada/cancelada: avisar y salir; esta pantalla ya no
+        // tiene nada que hacer (evita agregar platos a una orden cerrada)
+        if (existente.estado == 'CERRADA' || existente.estado == 'CANCELADA') {
+          if (!mounted) return;
+          final cerrada = existente.estado == 'CERRADA';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(cerrada
+                ? 'La orden #${existente.numeroOrden} ya fue cobrada y cerrada'
+                : 'La orden #${existente.numeroOrden} fue cancelada'),
+            backgroundColor: cerrada ? AppColors.success : AppColors.warning,
+          ));
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/mesero/mesas');
+          }
+          return;
+        }
       } else if (!widget.esParaLlevar) {
         final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
         if (resumen != null) {
