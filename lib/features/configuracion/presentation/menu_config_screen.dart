@@ -86,6 +86,8 @@ class _MenuConfigScreenState extends State<MenuConfigScreen> with SingleTickerPr
             repo:         _repo,
             restaurantId: widget.restaurantId,
             sucursalId:   widget.sucursalId,
+            // Plato asignado en esta sucursal (precio incluido), por platoId
+            asignados:    {for (final p in _platosSucursal) p.platoId: p},
             onChanged:    () { _loadCategorias(); _loadPlatosSucursal(); },
           ),
           _PlatosSucursalTab(
@@ -110,6 +112,7 @@ class _CategoriasTab extends StatelessWidget {
   final ConfiguracionRepository repo;
   final String restaurantId;
   final String sucursalId;
+  final Map<String, PlatoModel> asignados;
   final VoidCallback onChanged;
 
   const _CategoriasTab({
@@ -118,6 +121,7 @@ class _CategoriasTab extends StatelessWidget {
     required this.repo,
     required this.restaurantId,
     required this.sucursalId,
+    required this.asignados,
     required this.onChanged,
   });
 
@@ -142,6 +146,7 @@ class _CategoriasTab extends StatelessWidget {
                 categoria:  categorias[i],
                 repo:       repo,
                 sucursalId: sucursalId,
+                asignados:  asignados,
                 onChanged:  onChanged,
               ),
             ),
@@ -201,9 +206,16 @@ class _CategoriaExpansion extends StatefulWidget {
   final CategoriaModel categoria;
   final ConfiguracionRepository repo;
   final String sucursalId;
+  final Map<String, PlatoModel> asignados;
   final VoidCallback onChanged;
 
-  const _CategoriaExpansion({required this.categoria, required this.repo, required this.sucursalId, required this.onChanged});
+  const _CategoriaExpansion({
+    required this.categoria,
+    required this.repo,
+    required this.sucursalId,
+    required this.asignados,
+    required this.onChanged,
+  });
 
   @override
   State<_CategoriaExpansion> createState() => _CategoriaExpansionState();
@@ -297,6 +309,7 @@ class _CategoriaExpansionState extends State<_CategoriaExpansion> {
         sub:        sub,
         repo:       widget.repo,
         sucursalId: widget.sucursalId,
+        asignados:  widget.asignados,
         onChanged:  () { _loadSubs(); widget.onChanged(); },
       )).toList(),
     );
@@ -389,9 +402,16 @@ class _SubcategoriaRow extends StatefulWidget {
   final SubcategoriaModel sub;
   final ConfiguracionRepository repo;
   final String sucursalId;
+  final Map<String, PlatoModel> asignados;
   final VoidCallback onChanged;
 
-  const _SubcategoriaRow({required this.sub, required this.repo, required this.sucursalId, required this.onChanged});
+  const _SubcategoriaRow({
+    required this.sub,
+    required this.repo,
+    required this.sucursalId,
+    required this.asignados,
+    required this.onChanged,
+  });
 
   @override
   State<_SubcategoriaRow> createState() => _SubcategoriaRowState();
@@ -489,17 +509,30 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
                   child: Icon(Icons.edit_outlined, size: 14, color: AppColors.textSecondary),
                 ),
               ),
-              GestureDetector(
-                onTap: () => _showAsignarPrecioDialog(context, p),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+              // Con precio asignado en la sucursal se muestra (tocar para
+              // cambiarlo); sin precio, el botón para asignarlo
+              Builder(builder: (_) {
+                final asignado = widget.asignados[p.platoId];
+                return GestureDetector(
+                  onTap: () => asignado != null
+                      ? _showEditarPrecioDialog(context, p, asignado)
+                      : _showAsignarPrecioDialog(context, p),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: asignado != null
+                          ? AppColors.success.withValues(alpha: 0.12)
+                          : AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      asignado != null ? '\$${asignado.precio.toStringAsFixed(2)}' : 'asignar precio',
+                      style: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w700,
+                        color: asignado != null ? AppColors.success : AppColors.warning)),
                   ),
-                  child: const Text('\$ precio', style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: AppColors.success, fontWeight: FontWeight.w600)),
-                ),
-              ),
+                );
+              }),
             ],
           ),
         )).toList(),
@@ -672,6 +705,51 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
                   const SnackBar(content: Text('Plato actualizado'), backgroundColor: AppColors.success),
                 );
                 _loadPlatos();
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Cambia el precio de un plato ya asignado a la sucursal.
+  void _showEditarPrecioDialog(BuildContext context, PlatoMasterModel plato, PlatoModel asignado) {
+    final precioCtrl = TextEditingController(text: asignado.precio.toStringAsFixed(2));
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Editar precio: ${plato.nombre}',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: TextField(
+          controller: precioCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Precio *', prefixText: '\$  '),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final precio = double.tryParse(precioCtrl.text.trim());
+              if (precio == null || precio <= 0) return;
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.actualizarPrecioPlato(
+                  sucursalPlatoId: asignado.sucursalPlatoId,
+                  sucursalId:      widget.sucursalId,
+                  platoId:         asignado.platoId,
+                  precio:          precio,
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Precio actualizado'), backgroundColor: AppColors.success),
+                );
                 widget.onChanged();
               } catch (e) {
                 if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(

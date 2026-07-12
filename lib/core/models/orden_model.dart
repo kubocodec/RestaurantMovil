@@ -9,6 +9,7 @@ class DetalleOrdenModel {
   final String tipoServicio;
   final String? observaciones;
   final bool facturado;
+  final int cantidadFacturada;
   final String? impresoraNombre;
   final String? impresoraIp;
   final int? impresoraPuerto;
@@ -24,6 +25,7 @@ class DetalleOrdenModel {
     required this.tipoServicio,
     this.observaciones,
     required this.facturado,
+    this.cantidadFacturada = 0,
     this.impresoraNombre,
     this.impresoraIp,
     this.impresoraPuerto,
@@ -40,10 +42,17 @@ class DetalleOrdenModel {
     tipoServicio:   j['tipoServicio']?.toString() ?? 'EN_MESA',
     observaciones:  j['observaciones']?.toString(),
     facturado:      j['facturado'] ?? false,
+    cantidadFacturada: (j['cantidadFacturada'] as num?)?.toInt() ?? 0,
     impresoraNombre: j['impresoraNombre']?.toString(),
     impresoraIp:     j['impresoraIp']?.toString(),
     impresoraPuerto: (j['impresoraPuerto'] as num?)?.toInt(),
   );
+
+  /// Unidades que faltan por cobrar (cuentas divididas).
+  int get cantidadPendiente => facturado ? 0 : cantidad - cantidadFacturada;
+
+  /// Monto pendiente de cobro de esta línea.
+  double get subtotalPendiente => precioUnitario * cantidadPendiente;
 
   bool get isPendiente     => estado == 'PENDIENTE' || estado == 'ENVIADO';
   bool get isEnPreparacion => estado == 'EN_PREPARACION';
@@ -105,7 +114,7 @@ class OrdenModel {
   double get total => detalles.fold(0.0, (s, d) => s + d.subtotal);
 
   List<DetalleOrdenModel> get detallesNoFacturados =>
-      detalles.where((d) => !d.facturado && d.estado != 'CANCELADO').toList();
+      detalles.where((d) => d.cantidadPendiente > 0 && d.estado != 'CANCELADO').toList();
 
   List<DetalleOrdenModel> get detallesPendientesCocina =>
       detalles.where((d) => d.isPendiente).toList();

@@ -39,7 +39,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   final _cedulaCtrl = TextEditingController();
   final _refCtrl    = TextEditingController();
   ClienteModel? _clienteEncontrado;
-  Set<String> _itemsSeleccionados = {};
+
+  /// Cuentas divididas: cuántas unidades de cada ítem entran en ESTE cobro
+  /// (ordenDetalleId → cantidad elegida, entre 0 y lo pendiente).
+  Map<String, int> _cantidadesElegidas = {};
 
   // false = recibo a consumidor final; true = factura con datos del cliente
   bool _esFactura = false;
@@ -79,7 +82,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         _metodosPago = metodos;
         _aperturaCierreCajaId = apertura?.aperturaCierreCajaId;
         if (metodos.isNotEmpty) _selectedMetodoPagoId = metodos.first.metodoPagoId;
-        _itemsSeleccionados = Set.from(orden.detallesNoFacturados.map((d) => d.ordenDetalleId));
+        // Por defecto se cobra todo lo pendiente; el cajero baja cantidades
+        // cuando el cliente paga solo una parte (cuentas divididas)
+        _cantidadesElegidas = {
+          for (final d in orden.detallesNoFacturados) d.ordenDetalleId: d.cantidadPendiente,
+        };
         _loading = false;
       });
     } catch (e) {
@@ -188,16 +195,19 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     );
   }
 
+  int _cantidadDe(String ordenDetalleId) => _cantidadesElegidas[ordenDetalleId] ?? 0;
+
   double get _subtotalSeleccionado {
     final orden = _orden;
     if (orden == null) return 0;
     return orden.detallesNoFacturados
-        .where((d) => _itemsSeleccionados.contains(d.ordenDetalleId))
-        .fold(0.0, (sum, d) => sum + d.subtotal);
+        .fold(0.0, (sum, d) => sum + d.precioUnitario * _cantidadDe(d.ordenDetalleId));
   }
 
+  bool get _haySeleccion => _cantidadesElegidas.values.any((c) => c > 0);
+
   bool get _puedeEmitir =>
-      _itemsSeleccionados.isNotEmpty &&
+      _haySeleccion &&
       _selectedMetodoPagoId != null &&
       _aperturaCierreCajaId != null &&
       (!_esFactura || _clienteEncontrado != null);
@@ -223,15 +233,24 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
     setState(() => _emitiendo = true);
     try {
+      // Solo los ítems con cantidad elegida > 0; se cobra esa cantidad
+      // (puede ser parcial: cuentas divididas)
       final seleccionados = orden.detallesNoFacturados
-          .where((d) => _itemsSeleccionados.contains(d.ordenDetalleId))
+          .where((d) => _cantidadDe(d.ordenDetalleId) > 0)
           .toList();
       final detalles = seleccionados
-          .map((d) => {'ordenDetalleId': d.ordenDetalleId, 'cantidad': d.cantidad})
+          .map((d) => {
+                'ordenDetalleId': d.ordenDetalleId,
+                'cantidad': _cantidadDe(d.ordenDetalleId),
+              })
           .toList();
       // Copia para el comprobante (tras emitir quedan marcados facturados)
       final itemsRecibo = seleccionados
-          .map((d) => ReciboItem(nombre: d.nombrePlato, cantidad: d.cantidad, subtotal: d.subtotal))
+          .map((d) => ReciboItem(
+                nombre: d.nombrePlato,
+                cantidad: _cantidadDe(d.ordenDetalleId),
+                subtotal: d.precioUnitario * _cantidadDe(d.ordenDetalleId),
+              ))
           .toList();
 
       final factura = await _factRepo.emitirFactura(
@@ -377,27 +396,35 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary))),
       );
     }
+    final todoSeleccionado = detalles.every(
+      (d) => _cantidadDe(d.ordenDetalleId) == d.cantidadPendiente);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Ítems a facturar', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+            const Text('Ítems a cobrar', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
             TextButton(
               onPressed: () => setState(() {
-                if (_itemsSeleccionados.length == detalles.length) {
-                  _itemsSeleccionados.clear();
+                if (todoSeleccionado) {
+                  _cantidadesElegidas.updateAll((_, __) => 0);
                 } else {
-                  _itemsSeleccionados = Set.from(detalles.map((d) => d.ordenDetalleId));
+                  _cantidadesElegidas = {
+                    for (final d in detalles) d.ordenDetalleId: d.cantidadPendiente,
+                  };
                 }
               }),
               child: Text(
-                _itemsSeleccionados.length == detalles.length ? 'Deseleccionar todo' : 'Seleccionar todo',
+                todoSeleccionado ? 'Quitar todo' : 'Cobrar todo',
                 style: const TextStyle(fontFamily: 'Poppins', fontSize: 12),
               ),
             ),
           ],
+        ),
+        const Text(
+          'Para cuentas divididas ajusta cuántas unidades paga este cliente; el resto queda pendiente.',
+          style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 8),
         Container(
@@ -407,24 +434,57 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             border: Border.all(color: AppColors.divider),
           ),
           child: Column(
-            children: detalles.map((d) => CheckboxListTile(
-              value: _itemsSeleccionados.contains(d.ordenDetalleId),
-              onChanged: (val) => setState(() {
-                if (val == true) {
-                  _itemsSeleccionados.add(d.ordenDetalleId);
-                } else {
-                  _itemsSeleccionados.remove(d.ordenDetalleId);
-                }
-              }),
-              title: Text('${d.cantidad}× ${d.nombrePlato}',
-                style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
-              subtitle: Text('\$${_fmt.format(d.precioUnitario)} c/u',
-                style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
-              secondary: Text('\$${_fmt.format(d.subtotal)}',
-                style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primary)),
-              activeColor: AppColors.primary,
-              dense: true,
-            )).toList(),
+            children: detalles.map((d) {
+              final elegida = _cantidadDe(d.ordenDetalleId);
+              final pendiente = d.cantidadPendiente;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(d.nombrePlato,
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600)),
+                          Text(
+                            '\$${_fmt.format(d.precioUnitario)} c/u · $pendiente pendiente${d.cantidadFacturada > 0 ? ' (${d.cantidadFacturada} ya cobradas)' : ''}',
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    // Stepper: cuántas unidades entran en este cobro
+                    _QtyBtn(
+                      icon: Icons.remove,
+                      enabled: elegida > 0,
+                      onTap: () => setState(() => _cantidadesElegidas[d.ordenDetalleId] = elegida - 1),
+                    ),
+                    SizedBox(
+                      width: 42,
+                      child: Text('$elegida/$pendiente',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13,
+                          color: elegida > 0 ? AppColors.primary : AppColors.textHint)),
+                    ),
+                    _QtyBtn(
+                      icon: Icons.add,
+                      enabled: elegida < pendiente,
+                      onTap: () => setState(() => _cantidadesElegidas[d.ordenDetalleId] = elegida + 1),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 62,
+                      child: Text('\$${_fmt.format(d.precioUnitario * elegida)}',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                          fontSize: 13, color: AppColors.primary)),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],
@@ -772,6 +832,30 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
     } finally {
       if (mounted) setState(() => _imprimiendo = false);
     }
+  }
+}
+
+/// Botón compacto de +/- para elegir cantidades en cuentas divididas.
+class _QtyBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _QtyBtn({required this.icon, required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: enabled ? AppColors.primary : AppColors.surfaceVariant,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 16, color: enabled ? Colors.white : AppColors.textHint),
+      ),
+    );
   }
 }
 

@@ -28,6 +28,16 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
   bool _loading = true;
   String? _error;
 
+  /// Clasificación: TODOS | FACTURA | RECIBO | ANULADA
+  String _filtro = 'TODOS';
+
+  List<FacturaModel> get _visibles => switch (_filtro) {
+    'FACTURA' => _comprobantes.where((c) => c.esFactura && !c.isAnulada).toList(),
+    'RECIBO'  => _comprobantes.where((c) => !c.esFactura && !c.isAnulada).toList(),
+    'ANULADA' => _comprobantes.where((c) => c.isAnulada).toList(),
+    _         => _comprobantes,
+  };
+
   String get _sucursalId {
     final s = context.read<AuthBloc>().state;
     return s is AuthAuthenticated ? s.user.sucursalId : '';
@@ -141,20 +151,54 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
       );
     }
 
+    final visibles = _visibles;
     final totalDia = _comprobantes
         .where((c) => !c.isAnulada)
         .fold(0.0, (s, c) => s + c.total);
+    final facturas = _comprobantes.where((c) => c.esFactura && !c.isAnulada).length;
+    final recibos  = _comprobantes.where((c) => !c.esFactura && !c.isAnulada).length;
+    final anuladas = _comprobantes.where((c) => c.isAnulada).length;
 
     return Column(
       children: [
+        // Clasificación de comprobantes
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _FiltroChip(
+                label: 'Todos (${_comprobantes.length})',
+                selected: _filtro == 'TODOS',
+                onTap: () => setState(() => _filtro = 'TODOS'),
+              ),
+              _FiltroChip(
+                label: 'Facturas ($facturas)',
+                selected: _filtro == 'FACTURA',
+                onTap: () => setState(() => _filtro = 'FACTURA'),
+              ),
+              _FiltroChip(
+                label: 'Recibos ($recibos)',
+                selected: _filtro == 'RECIBO',
+                onTap: () => setState(() => _filtro = 'RECIBO'),
+              ),
+              _FiltroChip(
+                label: 'Anulados ($anuladas)',
+                selected: _filtro == 'ANULADA',
+                onTap: () => setState(() => _filtro = 'ANULADA'),
+              ),
+            ],
+          ),
+        ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${_comprobantes.length} comprobantes',
+              Text('${visibles.length} comprobantes',
                   style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
-              Text('Total: \$${_fmt.format(totalDia)}',
+              Text('Total del día: \$${_fmt.format(totalDia)}',
                   style: const TextStyle(
                     fontFamily: 'Poppins', fontSize: 13,
                     fontWeight: FontWeight.w700, color: AppColors.cajeroColor)),
@@ -162,19 +206,23 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
           ),
         ),
         Expanded(
-          child: RefreshIndicator(
-            color: AppColors.primary,
-            onRefresh: _load,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              itemCount: _comprobantes.length,
-              itemBuilder: (_, i) => _ComprobanteCard(
-                factura: _comprobantes[i],
-                fmt: _fmt,
-                onTap: () => _verDetalle(_comprobantes[i]),
-              ),
-            ),
-          ),
+          child: visibles.isEmpty
+              ? const Center(
+                  child: Text('Sin comprobantes de este tipo',
+                      style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)))
+              : RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: _load,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    itemCount: visibles.length,
+                    itemBuilder: (_, i) => _ComprobanteCard(
+                      factura: visibles[i],
+                      fmt: _fmt,
+                      onTap: () => _verDetalle(visibles[i]),
+                    ),
+                  ),
+                ),
         ),
       ],
     );
@@ -190,6 +238,36 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
         factura: f,
         fmt: _fmt,
         sucursalId: _sucursalId,
+      ),
+    );
+  }
+}
+
+class _FiltroChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FiltroChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary : AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: selected ? AppColors.primary : AppColors.divider),
+          ),
+          child: Text(label,
+            style: TextStyle(
+              fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.textSecondary)),
+        ),
       ),
     );
   }

@@ -16,8 +16,13 @@ class _CartItem {
   int cantidad = 1;
   String? notas;
 
-  _CartItem(this.plato);
+  /// EN_MESA o PARA_LLEVAR: cada plato puede ser distinto (ej. comen en la
+  /// mesa pero piden un postre para llevar).
+  String tipoServicio;
+
+  _CartItem(this.plato, {this.tipoServicio = 'EN_MESA'});
   double get subtotal => plato.precio * cantidad;
+  bool get esParaLlevar => tipoServicio == 'PARA_LLEVAR';
 }
 
 class OrdenScreen extends StatefulWidget {
@@ -46,11 +51,19 @@ class _OrdenScreenState extends State<OrdenScreen> {
   final List<_CartItem> _carrito = [];
   String _tipoOrden = 'EN_MESA';
   String? _categoriaFiltro;
+  final _busquedaCtrl = TextEditingController();
+  String _busqueda = '';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _busquedaCtrl.dispose();
+    super.dispose();
   }
 
   String get _sucursalId {
@@ -103,7 +116,8 @@ class _OrdenScreenState extends State<OrdenScreen> {
       if (idx >= 0) {
         _carrito[idx].cantidad++;
       } else {
-        _carrito.add(_CartItem(plato));
+        // Hereda el tipo elegido arriba; se puede cambiar por plato en el carrito
+        _carrito.add(_CartItem(plato, tipoServicio: _tipoOrden));
       }
     });
   }
@@ -140,14 +154,14 @@ class _OrdenScreenState extends State<OrdenScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Mesa: ${widget.mesaNombre}'),
-            Text('Tipo: ${_tipoOrden == 'EN_MESA' ? 'En mesa' : 'Para llevar'}'),
             const Divider(),
             ..._carrito.map((i) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(child: Text('${i.cantidad}x ${i.plato.nombrePlato}',
+                  Expanded(child: Text(
+                    '${i.cantidad}x ${i.plato.nombrePlato}${i.esParaLlevar ? ' (llevar)' : ''}',
                     style: const TextStyle(fontSize: 13, fontFamily: 'Poppins'))),
                   Text('\$${i.subtotal.toStringAsFixed(2)}',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Poppins', fontSize: 13)),
@@ -195,7 +209,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
           ordenId: orden.ordenId,
           platoId: item.plato.platoId,
           cantidad: item.cantidad,
-          tipoServicio: _tipoOrden == 'EN_MESA' ? 'EN_MESA' : 'PARA_LLEVAR',
+          tipoServicio: item.tipoServicio,
           observaciones: item.notas,
         );
       }
@@ -293,7 +307,8 @@ class _OrdenScreenState extends State<OrdenScreen> {
 
   Widget _buildCobrarBar() {
     final orden = _ordenExistente!;
-    final totalPorCobrar = orden.detallesNoFacturados.fold(0.0, (s, d) => s + d.subtotal);
+    // Con cuentas divididas puede haber unidades ya cobradas: solo lo pendiente
+    final totalPorCobrar = orden.detallesNoFacturados.fold(0.0, (s, d) => s + d.subtotalPendiente);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(
@@ -339,9 +354,46 @@ class _OrdenScreenState extends State<OrdenScreen> {
       children: [
         _buildTipoOrden(),
         if (_ordenExistente != null) _buildOrdenActivaBanner(_ordenExistente!),
+        _buildBusqueda(),
         _buildCategorias(),
         Expanded(child: _buildPlatosList()),
       ],
+    );
+  }
+
+  Widget _buildBusqueda() {
+    return Container(
+      color: AppColors.cardBackground,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: SizedBox(
+        height: 40,
+        child: TextField(
+          controller: _busquedaCtrl,
+          onChanged: (v) => setState(() => _busqueda = v.trim().toLowerCase()),
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'Buscar plato...',
+            hintStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.textHint),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),
+            suffixIcon: _busqueda.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondary),
+                    onPressed: () {
+                      _busquedaCtrl.clear();
+                      setState(() => _busqueda = '');
+                    },
+                  ),
+            filled: true,
+            fillColor: AppColors.surfaceVariant,
+            contentPadding: EdgeInsets.zero,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -390,8 +442,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Text('Tipo:', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
-          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Los platos nuevos se agregan como:',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12.5)),
+          ),
           _TipoChip(
             label: 'En mesa', icon: Icons.table_restaurant_outlined,
             selected: _tipoOrden == 'EN_MESA',
@@ -562,18 +616,26 @@ class _OrdenScreenState extends State<OrdenScreen> {
   }
 
   Widget _buildPlatosList() {
-    final visibles = _categoriaFiltro == null
+    var visibles = _categoriaFiltro == null
         ? _platos
         : _platos.where((p) => p.categoria == _categoriaFiltro).toList();
+    if (_busqueda.isNotEmpty) {
+      visibles = visibles
+          .where((p) => p.nombrePlato.toLowerCase().contains(_busqueda))
+          .toList();
+    }
     if (visibles.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.no_food_outlined, size: 64, color: AppColors.textHint),
-            SizedBox(height: 12),
-            Text('No hay platos disponibles',
-              style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)),
+            const Icon(Icons.no_food_outlined, size: 64, color: AppColors.textHint),
+            const SizedBox(height: 12),
+            Text(
+              _busqueda.isNotEmpty
+                  ? 'Sin resultados para "$_busqueda"'
+                  : 'No hay platos disponibles',
+              style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)),
           ],
         ),
       );
@@ -840,7 +902,7 @@ class _PlatoTile extends StatelessWidget {
   }
 }
 
-class _CarritoSheet extends StatelessWidget {
+class _CarritoSheet extends StatefulWidget {
   final List<_CartItem> carrito;
   final double total;
   final ScrollController scrollController;
@@ -856,6 +918,18 @@ class _CarritoSheet extends StatelessWidget {
     required this.onNota,
     required this.onConfirm,
   });
+
+  @override
+  State<_CarritoSheet> createState() => _CarritoSheetState();
+}
+
+class _CarritoSheetState extends State<_CarritoSheet> {
+  List<_CartItem> get carrito => widget.carrito;
+  double get total => widget.total;
+  ScrollController get scrollController => widget.scrollController;
+  Function(PlatoModel) get onRemove => widget.onRemove;
+  Function(_CartItem) get onNota => widget.onNota;
+  VoidCallback get onConfirm => widget.onConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -903,6 +977,40 @@ class _CarritoSheet extends StatelessWidget {
                           style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
                         Text('\$${i.plato.precio.toStringAsFixed(2)} c/u',
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        // Cada plato puede ir en mesa o para llevar
+                        GestureDetector(
+                          onTap: () => setState(() =>
+                            i.tipoServicio = i.esParaLlevar ? 'EN_MESA' : 'PARA_LLEVAR'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: i.esParaLlevar
+                                  ? AppColors.earth2.withValues(alpha: 0.15)
+                                  : AppColors.surfaceVariant,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: i.esParaLlevar ? AppColors.earth2 : AppColors.divider),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  i.esParaLlevar
+                                      ? Icons.takeout_dining_outlined
+                                      : Icons.table_restaurant_outlined,
+                                  size: 12,
+                                  color: i.esParaLlevar ? AppColors.earth2 : AppColors.textSecondary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  i.esParaLlevar ? 'Para llevar' : 'En mesa',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w600,
+                                    color: i.esParaLlevar ? AppColors.earth2 : AppColors.textSecondary)),
+                              ],
+                            ),
+                          ),
+                        ),
                         if (i.notas != null && i.notas!.isNotEmpty)
                           Text('Nota: ${i.notas}',
                             style: const TextStyle(
