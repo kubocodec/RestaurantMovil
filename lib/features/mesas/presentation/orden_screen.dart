@@ -70,14 +70,15 @@ class _OrdenScreenState extends State<OrdenScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final platos = await _repo.getPlatosBySucursal(_sucursalId);
+      // Buscar SIEMPRE la orden activa de la mesa (no confiar en el query
+      // param 'libre': la pantalla anterior puede tener el estado desfasado
+      // y crearíamos una orden duplicada sobre una mesa ocupada).
       OrdenModel? existente;
-      if (!widget.isLibre) {
-        final activas = await _repo.getOrdenesActivas(_sucursalId);
-        final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
-        if (resumen != null) {
-          // El listado de activas no incluye los ítems: cargar la orden completa
-          existente = await _repo.getOrden(resumen.ordenId);
-        }
+      final activas = await _repo.getOrdenesActivas(_sucursalId);
+      final resumen = activas.where((o) => o.mesaId == widget.mesaId).firstOrNull;
+      if (resumen != null) {
+        // El listado de activas no incluye los ítems: cargar la orden completa
+        existente = await _repo.getOrden(resumen.ordenId);
       }
       if (!mounted) return;
       setState(() {
@@ -222,7 +223,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
             duration: const Duration(seconds: 5),
           ));
         }
-        context.go('/mesero/mesas');
+        // pop (no go): así el await del push en MesasScreen se completa
+        // y la pantalla de mesas recarga mostrando la mesa OCUPADA.
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/mesero/mesas');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -260,11 +267,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
       bottomNavigationBar: _totalItems > 0
           ? _buildBottomBar()
           : (_mostrarCobrar ? _buildCobrarBar() : null),
@@ -394,59 +403,120 @@ class _OrdenScreenState extends State<OrdenScreen> {
     );
   }
 
+  /// Barra compacta de una sola línea: el detalle completo se abre en una
+  /// hoja inferior para no quitarle espacio al menú ni solaparse con las
+  /// categorías.
   Widget _buildOrdenActivaBanner(OrdenModel o) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       decoration: BoxDecoration(
         color: AppColors.mesaOcupada.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.mesaOcupada.withValues(alpha: 0.4)),
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: true,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-          leading: const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 20),
-          title: Text(
-            'Orden #${o.numeroOrden} · ${o.detalles.length} items · \$${o.total.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontFamily: 'Poppins', fontSize: 13,
-              fontWeight: FontWeight.w600, color: AppColors.mesaOcupada),
-          ),
-          subtitle: const Text(
-            'Toca para ver el pedido. Puedes agregar más platos.',
-            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
-          ),
-          children: [
-            // Altura acotada con scroll interno: con muchos ítems el panel
-            // no debe comerse la pantalla ni solaparse con el menú.
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.3,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _mostrarPedidoActual(o),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Orden #${o.numeroOrden} · ${o.detalles.length} items · \$${o.total.toStringAsFixed(2)}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontSize: 12.5,
+                    fontWeight: FontWeight.w600, color: AppColors.mesaOcupada),
+                ),
               ),
-              child: SingleChildScrollView(
-                child: Column(
-                  children: o.detalles.map((d) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.mesaOcupada,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text('Ver pedido',
+                  style: TextStyle(
+                    fontFamily: 'Poppins', fontSize: 11,
+                    fontWeight: FontWeight.w600, color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _mostrarPedidoActual(OrdenModel o) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        maxChildSize: 0.9,
+        minChildSize: 0.35,
+        expand: false,
+        builder: (_, ctrl) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Pedido · Orden #${o.numeroOrden}',
+                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                  Text('${o.detalles.length} items',
+                    style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: ctrl,
+                padding: const EdgeInsets.all(16),
+                itemCount: o.detalles.length,
+                itemBuilder: (_, i) {
+                  final d = o.detalles[i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
                     child: Row(
                       children: [
-                        Text('${d.cantidad}x',
-                          style: const TextStyle(
-                            fontFamily: 'Poppins', fontWeight: FontWeight.w700,
-                            fontSize: 12, color: AppColors.mesaOcupada)),
-                        const SizedBox(width: 8),
+                        Container(
+                          width: 32, height: 32,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.mesaOcupada.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('${d.cantidad}x',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                              fontSize: 12, color: AppColors.mesaOcupada)),
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(d.nombrePlato,
-                                style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5)),
+                                style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
                               if (d.observaciones != null && d.observaciones!.isNotEmpty)
                                 Text('Nota: ${d.observaciones}',
                                   style: const TextStyle(
-                                    fontFamily: 'Poppins', fontSize: 10.5,
+                                    fontFamily: 'Poppins', fontSize: 11,
                                     color: AppColors.warning, fontStyle: FontStyle.italic)),
                             ],
                           ),
@@ -455,11 +525,29 @@ class _OrdenScreenState extends State<OrdenScreen> {
                         const SizedBox(width: 8),
                         Text('\$${d.subtotal.toStringAsFixed(2)}',
                           style: const TextStyle(
-                            fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12)),
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12.5)),
                       ],
                     ),
-                  )).toList(),
-                ),
+                  );
+                },
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 14 + MediaQuery.of(ctx).padding.bottom),
+              decoration: const BoxDecoration(
+                color: AppColors.cardBackground,
+                border: Border(top: BorderSide(color: AppColors.divider)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Total',
+                    style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 15)),
+                  Text('\$${o.total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                      fontSize: 18, color: AppColors.mesaOcupada)),
+                ],
               ),
             ),
           ],

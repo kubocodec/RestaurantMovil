@@ -283,11 +283,13 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Facturación')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 

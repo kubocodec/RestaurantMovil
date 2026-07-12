@@ -54,11 +54,13 @@ class _OrdenesParaFacturarScreenState extends State<OrdenesParaFacturarScreen> {
         title: const Text('Seleccionar orden'),
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 

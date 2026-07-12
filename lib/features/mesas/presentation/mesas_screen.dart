@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -22,38 +23,59 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
   bool _loading = true;
   String? _error;
   late TabController _tabCtrl;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 1, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    // El estado de las mesas cambia desde otros dispositivos (mesero,
+    // cajero): refrescar en silencio sin esperar al pull-to-refresh.
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _refreshSilencioso());
   }
 
   @override
-  void dispose() { _tabCtrl.dispose(); super.dispose(); }
+  void dispose() { _timer?.cancel(); _tabCtrl.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final sid = _sucursalId;
-      if (sid.isEmpty) throw Exception('Sin sucursal asignada');
-      final salones = await _repo.getSalonesBySucursal(sid);
-      final mesas   = await _repo.getMesasBySucursal(sid);
-      if (!mounted) return;
-      final len = salones.isEmpty ? 1 : salones.length + 1;
-      _tabCtrl.dispose();
-      _tabCtrl = TabController(length: len, vsync: this);
-      setState(() {
-        _salones    = salones;
-        _todasMesas = mesas;
-        _loading    = false;
-      });
+      await _fetch();
+      if (mounted) setState(() => _loading = false);
     } catch (e, st) {
       debugPrint('MesasScreen._load error: $e\n$st');
       if (!mounted) return;
       setState(() { _error = ApiClient.parseError(e); _loading = false; });
     }
+  }
+
+  /// Igual que _load pero sin spinner ni error: para el refresco periódico.
+  Future<void> _refreshSilencioso() async {
+    if (_loading) return;
+    try { await _fetch(); } catch (_) {}
+  }
+
+  Future<void> _fetch() async {
+    final sid = _sucursalId;
+    if (sid.isEmpty) throw Exception('Sin sucursal asignada');
+    final salones = await _repo.getSalonesBySucursal(sid);
+    final mesas   = await _repo.getMesasBySucursal(sid);
+    if (!mounted) return;
+    final len = salones.isEmpty ? 1 : salones.length + 1;
+    // Conservar la pestaña seleccionada: solo recrear si cambió el número
+    if (len != _tabCtrl.length) {
+      final anterior = _tabCtrl;
+      _tabCtrl = TabController(
+        length: len, vsync: this,
+        initialIndex: anterior.index.clamp(0, len - 1),
+      );
+      anterior.dispose();
+    }
+    setState(() {
+      _salones    = salones;
+      _todasMesas = mesas;
+    });
   }
 
   String get _sucursalId {
@@ -87,11 +109,13 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _error != null
-              ? _ErrorView(error: _error!, onRetry: _load)
-              : _buildContent(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : _error != null
+                ? _ErrorView(error: _error!, onRetry: _load)
+                : _buildContent(),
+      ),
     );
   }
 

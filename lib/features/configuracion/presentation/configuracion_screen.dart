@@ -93,11 +93,13 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 

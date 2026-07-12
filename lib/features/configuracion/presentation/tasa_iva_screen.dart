@@ -46,11 +46,13 @@ class _TasaIvaScreenState extends State<TasaIvaScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nueva tasa'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 
@@ -118,7 +120,8 @@ class _TasaIvaScreenState extends State<TasaIvaScreen> {
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              // Espacio extra al final: el FAB no debe tapar la última tasa
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
               itemCount: _tasas.length,
               itemBuilder: (_, i) => _TasaCard(
                 tasa: _tasas[i],

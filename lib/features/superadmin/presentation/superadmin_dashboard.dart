@@ -69,17 +69,19 @@ class _SuperAdminDashboardState extends State<SuperAdminDashboard> {
             label: const Text('Nuevo cliente', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
             onPressed: () => _showCrearTenantDialog(context),
           ),
-          body: Column(
-            children: [
-              _buildHeader(user),
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _error != null
-                        ? _buildError()
-                        : _buildTenantList(),
-              ),
-            ],
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(user),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error != null
+                          ? _buildError()
+                          : _buildTenantList(),
+                ),
+              ],
+            ),
           ),
         );
       },

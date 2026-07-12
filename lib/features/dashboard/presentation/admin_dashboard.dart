@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -55,11 +56,28 @@ class _AdminBodyState extends State<_AdminBody> {
   int _mesasOcupadas = 0;
   int _ordenesActivas = 0;
   bool _cargandoStats = true;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _loadStats();
+    // Las ventas/mesas/órdenes cambian desde otros dispositivos:
+    // refrescar el resumen sin depender del pull-to-refresh.
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _loadStats());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  /// Navega y refresca las estadísticas al volver (push mantiene este
+  /// dashboard vivo debajo; con go se perdía y no había refresco).
+  Future<void> _irA(String ruta) async {
+    await context.push(ruta);
+    if (mounted) _loadStats();
   }
 
   Future<void> _loadStats() async {
@@ -204,12 +222,12 @@ class _AdminBodyState extends State<_AdminBody> {
 
   Widget _buildModules(BuildContext context) {
     final modules = [
-      _Module(Icons.table_restaurant_outlined, 'Mesas', 'Ver y gestionar mesas', AppColors.primary, () => context.go('/mesero/mesas')),
-      _Module(Icons.receipt_long_outlined, 'Órdenes', 'Órdenes activas', AppColors.earth2, () => context.go('/mesero/mesas')),
-      _Module(Icons.point_of_sale_outlined, 'Caja', 'Aperturas y cierres', AppColors.cajeroColor, () => context.go('/cajero/caja')),
-      _Module(Icons.kitchen_outlined, 'Cocina', 'Estado de platos', AppColors.cocineroColor, () => context.go('/cocina')),
-      _Module(Icons.bar_chart_outlined, 'Reportes', 'Estadísticas del día', AppColors.info, () => context.go('/admin/reportes')),
-      _Module(Icons.settings_outlined, 'Configuración', 'Sucursal y menú', AppColors.textSecondary, () => context.go('/admin/configuracion')),
+      _Module(Icons.table_restaurant_outlined, 'Mesas', 'Ver y gestionar mesas', AppColors.primary, () => _irA('/mesero/mesas')),
+      _Module(Icons.receipt_long_outlined, 'Órdenes', 'Órdenes activas', AppColors.earth2, () => _irA('/mesero/mesas')),
+      _Module(Icons.point_of_sale_outlined, 'Caja', 'Aperturas y cierres', AppColors.cajeroColor, () => _irA('/cajero/caja')),
+      _Module(Icons.kitchen_outlined, 'Cocina', 'Estado de platos', AppColors.cocineroColor, () => _irA('/cocina')),
+      _Module(Icons.bar_chart_outlined, 'Reportes', 'Estadísticas del día', AppColors.info, () => _irA('/admin/reportes')),
+      _Module(Icons.settings_outlined, 'Configuración', 'Sucursal y menú', AppColors.textSecondary, () => _irA('/admin/configuracion')),
     ];
 
     return Column(

@@ -48,11 +48,13 @@ class _SalonesMesasScreenState extends State<SalonesMesasScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nuevo salón'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 
@@ -97,10 +99,12 @@ class _SalonesMesasScreenState extends State<SalonesMesasScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        // Espacio extra al final para que el FAB no tape el último salón
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
         itemCount: _salones.length,
         itemBuilder: (_, i) => _SalonCard(
           salon: _salones[i],
+          sucursalId: widget.sucursalId,
           repo: _repo,
           onChanged: _load,
         ),
@@ -163,10 +167,16 @@ class _SalonesMesasScreenState extends State<SalonesMesasScreen> {
 
 class _SalonCard extends StatefulWidget {
   final SalonModel salon;
+  final String sucursalId;
   final ConfiguracionRepository repo;
   final VoidCallback onChanged;
 
-  const _SalonCard({required this.salon, required this.repo, required this.onChanged});
+  const _SalonCard({
+    required this.salon,
+    required this.sucursalId,
+    required this.repo,
+    required this.onChanged,
+  });
 
   @override
   State<_SalonCard> createState() => _SalonCardState();
@@ -230,6 +240,11 @@ class _SalonCardState extends State<_SalonCard> {
                     ),
                   ),
                   IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 20),
+                    onPressed: () => _showEditarSalonDialog(context),
+                    tooltip: 'Editar salón',
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
                     onPressed: () => _showCrearMesaDialog(context),
                     tooltip: 'Agregar mesa',
@@ -279,7 +294,155 @@ class _SalonCardState extends State<_SalonCard> {
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: _mesas.map((m) => _MesaChip(mesa: m)).toList(),
+        children: _mesas.map((m) => _MesaChip(
+          mesa: m,
+          onTap: () => _showEditarMesaDialog(context, m),
+        )).toList(),
+      ),
+    );
+  }
+
+  void _showEditarSalonDialog(BuildContext context) {
+    final nombreCtrl = TextEditingController(text: widget.salon.nombre);
+    final descCtrl   = TextEditingController(text: widget.salon.descripcion);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar salón', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nombreCtrl,
+              decoration: const InputDecoration(labelText: 'Nombre del salón *'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descCtrl,
+              decoration: const InputDecoration(labelText: 'Descripción (opcional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final nombre = nombreCtrl.text.trim();
+              if (nombre.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.actualizarSalon(
+                  salonId:     widget.salon.salonId,
+                  sucursalId:  widget.sucursalId,
+                  nombre:      nombre,
+                  descripcion: descCtrl.text.trim(),
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Salón actualizado'), backgroundColor: AppColors.success),
+                );
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditarMesaDialog(BuildContext context, MesaModel mesa) {
+    final numCtrl = TextEditingController(text: mesa.numeroMesa);
+    final capCtrl = TextEditingController(text: '${mesa.capacidad}');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Editar mesa ${mesa.numeroMesa}',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: numCtrl,
+              decoration: const InputDecoration(labelText: 'Número de mesa *'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: capCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Capacidad (personas)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: ctx,
+                builder: (c2) => AlertDialog(
+                  title: const Text('Desactivar mesa'),
+                  content: Text('¿Desactivar la mesa ${mesa.numeroMesa}? Dejará de aparecer para tomar órdenes.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(c2, false), child: const Text('Cancelar')),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                      onPressed: () => Navigator.pop(c2, true),
+                      child: const Text('Desactivar'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok != true) return;
+              if (ctx.mounted) Navigator.pop(ctx);
+              try {
+                await widget.repo.eliminarMesa(mesa.mesaId);
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mesa desactivada'), backgroundColor: AppColors.success),
+                );
+                _loadMesas();
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Desactivar'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final num = numCtrl.text.trim();
+              final cap = int.tryParse(capCtrl.text.trim()) ?? mesa.capacidad;
+              if (num.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.actualizarMesa(
+                  mesaId:     mesa.mesaId,
+                  salonId:    mesa.salonId,
+                  numeroMesa: num,
+                  capacidad:  cap,
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mesa actualizada'), backgroundColor: AppColors.success),
+                );
+                _loadMesas();
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
       ),
     );
   }
@@ -343,11 +506,14 @@ class _SalonCardState extends State<_SalonCard> {
 
 class _MesaChip extends StatelessWidget {
   final MesaModel mesa;
-  const _MesaChip({required this.mesa});
+  final VoidCallback onTap;
+  const _MesaChip({required this.mesa, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.primary.withOpacity(0.1),
@@ -363,7 +529,10 @@ class _MesaChip extends StatelessWidget {
               style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
           Text('  (${mesa.capacidad} pax)',
               style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, color: AppColors.textSecondary)),
+          const SizedBox(width: 4),
+          const Icon(Icons.edit_outlined, size: 12, color: AppColors.textSecondary),
         ],
+      ),
       ),
     );
   }

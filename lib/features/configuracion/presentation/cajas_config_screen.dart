@@ -46,11 +46,13 @@ class _CajasConfigScreenState extends State<CajasConfigScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nueva caja'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 
@@ -119,11 +121,13 @@ class _CajasConfigScreenState extends State<CajasConfigScreen> {
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              // Espacio extra al final para que el FAB no tape la última caja
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
               itemCount: _cajas.length,
               itemBuilder: (_, i) => _CajaCard(
                 caja: _cajas[i],
                 onToggle: () => _toggle(_cajas[i]),
+                onEdit: () => _showEditarDialog(_cajas[i]),
               ),
             ),
           ),
@@ -141,6 +145,78 @@ class _CajasConfigScreenState extends State<CajasConfigScreen> {
         SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
       );
     }
+  }
+
+  void _showEditarDialog(CajaConfigModel caja) {
+    final nombreCtrl = TextEditingController(text: caja.nombre);
+    final codigoCtrl = TextEditingController(text: caja.codigoPuntoEmision);
+    final descCtrl   = TextEditingController(text: caja.descripcion ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar caja', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nombreCtrl,
+                decoration: const InputDecoration(labelText: 'Nombre de la caja *'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: codigoCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Código punto emisión *',
+                  helperText: '3 dígitos, ej: 001',
+                ),
+                maxLength: 3,
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: descCtrl,
+                decoration: const InputDecoration(labelText: 'Descripción (opcional)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final nombre = nombreCtrl.text.trim();
+              final codigo = codigoCtrl.text.trim();
+              if (nombre.isEmpty || codigo.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Nombre y código son requeridos')),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              try {
+                await _repo.actualizarCaja(
+                  cajaId:              caja.cajaId,
+                  sucursalId:          widget.sucursalId,
+                  nombre:              nombre,
+                  codigoPuntoEmision:  codigo,
+                  descripcion:         descCtrl.text.trim(),
+                );
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Caja actualizada'), backgroundColor: AppColors.success),
+                );
+                _load();
+              } catch (e) {
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCrearDialog() {
@@ -218,11 +294,15 @@ class _CajasConfigScreenState extends State<CajasConfigScreen> {
 class _CajaCard extends StatelessWidget {
   final CajaConfigModel caja;
   final VoidCallback onToggle;
-  const _CajaCard({required this.caja, required this.onToggle});
+  final VoidCallback onEdit;
+  const _CajaCard({required this.caja, required this.onToggle, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -270,6 +350,7 @@ class _CajaCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }

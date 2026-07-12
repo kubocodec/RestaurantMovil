@@ -154,18 +154,20 @@ class _CocinaScreenState extends State<CocinaScreen> with SingleTickerProviderSt
           ],
         ),
       ),
-      body: _loading && _todos.isEmpty
-          ? const Center(child: CircularProgressIndicator(color: AppColors.cocineroColor))
-          : _error != null && _todos.isEmpty
-              ? _buildError()
-              : TabBarView(
-                  controller: _tabCtrl,
-                  children: [
-                    _buildList(_pendientes, 'Iniciar', AppColors.estadoEnProceso, Icons.play_arrow_rounded, 'EN_PREPARACION'),
-                    _buildList(_enPreparacion, 'Listo', AppColors.estadoListo, Icons.done_rounded, 'LISTO'),
-                    _buildListosList(),
-                  ],
-                ),
+      body: SafeArea(
+        child: _loading && _todos.isEmpty
+            ? const Center(child: CircularProgressIndicator(color: AppColors.cocineroColor))
+            : _error != null && _todos.isEmpty
+                ? _buildError()
+                : TabBarView(
+                    controller: _tabCtrl,
+                    children: [
+                      _buildList(_pendientes, 'Iniciar', AppColors.estadoEnProceso, Icons.play_arrow_rounded, 'EN_PREPARACION'),
+                      _buildList(_enPreparacion, 'Listo', AppColors.estadoListo, Icons.done_rounded, 'LISTO'),
+                      _buildListosList(),
+                    ],
+                  ),
+      ),
     );
   }
 

@@ -56,11 +56,13 @@ class _UsuariosConfigScreenState extends State<UsuariosConfigScreen> {
         icon: const Icon(Icons.person_add_rounded),
         label: const Text('Nuevo usuario'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 
@@ -106,11 +108,13 @@ class _UsuariosConfigScreenState extends State<UsuariosConfigScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        // Espacio extra al final para que el FAB no tape al último usuario
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
         itemCount: _usuarios.length,
         itemBuilder: (_, i) => _UsuarioCard(
           usuario: _usuarios[i],
           onToggle: () => _toggle(_usuarios[i]),
+          onEdit: () => _showEditarDialog(_usuarios[i]),
         ),
       ),
     );
@@ -125,6 +129,140 @@ class _UsuariosConfigScreenState extends State<UsuariosConfigScreen> {
         SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
       );
     }
+  }
+
+  void _showEditarDialog(UsuarioListModel u) {
+    final nombreCtrl = TextEditingController(text: u.nombre);
+    // Si el rol actual no está en la lista (p.ej. ADMIN), se muestra sin
+    // permitir cambiarlo a/desde roles restringidos.
+    String? selectedRolId = _roles.any((r) => r.rolId == u.rolId) ? u.rolId : null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Text('Editar: @${u.usuario}',
+              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nombreCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Nombre completo *'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedRolId,
+                  decoration: InputDecoration(
+                    labelText: 'Rol *',
+                    helperText: selectedRolId == null ? 'Rol actual: ${u.nombreRol}' : null,
+                  ),
+                  items: _roles.map((r) => DropdownMenuItem(value: r.rolId, child: Text(r.nombre))).toList(),
+                  onChanged: (v) => setDlgState(() => selectedRolId = v),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showCambiarPasswordDialog(u);
+                    },
+                    icon: const Icon(Icons.lock_reset_rounded, size: 18),
+                    label: const Text('Cambiar contraseña'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () async {
+                final nombre = nombreCtrl.text.trim();
+                final rolId  = selectedRolId ?? u.rolId;
+                if (nombre.isEmpty) return;
+                Navigator.pop(ctx);
+                try {
+                  await _repo.actualizarUsuario(
+                    usuarioId:  u.usuarioId,
+                    sucursalId: widget.sucursalId,
+                    rolId:      rolId,
+                    nombre:     nombre,
+                    usuario:    u.usuario,
+                  );
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Usuario actualizado'), backgroundColor: AppColors.success),
+                  );
+                  _load();
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                  );
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCambiarPasswordDialog(UsuarioListModel u) {
+    final passCtrl = TextEditingController();
+    bool obscure = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Text('Nueva contraseña para @${u.usuario}',
+              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+          content: TextField(
+            controller: passCtrl,
+            obscureText: obscure,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Contraseña nueva *',
+              helperText: 'Mínimo 6 caracteres',
+              suffixIcon: IconButton(
+                icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                onPressed: () => setDlgState(() => obscure = !obscure),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () async {
+                final pass = passCtrl.text;
+                if (pass.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('La contraseña debe tener mínimo 6 caracteres')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                try {
+                  await _repo.cambiarPasswordUsuario(u.usuarioId, pass);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Contraseña actualizada'), backgroundColor: AppColors.success),
+                  );
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                  );
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showCrearDialog() {
@@ -230,7 +368,8 @@ class _UsuariosConfigScreenState extends State<UsuariosConfigScreen> {
 class _UsuarioCard extends StatelessWidget {
   final UsuarioListModel usuario;
   final VoidCallback onToggle;
-  const _UsuarioCard({required this.usuario, required this.onToggle});
+  final VoidCallback onEdit;
+  const _UsuarioCard({required this.usuario, required this.onToggle, required this.onEdit});
 
   Color get _rolColor {
     switch (usuario.nombreRol.toUpperCase()) {
@@ -252,7 +391,10 @@ class _UsuarioCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -295,6 +437,7 @@ class _UsuarioCard extends StatelessWidget {
           ),
           Switch(value: usuario.activo, onChanged: (_) => onToggle(), activeColor: AppColors.success),
         ],
+      ),
       ),
     );
   }

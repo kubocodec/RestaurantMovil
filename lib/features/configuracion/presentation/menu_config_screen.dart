@@ -76,7 +76,8 @@ class _MenuConfigScreenState extends State<MenuConfigScreen> with SingleTickerPr
           ],
         ),
       ),
-      body: TabBarView(
+      body: SafeArea(
+        child: TabBarView(
         controller: _tabs,
         children: [
           _CategoriasTab(
@@ -88,12 +89,14 @@ class _MenuConfigScreenState extends State<MenuConfigScreen> with SingleTickerPr
             onChanged:    () { _loadCategorias(); _loadPlatosSucursal(); },
           ),
           _PlatosSucursalTab(
-            platos:  _platosSucursal,
-            loading: _loadingPlatos,
-            repo:    _repo,
-            onChanged: _loadPlatosSucursal,
+            platos:     _platosSucursal,
+            loading:    _loadingPlatos,
+            repo:       _repo,
+            sucursalId: widget.sucursalId,
+            onChanged:  _loadPlatosSucursal,
           ),
         ],
+        ),
       ),
     );
   }
@@ -424,6 +427,13 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
               const SizedBox(width: 8),
               Expanded(child: Text(p.nombre, style: const TextStyle(fontFamily: 'Poppins', fontSize: 12))),
               GestureDetector(
+                onTap: () => _showEditarPlatoDialog(context, p),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(Icons.edit_outlined, size: 14, color: AppColors.textSecondary),
+                ),
+              ),
+              GestureDetector(
                 onTap: () => _showAsignarPrecioDialog(context, p),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -522,6 +532,62 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
     );
   }
 
+  void _showEditarPlatoDialog(BuildContext context, PlatoMasterModel plato) {
+    final nombreCtrl = TextEditingController(text: plato.nombre);
+    final descCtrl   = TextEditingController(text: plato.descripcion ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Editar: ${plato.nombre}',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nombreCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(labelText: 'Nombre del plato *'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descCtrl,
+              decoration: const InputDecoration(labelText: 'Descripción (opcional)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final nombre = nombreCtrl.text.trim();
+              if (nombre.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.actualizarPlato(
+                  platoId:        plato.platoId,
+                  subcategoriaId: plato.subcategoriaId,
+                  nombre:         nombre,
+                  descripcion:    descCtrl.text.trim(),
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Plato actualizado'), backgroundColor: AppColors.success),
+                );
+                _loadPlatos();
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAsignarPrecioDialog(BuildContext context, PlatoMasterModel plato) {
     final precioCtrl = TextEditingController();
     showDialog(
@@ -571,14 +637,60 @@ class _PlatosSucursalTab extends StatelessWidget {
   final List<PlatoModel> platos;
   final bool loading;
   final ConfiguracionRepository repo;
+  final String sucursalId;
   final VoidCallback onChanged;
 
   const _PlatosSucursalTab({
     required this.platos,
     required this.loading,
     required this.repo,
+    required this.sucursalId,
     required this.onChanged,
   });
+
+  void _showEditarPrecioDialog(BuildContext context, PlatoModel p) {
+    final precioCtrl = TextEditingController(text: p.precio.toStringAsFixed(2));
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Editar precio: ${p.nombrePlato}',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: TextField(
+          controller: precioCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Precio *', prefixText: '\$  '),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              final precio = double.tryParse(precioCtrl.text.trim());
+              if (precio == null || precio <= 0) return;
+              Navigator.pop(ctx);
+              try {
+                await repo.actualizarPrecioPlato(
+                  sucursalPlatoId: p.sucursalPlatoId,
+                  sucursalId:      sucursalId,
+                  platoId:         p.platoId,
+                  precio:          precio,
+                );
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Precio actualizado'), backgroundColor: AppColors.success),
+                );
+                onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -606,7 +718,10 @@ class _PlatosSucursalTab extends StatelessWidget {
         itemCount: platos.length,
         itemBuilder: (_, i) {
           final p = platos[i];
-          return Container(
+          return InkWell(
+            onTap: () => _showEditarPrecioDialog(context, p),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -628,7 +743,13 @@ class _PlatosSucursalTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(p.nombrePlato, style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
-                      Text('\$${p.precio.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w700)),
+                      Row(
+                        children: [
+                          Text('\$${p.precio.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.edit_outlined, size: 12, color: AppColors.textSecondary),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -636,7 +757,15 @@ class _PlatosSucursalTab extends StatelessWidget {
                   value: p.disponible,
                   onChanged: (v) async {
                     try {
-                      await repo.toggleDisponibilidadPlato(p.sucursalPlatoId, v);
+                      // El PUT exige el cuerpo completo: se reenvía el
+                      // precio actual junto con la nueva disponibilidad.
+                      await repo.actualizarPrecioPlato(
+                        sucursalPlatoId: p.sucursalPlatoId,
+                        sucursalId:      sucursalId,
+                        platoId:         p.platoId,
+                        precio:          p.precio,
+                        disponible:      v,
+                      );
                       onChanged();
                     } catch (e) {
                       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -647,6 +776,7 @@ class _PlatosSucursalTab extends StatelessWidget {
                   activeColor: AppColors.success,
                 ),
               ],
+            ),
             ),
           );
         },

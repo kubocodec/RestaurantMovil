@@ -62,11 +62,13 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nueva impresora'),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildBody(),
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _buildError()
+                : _buildBody(),
+      ),
     );
   }
 
@@ -140,7 +142,8 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
           child: RefreshIndicator(
             onRefresh: _load,
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              // Espacio extra al final: el FAB no debe tapar la última impresora
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
               itemCount: _impresoras.length,
               itemBuilder: (_, i) => _ImpresoraCard(
                 impresora: _impresoras[i],

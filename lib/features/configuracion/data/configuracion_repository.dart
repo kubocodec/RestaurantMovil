@@ -2,7 +2,6 @@ import '../../../core/models/config_models.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/models/salon_model.dart';
 import '../../../core/models/mesa_model.dart';
-import '../../../core/models/caja_model.dart';
 import '../../../core/network/api_client.dart';
 
 class ConfiguracionRepository {
@@ -131,8 +130,22 @@ class ConfiguracionRepository {
     return SalonModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  Future<void> eliminarSalon(String salonId) async {
-    await _dio.delete('/api/salones/$salonId');
+  Future<SalonModel> actualizarSalon({
+    required String salonId,
+    required String sucursalId,
+    required String nombre,
+    String? descripcion,
+  }) async {
+    final r = await _dio.put('/api/salones/$salonId', data: {
+      'sucursalId':  sucursalId,
+      'nombre':      nombre,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
+    });
+    return SalonModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<void> toggleSalon(String salonId) async {
+    await _dio.patch('/api/salones/$salonId/toggle-activo');
   }
 
   // ── MESAS ────────────────────────────────────────────────────────────────────
@@ -149,6 +162,20 @@ class ConfiguracionRepository {
     required int capacidad,
   }) async {
     final r = await _dio.post('/api/mesas', data: {
+      'salonId':    salonId,
+      'numeroMesa': numeroMesa,
+      'capacidad':  capacidad,
+    });
+    return MesaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<MesaModel> actualizarMesa({
+    required String mesaId,
+    required String salonId,
+    required String numeroMesa,
+    required int capacidad,
+  }) async {
+    final r = await _dio.put('/api/mesas/$mesaId', data: {
       'salonId':    salonId,
       'numeroMesa': numeroMesa,
       'capacidad':  capacidad,
@@ -175,6 +202,22 @@ class ConfiguracionRepository {
     String? descripcion,
   }) async {
     final r = await _dio.post('/api/caja', data: {
+      'sucursalId':          sucursalId,
+      'nombre':              nombre,
+      'codigoPuntoEmision':  codigoPuntoEmision,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
+    });
+    return CajaConfigModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<CajaConfigModel> actualizarCaja({
+    required String cajaId,
+    required String sucursalId,
+    required String nombre,
+    required String codigoPuntoEmision,
+    String? descripcion,
+  }) async {
+    final r = await _dio.put('/api/caja/$cajaId', data: {
       'sucursalId':          sucursalId,
       'nombre':              nombre,
       'codigoPuntoEmision':  codigoPuntoEmision,
@@ -271,10 +314,37 @@ class ConfiguracionRepository {
     return PlatoModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  Future<void> toggleDisponibilidadPlato(String sucursalPlatoId, bool disponible) async {
-    await _dio.put('/api/platos/sucursal/$sucursalPlatoId', data: {
-      'disponible': disponible,
+  Future<PlatoMasterModel> actualizarPlato({
+    required String platoId,
+    required String subcategoriaId,
+    required String nombre,
+    String? descripcion,
+  }) async {
+    final r = await _dio.put('/api/platos/$platoId', data: {
+      'subcategoriaId': subcategoriaId,
+      'nombre':         nombre,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
     });
+    return PlatoMasterModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Actualiza precio y/o disponibilidad del plato en la sucursal.
+  /// El backend valida sucursalId/platoId/precio como requeridos, por eso
+  /// se envía el cuerpo completo aunque solo cambie la disponibilidad.
+  Future<PlatoModel> actualizarPrecioPlato({
+    required String sucursalPlatoId,
+    required String sucursalId,
+    required String platoId,
+    required double precio,
+    bool? disponible,
+  }) async {
+    final r = await _dio.put('/api/platos/sucursal/$sucursalPlatoId', data: {
+      'sucursalId': sucursalId,
+      'platoId':    platoId,
+      'precio':     precio,
+      if (disponible != null) 'disponible': disponible,
+    });
+    return PlatoModel.fromJson(r.data['data'] ?? r.data);
   }
 
   // ── USUARIOS ─────────────────────────────────────────────────────────────────
@@ -304,6 +374,33 @@ class ConfiguracionRepository {
       if (telefono != null && telefono.isNotEmpty) 'telefono': telefono,
     });
     return UsuarioListModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<UsuarioListModel> actualizarUsuario({
+    required String usuarioId,
+    required String sucursalId,
+    required String rolId,
+    required String nombre,
+    required String usuario,
+    String? correo,
+    String? telefono,
+  }) async {
+    final r = await _dio.put('/api/usuarios/$usuarioId', data: {
+      'sucursalId': sucursalId,
+      'rolId':      rolId,
+      'nombre':     nombre,
+      'usuario':    usuario,
+      if (correo != null && correo.isNotEmpty) 'correo': correo,
+      if (telefono != null && telefono.isNotEmpty) 'telefono': telefono,
+    });
+    return UsuarioListModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<void> cambiarPasswordUsuario(String usuarioId, String nuevaPassword) async {
+    await _dio.patch(
+      '/api/usuarios/$usuarioId/cambiar-password',
+      queryParameters: {'nuevaPassword': nuevaPassword},
+    );
   }
 
   Future<void> toggleUsuario(String usuarioId) async {

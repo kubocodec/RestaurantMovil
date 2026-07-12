@@ -67,36 +67,38 @@ class _ReportesScreenState extends State<ReportesScreen> {
         title: const Text('Reportes'),
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
       ),
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.cardBackground,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.textSecondary),
-                const SizedBox(width: 8),
-                Text(
-                  esHoy ? 'Hoy' : DateFormat('EEEE d MMMM y', 'es').format(_fecha),
-                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _elegirFecha,
-                  icon: const Icon(Icons.edit_calendar_outlined, size: 18),
-                  label: const Text('Cambiar fecha'),
-                ),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              color: AppColors.cardBackground,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.textSecondary),
+                  const SizedBox(width: 8),
+                  Text(
+                    esHoy ? 'Hoy' : DateFormat('EEEE d MMMM y', 'es').format(_fecha),
+                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _elegirFecha,
+                    icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+                    label: const Text('Cambiar fecha'),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                : _error != null
-                    ? _buildError()
-                    : _buildBody(),
-          ),
-        ],
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  : _error != null
+                      ? _buildError()
+                      : _buildBody(),
+            ),
+          ],
+        ),
       ),
     );
   }

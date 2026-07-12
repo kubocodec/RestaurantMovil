@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -50,11 +51,21 @@ class _CajeroBodyState extends State<_CajeroBody> {
   int _ordenesHoy = 0;
   int _ordenesActivas = 0;
   bool _cargandoStats = true;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _checkCajaStatus();
+    // Ventas y órdenes cambian desde otros dispositivos (meseros):
+    // refrescar el resumen sin depender del pull-to-refresh.
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _checkCajaStatus());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkCajaStatus() async {
@@ -165,6 +176,13 @@ class _CajeroBodyState extends State<_CajeroBody> {
   Future<void> _irACaja(BuildContext context) async {
     await context.push('/cajero/caja');
     if (mounted) _checkCajaStatus(); // refleja apertura/cierre al volver
+  }
+
+  /// Navega con push y refresca el resumen al volver (con go se perdía
+  /// este dashboard y los datos quedaban desactualizados).
+  Future<void> _irARuta(String ruta) async {
+    await context.push(ruta);
+    if (mounted) _checkCajaStatus();
   }
 
   Widget _buildCajaStatus(BuildContext context) {
@@ -283,7 +301,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
           label: 'Facturación',
           subtitle: 'Emitir y gestionar facturas',
           color: AppColors.primary,
-          onTap: () => context.go('/cajero/ordenes'),
+          onTap: () => _irARuta('/cajero/ordenes'),
         ),
         const SizedBox(height: 8),
         _ActionTile(
@@ -291,7 +309,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
           label: 'Tomar pedidos',
           subtitle: 'Crear órdenes en las mesas',
           color: AppColors.earth2,
-          onTap: () => context.go('/mesero/mesas'),
+          onTap: () => _irARuta('/mesero/mesas'),
         ),
       ],
     );
