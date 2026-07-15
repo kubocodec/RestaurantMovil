@@ -252,13 +252,17 @@ class _CajeroBodyState extends State<_CajeroBody> {
       children: [
         Text('Resumen del día', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
-        GridView.count(
+        GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.3,
+          // Columnas según el ancho real y altura fija de tarjeta: en
+          // tablet vertical las proporciones fijas aplastaban el contenido
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 240,
+            mainAxisExtent: 150,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
           children: [
             StatCard(
               title: 'Ventas del día',

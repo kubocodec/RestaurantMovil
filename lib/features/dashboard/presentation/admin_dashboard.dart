@@ -190,13 +190,17 @@ class _AdminBodyState extends State<_AdminBody> {
       children: [
         Text('Resumen del día', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
-        GridView.count(
+        GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.25,
+          // Columnas según el ancho real y altura fija de tarjeta: en
+          // tablet vertical las proporciones fijas aplastaban el contenido
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 240,
+            mainAxisExtent: 150,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
           children: [
             StatCard(
               title: 'Ventas totales',
@@ -239,11 +243,12 @@ class _AdminBodyState extends State<_AdminBody> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: MediaQuery.of(context).size.width > 600 ? 5 : 3,
+          // Columnas según el ancho real y altura fija de módulo (responsive)
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 150,
+            mainAxisExtent: 128,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
-            childAspectRatio: 0.9,
           ),
           itemCount: modules.length,
           itemBuilder: (_, i) {
