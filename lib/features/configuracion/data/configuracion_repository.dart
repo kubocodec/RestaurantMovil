@@ -83,8 +83,10 @@ class ConfiguracionRepository {
 
   // ── TASAS IVA ────────────────────────────────────────────────────────────────
 
+  // Incluye inactivas: la configuración las muestra para poder reactivarlas
   Future<List<TasaIvaModel>> getTasasIva(String tenantId) async {
-    final r = await _dio.get('/api/tasa-iva/tenant/$tenantId');
+    final r = await _dio.get('/api/tasa-iva/tenant/$tenantId',
+        queryParameters: {'incluirInactivas': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => TasaIvaModel.fromJson(j)).toList();
   }
@@ -112,8 +114,10 @@ class ConfiguracionRepository {
 
   // ── SALONES ──────────────────────────────────────────────────────────────────
 
+  // Incluye inactivos: la configuración los muestra para poder reactivarlos
   Future<List<SalonModel>> getSalones(String sucursalId) async {
-    final r = await _dio.get('/api/salones/sucursal/$sucursalId');
+    final r = await _dio.get('/api/salones/sucursal/$sucursalId',
+        queryParameters: {'incluirInactivos': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => SalonModel.fromJson(j)).toList();
   }
@@ -151,8 +155,10 @@ class ConfiguracionRepository {
 
   // ── MESAS ────────────────────────────────────────────────────────────────────
 
+  // Incluye inactivas: la configuración las muestra para poder reactivarlas
   Future<List<MesaModel>> getMesasBySalon(String salonId) async {
-    final r = await _dio.get('/api/mesas/salon/$salonId');
+    final r = await _dio.get('/api/mesas/salon/$salonId',
+        queryParameters: {'incluirInactivas': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => MesaModel.fromJson(j)).toList();
   }
@@ -186,6 +192,10 @@ class ConfiguracionRepository {
 
   Future<void> eliminarMesa(String mesaId) async {
     await _dio.delete('/api/mesas/$mesaId');
+  }
+
+  Future<void> toggleMesa(String mesaId) async {
+    await _dio.patch('/api/mesas/$mesaId/toggle-activo');
   }
 
   // ── CAJAS ────────────────────────────────────────────────────────────────────
@@ -274,8 +284,10 @@ class ConfiguracionRepository {
 
   // ── CATEGORÍAS ───────────────────────────────────────────────────────────────
 
+  // Incluye inactivas: la configuración las muestra para poder reactivarlas
   Future<List<CategoriaModel>> getCategorias(String restaurantId) async {
-    final r = await _dio.get('/api/categorias/restaurant/$restaurantId');
+    final r = await _dio.get('/api/categorias/restaurant/$restaurantId',
+        queryParameters: {'incluirInactivas': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => CategoriaModel.fromJson(j)).toList();
   }
@@ -309,8 +321,10 @@ class ConfiguracionRepository {
 
   // ── SUBCATEGORÍAS ────────────────────────────────────────────────────────────
 
+  // Incluye inactivas: la configuración las muestra para poder reactivarlas
   Future<List<SubcategoriaModel>> getSubcategorias(String categoriaId) async {
-    final r = await _dio.get('/api/categorias/$categoriaId/subcategorias');
+    final r = await _dio.get('/api/categorias/$categoriaId/subcategorias',
+        queryParameters: {'incluirInactivas': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => SubcategoriaModel.fromJson(j)).toList();
   }
@@ -344,8 +358,10 @@ class ConfiguracionRepository {
 
   // ── PLATOS ───────────────────────────────────────────────────────────────────
 
+  // Incluye inactivos: la configuración los muestra para poder reactivarlos
   Future<List<PlatoModel>> getPlatosSucursal(String sucursalId) async {
-    final r = await _dio.get('/api/platos/sucursal/$sucursalId');
+    final r = await _dio.get('/api/platos/sucursal/$sucursalId',
+        queryParameters: {'incluirInactivos': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => PlatoModel.fromJson(j)).toList();
   }

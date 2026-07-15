@@ -233,6 +233,10 @@ class _SalonCardState extends State<_SalonCard> {
                       children: [
                         Text(widget.salon.nombre,
                             style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+                        if (!widget.salon.activo)
+                          const Text('Inactivo',
+                              style: TextStyle(fontFamily: 'Poppins', fontSize: 11,
+                                  fontWeight: FontWeight.w600, color: AppColors.error)),
                         if (widget.salon.descripcion.isNotEmpty)
                           Text(widget.salon.descripcion,
                               style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
@@ -325,6 +329,28 @@ class _SalonCardState extends State<_SalonCard> {
           ],
         ),
         actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+                foregroundColor: widget.salon.activo ? AppColors.error : AppColors.success),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await widget.repo.toggleSalon(widget.salon.salonId);
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(widget.salon.activo ? 'Salón desactivado' : 'Salón reactivado'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+                widget.onChanged();
+              } catch (e) {
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: Text(widget.salon.activo ? 'Desactivar' : 'Reactivar'),
+          ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton(
             onPressed: () async {
@@ -381,29 +407,39 @@ class _SalonCardState extends State<_SalonCard> {
         ),
         actions: [
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(
+                foregroundColor: mesa.activo ? AppColors.error : AppColors.success),
             onPressed: () async {
-              final ok = await showDialog<bool>(
-                context: ctx,
-                builder: (c2) => AlertDialog(
-                  title: const Text('Desactivar mesa'),
-                  content: Text('¿Desactivar la mesa ${mesa.numeroMesa}? Dejará de aparecer para tomar órdenes.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(c2, false), child: const Text('Cancelar')),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-                      onPressed: () => Navigator.pop(c2, true),
-                      child: const Text('Desactivar'),
-                    ),
-                  ],
-                ),
-              );
-              if (ok != true) return;
+              if (mesa.activo) {
+                final ok = await showDialog<bool>(
+                  context: ctx,
+                  builder: (c2) => AlertDialog(
+                    title: const Text('Desactivar mesa'),
+                    content: Text('¿Desactivar la mesa ${mesa.numeroMesa}? Dejará de aparecer para tomar órdenes.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(c2, false), child: const Text('Cancelar')),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                        onPressed: () => Navigator.pop(c2, true),
+                        child: const Text('Desactivar'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok != true) return;
+              }
               if (ctx.mounted) Navigator.pop(ctx);
               try {
-                await widget.repo.eliminarMesa(mesa.mesaId);
+                if (mesa.activo) {
+                  await widget.repo.eliminarMesa(mesa.mesaId);
+                } else {
+                  await widget.repo.toggleMesa(mesa.mesaId);
+                }
                 if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mesa desactivada'), backgroundColor: AppColors.success),
+                  SnackBar(
+                    content: Text(mesa.activo ? 'Mesa desactivada' : 'Mesa reactivada'),
+                    backgroundColor: AppColors.success,
+                  ),
                 );
                 _loadMesas();
                 widget.onChanged();
@@ -413,7 +449,7 @@ class _SalonCardState extends State<_SalonCard> {
                 );
               }
             },
-            child: const Text('Desactivar'),
+            child: Text(mesa.activo ? 'Desactivar' : 'Reactivar'),
           ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton(
@@ -511,24 +547,28 @@ class _MesaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Las inactivas se muestran en gris para poder reactivarlas
+    final color = mesa.activo ? AppColors.primary : AppColors.textSecondary;
     return GestureDetector(
       onTap: onTap,
       child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.table_bar_outlined, size: 14, color: AppColors.primary),
+          Icon(Icons.table_bar_outlined, size: 14, color: color),
           const SizedBox(width: 5),
           Text('Mesa ${mesa.numeroMesa}',
-              style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
-          Text('  (${mesa.capacidad} pax)',
-              style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, color: AppColors.textSecondary)),
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          Text(mesa.activo ? '  (${mesa.capacidad} pax)' : '  (inactiva)',
+              style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 10,
+                  color: mesa.activo ? AppColors.textSecondary : AppColors.error)),
           const SizedBox(width: 4),
           const Icon(Icons.edit_outlined, size: 12, color: AppColors.textSecondary),
         ],
