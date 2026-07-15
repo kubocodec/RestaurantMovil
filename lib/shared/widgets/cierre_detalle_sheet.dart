@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/caja_model.dart';
+import '../../core/models/config_models.dart';
+import '../../core/network/api_client.dart';
+import '../../core/printing/comanda_printer.dart';
+import '../../features/configuracion/data/configuracion_repository.dart';
 
 /// Hoja inferior con el detalle completo de un turno de caja (abierto o
 /// cerrado): arqueo, ventas por método de pago, cada ingreso y egreso,
-/// y ventas por plato.
-Future<void> mostrarCierreDetalle(BuildContext context, CierreDetalladoModel cierre) {
+/// y ventas por plato. Con [sucursalId] se habilita el botón de imprimir
+/// (usa las impresoras térmicas configuradas en la sucursal).
+Future<void> mostrarCierreDetalle(
+  BuildContext context,
+  CierreDetalladoModel cierre, {
+  String? sucursalId,
+}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -21,18 +30,91 @@ Future<void> mostrarCierreDetalle(BuildContext context, CierreDetalladoModel cie
           color: AppColors.background,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: _CierreDetalleBody(cierre: cierre, scrollController: scrollCtrl),
+        child: _CierreDetalleBody(
+          cierre: cierre,
+          scrollController: scrollCtrl,
+          sucursalId: sucursalId,
+        ),
       ),
     ),
   );
 }
 
-class _CierreDetalleBody extends StatelessWidget {
+class _CierreDetalleBody extends StatefulWidget {
   final CierreDetalladoModel cierre;
   final ScrollController scrollController;
-  const _CierreDetalleBody({required this.cierre, required this.scrollController});
+  final String? sucursalId;
+  const _CierreDetalleBody({
+    required this.cierre,
+    required this.scrollController,
+    this.sucursalId,
+  });
 
+  @override
+  State<_CierreDetalleBody> createState() => _CierreDetalleBodyState();
+}
+
+class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
   static final _fmt = NumberFormat('#,##0.00', 'es');
+  bool _imprimiendo = false;
+
+  CierreDetalladoModel get cierre => widget.cierre;
+  ScrollController get scrollController => widget.scrollController;
+
+  /// Lista las impresoras de la sucursal, deja elegir una e imprime el
+  /// ticket de cierre completo (mismo flujo que la reimpresión de recibos).
+  Future<void> _imprimir() async {
+    final sucursalId = widget.sucursalId;
+    if (sucursalId == null || _imprimiendo) return;
+    setState(() => _imprimiendo = true);
+    try {
+      final impresoras = (await ConfiguracionRepository().getImpresoras(sucursalId))
+          .where((i) => i.activo && (i.ip?.isNotEmpty ?? false))
+          .toList();
+      if (!mounted) return;
+      if (impresoras.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No hay impresoras configuradas en la sucursal'),
+          backgroundColor: AppColors.warning,
+        ));
+        return;
+      }
+      ImpresoraModel? elegida = impresoras.length == 1 ? impresoras.first : null;
+      elegida ??= await showDialog<ImpresoraModel>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Imprimir en',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+          children: impresoras.map((i) => SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, i),
+            child: Text('${i.nombre}${i.area?.isNotEmpty == true ? ' (${i.area})' : ''}',
+                style: const TextStyle(fontFamily: 'Poppins')),
+          )).toList(),
+        ),
+      );
+      if (elegida == null) return;
+
+      await ComandaPrinter.imprimirCierreCaja(
+        ip: elegida.ip!,
+        puerto: elegida.puerto ?? 9100,
+        cierre: cierre,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Cierre de caja impreso'), backgroundColor: AppColors.success,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo imprimir: ${ApiClient.parseError(e)}'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _imprimiendo = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +134,22 @@ class _CierreDetalleBody extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _buildHeader(c),
+        if (widget.sucursalId != null) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _imprimiendo ? null : _imprimir,
+              icon: _imprimiendo
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.print_outlined, size: 20),
+              label: Text(_imprimiendo ? 'Imprimiendo...' : 'Imprimir cierre',
+                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         _buildArqueo(c),
         const SizedBox(height: 16),
@@ -155,7 +253,7 @@ class _CierreDetalleBody extends StatelessWidget {
           const Divider(height: 16),
           _Fila('Ventas totales (todos los métodos)', c.totalVentas, fmt: _fmt),
           if (otrosMetodos > 0.009)
-            _Fila('Cobrado por tarjeta/transferencia', otrosMetodos, fmt: _fmt),
+            _Fila('Cobrado por otros métodos de pago', otrosMetodos, fmt: _fmt),
         ],
       ),
     );

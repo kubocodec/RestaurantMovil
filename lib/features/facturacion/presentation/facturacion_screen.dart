@@ -69,7 +69,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final orden    = await _ordenRepo.getOrden(widget.ordenId);
-      final metodos  = await _factRepo.getMetodosPago();
+      final metodos  = await _factRepo.getMetodosPago(_sucursalId);
       final cajas    = await _cajaRepo.getCajasBySucursal(_sucursalId);
       AperturaCajaModel? apertura;
       if (cajas.isNotEmpty) {

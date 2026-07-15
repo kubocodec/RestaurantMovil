@@ -1,4 +1,5 @@
 import '../../../core/models/config_models.dart';
+import '../../../core/models/factura_model.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/models/salon_model.dart';
 import '../../../core/models/mesa_model.dart';
@@ -228,6 +229,47 @@ class ConfiguracionRepository {
 
   Future<void> toggleCaja(String cajaId) async {
     await _dio.patch('/api/caja/$cajaId/toggle');
+  }
+
+  // ── MÉTODOS DE PAGO (por sucursal) ──────────────────────────────────────────
+
+  Future<List<MetodoPagoModel>> getMetodosPago(String sucursalId) async {
+    final r = await _dio.get('/api/metodos-pago/sucursal/$sucursalId');
+    final List data = r.data['data'] ?? [];
+    return data.map((j) => MetodoPagoModel.fromJson(j)).toList();
+  }
+
+  Future<MetodoPagoModel> crearMetodoPago({
+    required String sucursalId,
+    required String nombre,
+    String? descripcion,
+    bool requiereReferencia = false,
+  }) async {
+    final r = await _dio.post('/api/metodos-pago', data: {
+      'sucursalId':          sucursalId,
+      'nombre':              nombre,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
+      'requiereReferencia':  requiereReferencia,
+    });
+    return MetodoPagoModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<MetodoPagoModel> actualizarMetodoPago({
+    required String metodoPagoId,
+    required String nombre,
+    String? descripcion,
+    bool requiereReferencia = false,
+  }) async {
+    final r = await _dio.put('/api/metodos-pago/$metodoPagoId', data: {
+      'nombre':              nombre,
+      if (descripcion != null && descripcion.isNotEmpty) 'descripcion': descripcion,
+      'requiereReferencia':  requiereReferencia,
+    });
+    return MetodoPagoModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  Future<void> toggleMetodoPago(String metodoPagoId) async {
+    await _dio.patch('/api/metodos-pago/$metodoPagoId/toggle');
   }
 
   // ── CATEGORÍAS ───────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import 'tasa_iva_screen.dart';
 import 'salones_mesas_screen.dart';
 import 'menu_config_screen.dart';
 import 'cajas_config_screen.dart';
+import 'metodos_pago_config_screen.dart';
 import 'usuarios_config_screen.dart';
 import 'impresoras_config_screen.dart';
 
@@ -167,6 +168,14 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
               done: s.tieneCaja,
               color: AppColors.earth2,
               onTap: () => _goTo(CajasConfigScreen(sucursalId: _sucursalId)),
+            ),
+            _buildItem(
+              icon: Icons.payments_outlined,
+              label: 'Métodos de pago',
+              subtitle: 'Efectivo, tarjetas, transferencias...',
+              done: true,
+              color: AppColors.success,
+              onTap: () => _goTo(MetodosPagoConfigScreen(sucursalId: _sucursalId)),
             ),
             _buildItem(
               icon: Icons.people_outline_rounded,

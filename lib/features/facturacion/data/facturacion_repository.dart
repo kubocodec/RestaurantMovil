@@ -4,8 +4,9 @@ import '../../../core/network/api_client.dart';
 class FacturacionRepository {
   final _dio = ApiClient.instance.dio;
 
-  Future<List<MetodoPagoModel>> getMetodosPago() async {
-    final r = await _dio.get('/api/metodos-pago/activos');
+  // Métodos de pago activos de la sucursal (cada sucursal tiene su catálogo)
+  Future<List<MetodoPagoModel>> getMetodosPago(String sucursalId) async {
+    final r = await _dio.get('/api/metodos-pago/sucursal/$sucursalId/activos');
     final List data = r.data['data'] ?? [];
     return data.map((j) => MetodoPagoModel.fromJson(j)).toList();
   }

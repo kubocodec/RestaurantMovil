@@ -196,7 +196,7 @@ class _CajaScreenState extends State<CajaScreen> {
         observaciones: obsCtrl.text.trim().isEmpty ? 'Cierre de turno' : obsCtrl.text.trim(),
       );
       if (mounted) {
-        await mostrarCierreDetalle(context, cierre);
+        await mostrarCierreDetalle(context, cierre, sucursalId: _sucursalId);
         _loadCaja();
       }
     } catch (e) {

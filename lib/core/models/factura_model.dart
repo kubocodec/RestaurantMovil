@@ -1,18 +1,24 @@
 class MetodoPagoModel {
   final String metodoPagoId;
   final String nombre;
+  final String descripcion;
   final bool requiereReferencia;
+  final bool activo;
 
   const MetodoPagoModel({
     required this.metodoPagoId,
     required this.nombre,
+    this.descripcion = '',
     required this.requiereReferencia,
+    this.activo = true,
   });
 
   factory MetodoPagoModel.fromJson(Map<String, dynamic> j) => MetodoPagoModel(
     metodoPagoId:       j['metodoPagoId']?.toString() ?? '',
     nombre:             j['nombre']?.toString() ?? '',
+    descripcion:        j['descripcion']?.toString() ?? '',
     requiereReferencia: j['requiereReferencia'] ?? false,
+    activo:             j['activo'] ?? true,
   );
 }
 

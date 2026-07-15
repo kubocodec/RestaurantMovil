@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../models/caja_model.dart';
 import '../models/factura_model.dart';
 import '../models/orden_model.dart';
 
@@ -163,6 +164,135 @@ class ComandaPrinter {
       bytes.addAll(_texto('${'-' * 32}\n'));
       bytes.addAll(_center);
       bytes.addAll(_texto('¡Gracias por su visita!\n'));
+      bytes.addAll(_left);
+      bytes.addAll(_feed);
+      bytes.addAll(_cut);
+
+      socket.add(bytes);
+      await socket.flush();
+    } finally {
+      await socket.close();
+    }
+  }
+
+  /// Imprime el ticket de cierre de caja con todo el detalle del turno:
+  /// arqueo, ventas por método de pago, cada ingreso/egreso y ventas por
+  /// plato. Sirve para el cierre del cajero y para reimprimir desde
+  /// Reportes.
+  static Future<void> imprimirCierreCaja({
+    required String ip,
+    int puerto = 9100,
+    required CierreDetalladoModel cierre,
+    String? nombreSucursal,
+  }) async {
+    final socket = await Socket.connect(ip, puerto, timeout: const Duration(seconds: 5));
+    try {
+      final c = cierre;
+      final bytes = <int>[
+        ..._init,
+        ..._center, ..._doubleSize, ..._boldOn,
+        ..._texto('CIERRE DE CAJA\n'),
+        ..._normalSize,
+        ..._texto('${c.nombreCaja}\n'),
+        ..._boldOff,
+        if (nombreSucursal != null && nombreSucursal.isNotEmpty)
+          ..._texto('$nombreSucursal\n'),
+        ..._left,
+        ..._texto('${'-' * 32}\n'),
+        ..._texto('Apertura: ${_fechaHora(c.fechaApertura.toLocal())}\n'),
+        ..._texto('  por ${c.usuarioApertura}\n'),
+        if (c.fechaCierre != null) ...[
+          ..._texto('Cierre:   ${_fechaHora(c.fechaCierre!.toLocal())}\n'),
+          if (c.usuarioCierre?.isNotEmpty ?? false)
+            ..._texto('  por ${c.usuarioCierre}\n'),
+        ],
+        ..._texto('${'-' * 32}\n'),
+        // ── Arqueo ──
+        ..._boldOn, ..._texto('ARQUEO (EFECTIVO)\n'), ..._boldOff,
+        ..._texto(_lineaMonto('Monto inicial', c.montoInicial)),
+        ..._texto(_lineaMonto('+ Ventas efectivo', c.totalVentasEfectivo)),
+        ..._texto(_lineaMonto('+ Otros ingresos', c.totalIngresos)),
+        ..._texto(_lineaMonto('- Egresos', -c.totalEgresos)),
+        ..._texto(_lineaMonto('= Esperado', c.montoEsperado)),
+        if (c.montoContado != null)
+          ..._texto(_lineaMonto('Contado', c.montoContado!)),
+      ];
+      final dif = c.diferencia;
+      if (dif != null) {
+        final etiqueta = dif.abs() < 0.01
+            ? 'CAJA CUADRADA'
+            : dif > 0 ? 'SOBRANTE' : 'FALTANTE';
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto(_lineaMonto(etiqueta, dif)));
+        bytes.addAll(_boldOff);
+      }
+      bytes.addAll(_texto('${'-' * 32}\n'));
+
+      // ── Ventas por método de pago ──
+      bytes.addAll(_boldOn);
+      bytes.addAll(_texto('VENTAS POR METODO DE PAGO\n'));
+      bytes.addAll(_boldOff);
+      if (c.ventasPorMetodo.isEmpty) {
+        bytes.addAll(_texto('(sin ventas)\n'));
+      } else {
+        for (final m in c.ventasPorMetodo) {
+          bytes.addAll(_texto(_lineaMonto('${m.metodo} (${m.numPagos})', m.total)));
+        }
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto(_lineaMonto(
+            'TOTAL (${c.totalFacturas} fact.)', c.totalVentas)));
+        bytes.addAll(_boldOff);
+      }
+      bytes.addAll(_texto('${'-' * 32}\n'));
+
+      // ── Ingresos extra ──
+      bytes.addAll(_boldOn);
+      bytes.addAll(_texto('INGRESOS EXTRA (${c.ingresos.length})\n'));
+      bytes.addAll(_boldOff);
+      if (c.ingresos.isEmpty) {
+        bytes.addAll(_texto('(ninguno)\n'));
+      } else {
+        for (final m in c.ingresos) {
+          bytes.addAll(_texto(_lineaMonto(
+              m.concepto.isEmpty ? 'Sin concepto' : m.concepto, m.monto)));
+        }
+        bytes.addAll(_texto(_lineaMonto('Total ingresos', c.totalIngresos)));
+      }
+      bytes.addAll(_texto('${'-' * 32}\n'));
+
+      // ── Egresos ──
+      bytes.addAll(_boldOn);
+      bytes.addAll(_texto('EGRESOS / GASTOS (${c.egresos.length})\n'));
+      bytes.addAll(_boldOff);
+      if (c.egresos.isEmpty) {
+        bytes.addAll(_texto('(ninguno)\n'));
+      } else {
+        for (final m in c.egresos) {
+          bytes.addAll(_texto(_lineaMonto(
+              m.concepto.isEmpty ? 'Sin concepto' : m.concepto, m.monto)));
+        }
+        bytes.addAll(_texto(_lineaMonto('Total egresos', c.totalEgresos)));
+      }
+      bytes.addAll(_texto('${'-' * 32}\n'));
+
+      // ── Ventas por plato ──
+      if (c.ventasPorPlato.isNotEmpty) {
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto('VENTAS POR PLATO\n'));
+        bytes.addAll(_boldOff);
+        for (final v in c.ventasPorPlato) {
+          bytes.addAll(_texto(_lineaMonto('${v.cantidad} x ${v.plato}', v.total)));
+        }
+        bytes.addAll(_texto('${'-' * 32}\n'));
+      }
+
+      if ((c.observaciones ?? '').trim().isNotEmpty) {
+        bytes.addAll(_texto('Obs: ${c.observaciones}\n'));
+        bytes.addAll(_texto('${'-' * 32}\n'));
+      }
+
+      bytes.addAll(_center);
+      bytes.addAll(_texto('Impreso: ${_fechaHora(DateTime.now())}\n'));
       bytes.addAll(_left);
       bytes.addAll(_feed);
       bytes.addAll(_cut);

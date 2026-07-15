@@ -234,13 +234,22 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  /// Resumen de caja del día: cuánto entró, cuánto salió y el
-  /// faltante/sobrante total de los turnos cerrados.
+  /// Resumen de caja del día: cuánto entró por cada método de pago,
+  /// cuánto salió y el faltante/sobrante total de los turnos cerrados.
   Widget _buildCajasResumenCard(ReporteCajasDiaModel c) {
     final cuadrada = c.totalDiferencia.abs() < 0.01;
     final colorDif = cuadrada
         ? AppColors.success
         : c.totalDiferencia > 0 ? AppColors.warning : AppColors.error;
+    // Ventas del día por método de pago, sumando todos los turnos
+    final porMetodo = <String, double>{};
+    for (final cierre in c.cierres) {
+      for (final m in cierre.ventasPorMetodo) {
+        porMetodo[m.metodo] = (porMetodo[m.metodo] ?? 0) + m.total;
+      }
+    }
+    final metodosOrdenados = porMetodo.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -254,8 +263,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
           const Text('Caja del día',
               style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
           const SizedBox(height: 10),
-          _FilaReporte(label: 'Ventas en efectivo', valor: c.totalVentasEfectivo, fmt: _fmt),
-          _FilaReporte(label: 'Ventas por tarjeta/transferencia', valor: c.totalVentas - c.totalVentasEfectivo, fmt: _fmt),
+          if (metodosOrdenados.isEmpty)
+            _FilaReporte(label: 'Ventas en efectivo', valor: c.totalVentasEfectivo, fmt: _fmt)
+          else
+            ...metodosOrdenados.map((e) =>
+                _FilaReporte(label: 'Ventas en ${e.key}', valor: e.value, fmt: _fmt)),
           _FilaReporte(label: 'Otros ingresos a caja', valor: c.totalIngresos, fmt: _fmt),
           _FilaReporte(label: 'Egresos (gastos) de caja', valor: c.totalEgresos, fmt: _fmt, negativo: true),
           const Divider(),
@@ -337,7 +349,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
         ? '${horaFmt.format(cierre.fechaApertura.toLocal())} - ${horaFmt.format(cierre.fechaCierre!.toLocal())}'
         : 'Desde ${horaFmt.format(cierre.fechaApertura.toLocal())}';
     return ListTile(
-      onTap: () => mostrarCierreDetalle(context, cierre),
+      onTap: () => mostrarCierreDetalle(context, cierre, sucursalId: _sucursalId),
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
