@@ -6,6 +6,7 @@ import '../../../core/models/caja_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../shared/widgets/cierre_detalle_sheet.dart';
 import '../data/caja_repository.dart';
 
 class CajaScreen extends StatefulWidget {
@@ -131,6 +132,7 @@ class _CajaScreenState extends State<CajaScreen> {
   Future<void> _cerrarCaja() async {
     final apertura = _apertura;
     if (apertura == null) return;
+    final resumen = _resumen;
     final montoCtrl = TextEditingController();
     final obsCtrl = TextEditingController();
     final confirm = await showDialog<bool>(
@@ -142,9 +144,18 @@ class _CajaScreenState extends State<CajaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Cuenta el efectivo de la caja e ingresa el total. El sistema calculará el arqueo (esperado vs. contado).',
+              'Cuenta solo el EFECTIVO del cajón e ingresa el total. El sistema calculará el arqueo (esperado vs. contado).',
               style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
             ),
+            if (resumen != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Ventas del turno: \$${_fmt.format(resumen.totalVentas)} '
+                '(\$${_fmt.format(resumen.totalVentasEfectivo)} en efectivo, '
+                '\$${_fmt.format(resumen.totalVentas - resumen.totalVentasEfectivo)} en otros métodos)',
+                style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: montoCtrl,
@@ -185,7 +196,7 @@ class _CajaScreenState extends State<CajaScreen> {
         observaciones: obsCtrl.text.trim().isEmpty ? 'Cierre de turno' : obsCtrl.text.trim(),
       );
       if (mounted) {
-        await _mostrarArqueo(cierre);
+        await mostrarCierreDetalle(context, cierre);
         _loadCaja();
       }
     } catch (e) {
@@ -195,48 +206,6 @@ class _CajaScreenState extends State<CajaScreen> {
         );
       }
     }
-  }
-
-  Future<void> _mostrarArqueo(AperturaCajaModel cierre) async {
-    final diferencia = cierre.diferencia ?? 0;
-    final cuadra = diferencia.abs() < 0.01;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              cuadra ? Icons.check_circle : Icons.warning_amber_rounded,
-              color: cuadra ? AppColors.success : AppColors.warning,
-            ),
-            const SizedBox(width: 8),
-            const Text('Arqueo de caja'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ArqueoRow(label: 'Monto inicial', value: cierre.montoInicial),
-            _ArqueoRow(label: 'Monto esperado', value: cierre.montoEsperado ?? 0),
-            _ArqueoRow(label: 'Efectivo contado', value: cierre.montoFinal ?? 0),
-            const Divider(),
-            _ArqueoRow(
-              label: cuadra
-                  ? 'Caja cuadrada'
-                  : diferencia > 0 ? 'Sobrante' : 'Faltante',
-              value: diferencia,
-              color: cuadra
-                  ? AppColors.success
-                  : diferencia > 0 ? AppColors.warning : AppColors.error,
-              bold: true,
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Entendido')),
-        ],
-      ),
-    );
   }
 
   Future<void> _registrarMovimiento(String tipo) async {
@@ -416,15 +385,30 @@ class _CajaScreenState extends State<CajaScreen> {
                   color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    const Text('Debe haber en caja',
-                      style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 13)),
-                    Text('\$${_fmt.format(_resumen!.montoEsperado)}',
-                      style: const TextStyle(
-                        color: Colors.white, fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w700, fontSize: 18)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Debe haber en caja (efectivo)',
+                          style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 13)),
+                        Text('\$${_fmt.format(_resumen!.montoEsperado)}',
+                          style: const TextStyle(
+                            color: Colors.white, fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w700, fontSize: 18)),
+                      ],
+                    ),
+                    if (_resumen!.totalVentas - _resumen!.totalVentasEfectivo > 0.009) ...[
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Efectivo: \$${_fmt.format(_resumen!.totalVentasEfectivo)} · '
+                          'Tarjeta/Transf.: \$${_fmt.format(_resumen!.totalVentas - _resumen!.totalVentasEfectivo)}',
+                          style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 11),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -624,34 +608,6 @@ class _CajaScreenState extends State<CajaScreen> {
             style: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Poppins')),
           const SizedBox(height: 24),
           ElevatedButton.icon(onPressed: _loadCaja, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
-        ],
-      ),
-    );
-  }
-}
-
-class _ArqueoRow extends StatelessWidget {
-  final String label;
-  final double value;
-  final Color? color;
-  final bool bold;
-  const _ArqueoRow({required this.label, required this.value, this.color, this.bold = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final style = TextStyle(
-      fontFamily: 'Poppins',
-      fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-      color: color ?? AppColors.textPrimary,
-      fontSize: bold ? 15 : 13,
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: style),
-          Text('\$${value.toStringAsFixed(2)}', style: style),
         ],
       ),
     );

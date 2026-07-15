@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/models/caja_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../shared/widgets/cierre_detalle_sheet.dart';
 import '../data/reportes_repository.dart';
 
 class ReportesScreen extends StatefulWidget {
@@ -18,6 +20,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
   final _repo = ReportesRepository();
   final _fmt = NumberFormat('#,##0.00', 'es');
   ResumenDiarioModel? _resumen;
+  ReporteCajasDiaModel? _cajas;
   DateTime _fecha = DateTime.now();
   bool _loading = true;
   String? _error;
@@ -36,9 +39,16 @@ class _ReportesScreenState extends State<ReportesScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final resumen = await _repo.getResumenDiario(_sucursalId, fecha: _fecha);
+      final futuros = await Future.wait([
+        _repo.getResumenDiario(_sucursalId, fecha: _fecha),
+        _repo.getCierresCajaDia(_sucursalId, fecha: _fecha),
+      ]);
       if (!mounted) return;
-      setState(() { _resumen = resumen; _loading = false; });
+      setState(() {
+        _resumen = futuros[0] as ResumenDiarioModel;
+        _cajas   = futuros[1] as ReporteCajasDiaModel;
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = ApiClient.parseError(e); _loading = false; });
@@ -116,6 +126,12 @@ class _ReportesScreenState extends State<ReportesScreen> {
           _buildDetalleCard(r),
           const SizedBox(height: 16),
           _buildGananciaCard(r),
+          if (_cajas != null) ...[
+            const SizedBox(height: 16),
+            _buildCajasResumenCard(_cajas!),
+            const SizedBox(height: 16),
+            _buildCierresCard(_cajas!),
+          ],
         ],
       ),
     );
@@ -213,6 +229,140 @@ class _ReportesScreenState extends State<ReportesScreen> {
           const SizedBox(height: 4),
           const Text('Basada en el costo registrado de cada plato',
               style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  /// Resumen de caja del día: cuánto entró, cuánto salió y el
+  /// faltante/sobrante total de los turnos cerrados.
+  Widget _buildCajasResumenCard(ReporteCajasDiaModel c) {
+    final cuadrada = c.totalDiferencia.abs() < 0.01;
+    final colorDif = cuadrada
+        ? AppColors.success
+        : c.totalDiferencia > 0 ? AppColors.warning : AppColors.error;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Caja del día',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 10),
+          _FilaReporte(label: 'Ventas en efectivo', valor: c.totalVentasEfectivo, fmt: _fmt),
+          _FilaReporte(label: 'Ventas por tarjeta/transferencia', valor: c.totalVentas - c.totalVentasEfectivo, fmt: _fmt),
+          _FilaReporte(label: 'Otros ingresos a caja', valor: c.totalIngresos, fmt: _fmt),
+          _FilaReporte(label: 'Egresos (gastos) de caja', valor: c.totalEgresos, fmt: _fmt, negativo: true),
+          const Divider(),
+          _FilaReporte(label: 'Efectivo esperado en cajas', valor: c.totalEsperado, fmt: _fmt),
+          _FilaReporte(label: 'Efectivo contado (cierres)', valor: c.totalContado, fmt: _fmt),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                cuadrada
+                    ? 'Cajas cuadradas'
+                    : c.totalDiferencia > 0 ? 'Sobrante del día' : 'Faltante del día',
+                style: TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: colorDif),
+              ),
+              Text('\$${_fmt.format(c.totalDiferencia.abs())}',
+                  style: TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 18, color: colorDif)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Turnos de caja del día: cada apertura/cierre con acceso al detalle
+  /// completo (ingresos, egresos, ventas, métodos de pago).
+  Widget _buildCierresCard(ReporteCajasDiaModel c) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+            child: Text('Cierres de caja (${c.cierres.length})',
+                style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          if (c.cierres.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 20),
+              child: Text('No hubo aperturas de caja este día',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.textSecondary)),
+            )
+          else ...[
+            const Divider(height: 1),
+            ...c.cierres.map(_buildCierreTile),
+            const SizedBox(height: 6),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCierreTile(CierreDetalladoModel cierre) {
+    final dif = cierre.diferencia;
+    final String estadoDif;
+    final Color colorDif;
+    if (!cierre.isCerrada) {
+      estadoDif = 'Turno abierto';
+      colorDif = AppColors.success;
+    } else if (dif == null || dif.abs() < 0.01) {
+      estadoDif = 'Cuadrada';
+      colorDif = AppColors.success;
+    } else if (dif > 0) {
+      estadoDif = 'Sobrante \$${_fmt.format(dif)}';
+      colorDif = AppColors.warning;
+    } else {
+      estadoDif = 'Faltante \$${_fmt.format(dif.abs())}';
+      colorDif = AppColors.error;
+    }
+    final horaFmt = DateFormat('HH:mm', 'es');
+    final horario = cierre.fechaCierre != null
+        ? '${horaFmt.format(cierre.fechaApertura.toLocal())} - ${horaFmt.format(cierre.fechaCierre!.toLocal())}'
+        : 'Desde ${horaFmt.format(cierre.fechaApertura.toLocal())}';
+    return ListTile(
+      onTap: () => mostrarCierreDetalle(context, cierre),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: colorDif.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(Icons.point_of_sale_outlined, color: colorDif, size: 20),
+      ),
+      title: Text('${cierre.nombreCaja} · $horario',
+          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+      subtitle: Text(
+        'Ventas \$${_fmt.format(cierre.totalVentas)} · '
+        'Egresos \$${_fmt.format(cierre.totalEgresos)} · '
+        '${cierre.usuarioCierre ?? cierre.usuarioApertura}',
+        style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(estadoDif,
+              style: TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 12, color: colorDif)),
+          const Text('Ver detalle',
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: AppColors.textSecondary)),
         ],
       ),
     );

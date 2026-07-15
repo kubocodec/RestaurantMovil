@@ -35,7 +35,9 @@ class CajaRepository {
     return AperturaCajaModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  Future<AperturaCajaModel> cerrarCaja({
+  // El backend devuelve el arqueo detallado del cierre (ingresos, egresos,
+  // ventas por plato y por método de pago, faltante/sobrante)
+  Future<CierreDetalladoModel> cerrarCaja({
     required String aperturaCierreCajaId,
     required double montoFinal,
     String? observaciones,
@@ -44,7 +46,13 @@ class CajaRepository {
       'montoFinal':   montoFinal,
       if (observaciones != null) 'observaciones': observaciones,
     });
-    return AperturaCajaModel.fromJson(r.data['data'] ?? r.data);
+    return CierreDetalladoModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  // Detalle completo de una apertura (abierta o cerrada)
+  Future<CierreDetalladoModel> getDetalleApertura(String aperturaCierreCajaId) async {
+    final r = await _dio.get('/api/caja/apertura/$aperturaCierreCajaId/detalle');
+    return CierreDetalladoModel.fromJson(r.data['data'] ?? r.data);
   }
 
   // Estado en vivo de la apertura: esperado + movimientos
