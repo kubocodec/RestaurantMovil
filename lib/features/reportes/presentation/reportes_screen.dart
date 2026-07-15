@@ -8,6 +8,7 @@ import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../shared/widgets/cierre_detalle_sheet.dart';
 import '../data/reportes_repository.dart';
+import 'comparativo_sucursales_screen.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -34,6 +35,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
   String get _sucursalId {
     final s = context.read<AuthBloc>().state;
     return s is AuthAuthenticated ? s.user.sucursalId : '';
+  }
+
+  String get _restaurantId {
+    final s = context.read<AuthBloc>().state;
+    return s is AuthAuthenticated ? s.user.restaurantId : '';
   }
 
   Future<void> _load() async {
@@ -75,7 +81,16 @@ class _ReportesScreenState extends State<ReportesScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Reportes'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.storefront_outlined),
+            tooltip: 'Ventas por sucursal',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ComparativoSucursalesScreen(restaurantId: _restaurantId),
+            )),
+          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
       ),
       body: SafeArea(
         child: Column(
