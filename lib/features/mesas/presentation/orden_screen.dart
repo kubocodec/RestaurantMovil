@@ -59,6 +59,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
   final List<_CartItem> _carrito = [];
   late String _tipoOrden = widget.esParaLlevar ? 'PARA_LLEVAR' : 'EN_MESA';
   String? _categoriaFiltro;
+  // Con muchas categorías el scroll horizontal era incómodo: por defecto se
+  // muestran todas en varias filas y el mesero puede colapsarlas a una.
+  bool _categoriasExpandidas = true;
   final _busquedaCtrl = TextEditingController();
   String _busqueda = '';
 
@@ -439,35 +442,60 @@ class _OrdenScreenState extends State<OrdenScreen> {
   Widget _buildCategorias() {
     final categorias = _categorias;
     if (categorias.isEmpty) return const SizedBox.shrink();
+
+    final chips = <Widget>[
+      _TipoChip(
+        label: 'Todos',
+        icon: Icons.restaurant_menu_outlined,
+        selected: _categoriaFiltro == null,
+        onTap: () => setState(() => _categoriaFiltro = null),
+      ),
+      ...categorias.map((c) => _TipoChip(
+        label: c,
+        icon: Icons.label_outline,
+        selected: _categoriaFiltro == c,
+        onTap: () => setState(() => _categoriaFiltro = c),
+      )),
+    ];
+
     return Container(
       color: AppColors.cardBackground,
       padding: const EdgeInsets.only(bottom: 8),
-      child: SizedBox(
-        height: 36,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _TipoChip(
-                label: 'Todos',
-                icon: Icons.restaurant_menu_outlined,
-                selected: _categoriaFiltro == null,
-                onTap: () => setState(() => _categoriaFiltro = null),
-              ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _categoriasExpandidas
+                // Todas visibles en varias filas: un toque para elegir
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+                  )
+                // Colapsado: una fila con scroll horizontal (modo compacto)
+                : SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.only(left: 16),
+                      children: [
+                        for (final chip in chips)
+                          Padding(padding: const EdgeInsets.only(right: 8), child: chip),
+                      ],
+                    ),
+                  ),
+          ),
+          IconButton(
+            tooltip: _categoriasExpandidas ? 'Colapsar categorías' : 'Ver todas las categorías',
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            icon: Icon(
+              _categoriasExpandidas ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+              color: AppColors.textSecondary,
             ),
-            ...categorias.map((c) => Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _TipoChip(
-                label: c,
-                icon: Icons.label_outline,
-                selected: _categoriaFiltro == c,
-                onTap: () => setState(() => _categoriaFiltro = c),
-              ),
-            )),
-          ],
-        ),
+            onPressed: () => setState(() => _categoriasExpandidas = !_categoriasExpandidas),
+          ),
+        ],
       ),
     );
   }
