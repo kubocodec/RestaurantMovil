@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/printing/comanda_printer.dart';
 import '../data/configuracion_repository.dart';
 
 /// Configuración de impresoras de comandas (cocina, barra, etc.).
@@ -131,7 +132,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Al enviar una orden, cada ítem se imprime en la impresora asignada a su categoría (ej: bebidas → barra, platos fuertes → cocina). Usa la IP de la impresora térmica en la red local (puerto 9100 por defecto).',
+                  'Al enviar una orden, cada ítem se imprime en la impresora asignada a su categoría (ej: bebidas → barra, platos fuertes → cocina). Usa la IP de la impresora en la red local (puerto 9100 por defecto) y/o su Bluetooth como respaldo si falla la red.',
                   style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
                 ),
               ),
@@ -150,6 +151,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                 onToggle: () => _toggle(_impresoras[i]),
                 onEdit: () => _showFormDialog(impresora: _impresoras[i]),
                 onCategorias: () => _showCategoriasDialog(_impresoras[i]),
+                onTest: () => _probarImpresion(_impresoras[i]),
               ),
             ),
           ),
@@ -173,6 +175,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
     final areaCtrl   = TextEditingController(text: impresora?.area ?? '');
     final ipCtrl     = TextEditingController(text: impresora?.ip ?? '');
     final puertoCtrl = TextEditingController(text: (impresora?.puerto ?? 9100).toString());
+    final macCtrl    = TextEditingController(text: impresora?.mac ?? '');
     final seleccion  = Set<String>.from(impresora?.categoriaIds ?? const []);
 
     showDialog(
@@ -199,13 +202,31 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                 TextField(
                   controller: ipCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'IP en la red local *', hintText: 'ej: 192.168.1.50'),
+                  decoration: const InputDecoration(labelText: 'IP en la red local', hintText: 'ej: 192.168.1.50'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: puertoCtrl,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Puerto', helperText: '9100 en la mayoría de impresoras térmicas'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: macCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Bluetooth (MAC)',
+                    hintText: 'ej: 66:12:8B:22:D4:A1',
+                    helperText: 'Respaldo si falla la red. Requiere IP o Bluetooth.',
+                    helperMaxLines: 2,
+                    suffixIcon: IconButton(
+                      tooltip: 'Buscar impresoras emparejadas',
+                      icon: const Icon(Icons.bluetooth_searching_rounded),
+                      onPressed: () async {
+                        final mac = await _elegirBluetooth(ctx);
+                        if (mac != null) setDialogState(() => macCtrl.text = mac);
+                      },
+                    ),
+                  ),
                 ),
                 if (!esEdicion) ...[
                   const SizedBox(height: 12),
@@ -222,9 +243,10 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
               onPressed: () async {
                 final nombre = nombreCtrl.text.trim();
                 final ip = ipCtrl.text.trim();
-                if (nombre.isEmpty || ip.isEmpty) {
+                final mac = macCtrl.text.trim();
+                if (nombre.isEmpty || (ip.isEmpty && mac.isEmpty)) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Nombre e IP son requeridos')),
+                    const SnackBar(content: Text('Nombre y al menos una conexión (IP o Bluetooth) son requeridos')),
                   );
                   return;
                 }
@@ -238,6 +260,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                       area: areaCtrl.text.trim(),
                       ip: ip,
                       puerto: int.tryParse(puertoCtrl.text.trim()) ?? 9100,
+                      mac: mac,
                     );
                   } else {
                     await _repo.crearImpresora(
@@ -246,6 +269,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                       area: areaCtrl.text.trim(),
                       ip: ip,
                       puerto: int.tryParse(puertoCtrl.text.trim()) ?? 9100,
+                      mac: mac,
                       categoriaIds: seleccion.toList(),
                     );
                   }
@@ -333,6 +357,78 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
     )).toList();
   }
 
+  /// Lista las impresoras Bluetooth emparejadas con el dispositivo y deja
+  /// elegir una; devuelve su MAC (o null si se cancela).
+  Future<String?> _elegirBluetooth(BuildContext ctx) async {
+    try {
+      final dispositivos = await ComandaPrinter.impresorasBluetoothEmparejadas();
+      if (dispositivos.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No hay dispositivos Bluetooth emparejados. Empareja la impresora desde los ajustes del dispositivo.'),
+            backgroundColor: AppColors.warning,
+          ));
+        }
+        return null;
+      }
+      if (!ctx.mounted) return null;
+      return showDialog<String>(
+        context: ctx,
+        builder: (dCtx) => SimpleDialog(
+          title: const Text('Impresoras emparejadas',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+          children: dispositivos.map((d) => SimpleDialogOption(
+            onPressed: () => Navigator.pop(dCtx, d.macAdress),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(d.name.isEmpty ? '(sin nombre)' : d.name,
+                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(d.macAdress,
+                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+              ],
+            ),
+          )).toList(),
+        ),
+      );
+    } catch (e) {
+      _showError(e);
+      return null;
+    }
+  }
+
+  /// Imprime un ticket de prueba en la impresora (red y, si falla,
+  /// Bluetooth) e informa por cuál vía se logró conectar.
+  Future<void> _probarImpresion(ImpresoraModel imp) async {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Imprimiendo prueba en ${imp.nombre}...'),
+      duration: const Duration(seconds: 2),
+    ));
+    try {
+      final via = await ComandaPrinter.imprimirPrueba(
+        ip: imp.ip,
+        puerto: imp.puerto ?? 9100,
+        mac: imp.mac,
+        nombre: imp.nombre,
+        area: imp.area,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Prueba impresa en ${imp.nombre} por $via'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo imprimir en ${imp.nombre}: ${e is Exception ? e.toString().replaceFirst('Exception: ', '') : e}'),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 6),
+        ));
+      }
+    }
+  }
+
   void _showError(Object e) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -347,13 +443,24 @@ class _ImpresoraCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onEdit;
   final VoidCallback onCategorias;
+  final VoidCallback onTest;
 
   const _ImpresoraCard({
     required this.impresora,
     required this.onToggle,
     required this.onEdit,
     required this.onCategorias,
+    required this.onTest,
   });
+
+  /// Resumen de conexiones: IP y/o Bluetooth según lo configurado.
+  String get _conexiones {
+    final partes = <String>[
+      if (impresora.ip?.isNotEmpty ?? false) '${impresora.ip}:${impresora.puerto ?? 9100}',
+      if (impresora.mac?.isNotEmpty ?? false) 'BT ${impresora.mac}',
+    ];
+    return partes.isEmpty ? 'sin conexión' : partes.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +494,7 @@ class _ImpresoraCard extends StatelessWidget {
                     Text(impresora.nombre,
                         style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
                     Text(
-                      '${impresora.area?.isNotEmpty == true ? '${impresora.area} · ' : ''}${impresora.ip ?? 'sin IP'}:${impresora.puerto ?? 9100}',
+                      '${impresora.area?.isNotEmpty == true ? '${impresora.area} · ' : ''}$_conexiones',
                       style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ],
@@ -415,6 +522,11 @@ class _ImpresoraCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              TextButton.icon(
+                onPressed: onTest,
+                icon: const Icon(Icons.print_outlined, size: 16),
+                label: const Text('Probar', style: TextStyle(fontFamily: 'Poppins', fontSize: 12)),
+              ),
               TextButton.icon(
                 onPressed: onCategorias,
                 icon: const Icon(Icons.category_outlined, size: 16),

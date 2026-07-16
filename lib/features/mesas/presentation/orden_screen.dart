@@ -265,7 +265,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(resultados.isEmpty
                 ? '¡Orden enviada a cocina!'
-                : '¡Orden enviada! Comandas impresas: ${resultados.map((r) => r.impresora).join(', ')}'),
+                : '¡Orden enviada! Comandas impresas: ${resultados.map((r) => r.via == 'Bluetooth' ? '${r.impresora} (BT)' : r.impresora).join(', ')}'),
             backgroundColor: AppColors.success,
           ));
         } else {

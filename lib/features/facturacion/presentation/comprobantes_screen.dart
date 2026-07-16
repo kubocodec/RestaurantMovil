@@ -499,7 +499,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
     setState(() => _imprimiendo = true);
     try {
       final impresoras = (await _configRepo.getImpresoras(widget.sucursalId))
-          .where((i) => i.activo && (i.ip?.isNotEmpty ?? false))
+          .where((i) => i.activo && i.imprimible)
           .toList();
       if (!mounted) return;
       if (impresoras.isEmpty) {
@@ -524,9 +524,10 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
       if (elegida == null) return;
 
       final f = widget.factura;
-      await ComandaPrinter.imprimirRecibo(
-        ip: elegida.ip!,
+      final via = await ComandaPrinter.imprimirRecibo(
+        ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
+        mac: elegida.mac,
         factura: f,
         items: f.items
             .map((it) => ReciboItem(nombre: it.nombre, cantidad: it.cantidad, subtotal: it.subtotal))
@@ -535,8 +536,8 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
         esFactura: f.esFactura,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Comprobante impreso'), backgroundColor: AppColors.success,
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Comprobante impreso por $via'), backgroundColor: AppColors.success,
         ));
       }
     } catch (e) {

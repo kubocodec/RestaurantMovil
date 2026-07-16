@@ -588,6 +588,7 @@ class ConfiguracionRepository {
     String? area,
     String? ip,
     int? puerto,
+    String? mac,
     List<String> categoriaIds = const [],
   }) async {
     final r = await _dio.post('/api/impresoras', data: {
@@ -596,6 +597,7 @@ class ConfiguracionRepository {
       if (area != null && area.isNotEmpty) 'area': area,
       if (ip != null && ip.isNotEmpty)     'ip':   ip,
       if (puerto != null)                  'puerto': puerto,
+      if (mac != null && mac.isNotEmpty)   'mac':  mac,
       'categoriaIds': categoriaIds,
     });
     return ImpresoraModel.fromJson(r.data['data'] ?? r.data);
@@ -608,13 +610,17 @@ class ConfiguracionRepository {
     String? area,
     String? ip,
     int? puerto,
+    String? mac,
   }) async {
+    // ip y mac se envían siempre (aun vacíos → null en backend) para poder
+    // quitar una vía de conexión al editar, no solo agregarla.
     final r = await _dio.put('/api/impresoras/$impresoraId', data: {
       'sucursalId': sucursalId,
       'nombre':     nombre,
       if (area != null && area.isNotEmpty) 'area': area,
-      if (ip != null && ip.isNotEmpty)     'ip':   ip,
+      'ip':  (ip != null && ip.isNotEmpty) ? ip : null,
       if (puerto != null)                  'puerto': puerto,
+      'mac': (mac != null && mac.isNotEmpty) ? mac : null,
     });
     return ImpresoraModel.fromJson(r.data['data'] ?? r.data);
   }

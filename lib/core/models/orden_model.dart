@@ -13,6 +13,7 @@ class DetalleOrdenModel {
   final String? impresoraNombre;
   final String? impresoraIp;
   final int? impresoraPuerto;
+  final String? impresoraMac;
 
   const DetalleOrdenModel({
     required this.ordenDetalleId,
@@ -29,6 +30,7 @@ class DetalleOrdenModel {
     this.impresoraNombre,
     this.impresoraIp,
     this.impresoraPuerto,
+    this.impresoraMac,
   });
 
   factory DetalleOrdenModel.fromJson(Map<String, dynamic> j) => DetalleOrdenModel(
@@ -46,6 +48,7 @@ class DetalleOrdenModel {
     impresoraNombre: j['impresoraNombre']?.toString(),
     impresoraIp:     j['impresoraIp']?.toString(),
     impresoraPuerto: (j['impresoraPuerto'] as num?)?.toInt(),
+    impresoraMac:    j['impresoraMac']?.toString(),
   );
 
   /// Unidades que faltan por cobrar (cuentas divididas).

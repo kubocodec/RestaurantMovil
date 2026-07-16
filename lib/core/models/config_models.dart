@@ -273,6 +273,7 @@ class ImpresoraModel {
   final String? area;
   final String? ip;
   final int? puerto;
+  final String? mac;
   final bool activo;
   final List<String> categorias;
   final List<String> categoriaIds;
@@ -284,10 +285,14 @@ class ImpresoraModel {
     this.area,
     this.ip,
     this.puerto,
+    this.mac,
     required this.activo,
     required this.categorias,
     required this.categoriaIds,
   });
+
+  /// Tiene al menos una vía de conexión configurada (red o Bluetooth).
+  bool get imprimible => (ip?.isNotEmpty ?? false) || (mac?.isNotEmpty ?? false);
 
   factory ImpresoraModel.fromJson(Map<String, dynamic> j) => ImpresoraModel(
     impresoraId: j['impresoraId']?.toString() ?? '',
@@ -296,6 +301,7 @@ class ImpresoraModel {
     area:        j['area']?.toString(),
     ip:          j['ip']?.toString(),
     puerto:      (j['puerto'] as num?)?.toInt(),
+    mac:         j['mac']?.toString(),
     activo:      j['activo'] ?? true,
     categorias:  ((j['categorias'] as List?) ?? []).map((e) => e.toString()).toList(),
     categoriaIds: ((j['categoriaIds'] as List?) ?? []).map((e) => e.toString()).toList(),

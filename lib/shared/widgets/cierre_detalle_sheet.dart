@@ -69,7 +69,7 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
     setState(() => _imprimiendo = true);
     try {
       final impresoras = (await ConfiguracionRepository().getImpresoras(sucursalId))
-          .where((i) => i.activo && (i.ip?.isNotEmpty ?? false))
+          .where((i) => i.activo && i.imprimible)
           .toList();
       if (!mounted) return;
       if (impresoras.isEmpty) {
@@ -94,14 +94,15 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
       );
       if (elegida == null) return;
 
-      await ComandaPrinter.imprimirCierreCaja(
-        ip: elegida.ip!,
+      final via = await ComandaPrinter.imprimirCierreCaja(
+        ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
+        mac: elegida.mac,
         cierre: cierre,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Cierre de caja impreso'), backgroundColor: AppColors.success,
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Cierre de caja impreso por $via'), backgroundColor: AppColors.success,
         ));
       }
     } catch (e) {
