@@ -2,6 +2,7 @@ class PlatoModel {
   final String sucursalPlatoId;
   final String platoId;
   final String nombrePlato;
+  final String? descripcionPlato;
   final String? imagenPlato;
   final String categoria;
   final String subcategoria;
@@ -12,6 +13,7 @@ class PlatoModel {
     required this.sucursalPlatoId,
     required this.platoId,
     required this.nombrePlato,
+    this.descripcionPlato,
     this.imagenPlato,
     this.categoria = '',
     this.subcategoria = '',
@@ -23,6 +25,7 @@ class PlatoModel {
     sucursalPlatoId: j['sucursalPlatoId']?.toString() ?? '',
     platoId:         j['platoId']?.toString() ?? '',
     nombrePlato:     j['nombrePlato']?.toString() ?? '',
+    descripcionPlato: j['descripcionPlato']?.toString(),
     imagenPlato:     j['imagenPlato']?.toString(),
     categoria:       j['categoria']?.toString() ?? '',
     subcategoria:    j['subcategoria']?.toString() ?? '',

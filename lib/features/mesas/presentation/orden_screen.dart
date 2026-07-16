@@ -915,6 +915,16 @@ class _PlatoTile extends StatelessWidget {
               children: [
                 Text(plato.nombrePlato,
                   style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
+                // Descripción del plato: discreta, máximo 2 líneas
+                if (plato.descripcionPlato?.trim().isNotEmpty ?? false) ...[
+                  const SizedBox(height: 2),
+                  Text(plato.descripcionPlato!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins', fontSize: 11.5, height: 1.3,
+                      color: AppColors.textSecondary)),
+                ],
                 const SizedBox(height: 6),
                 Text('\$${plato.precio.toStringAsFixed(2)}',
                   style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.primary)),
