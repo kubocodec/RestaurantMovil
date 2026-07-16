@@ -41,6 +41,8 @@ class UserModel extends Equatable {
   final String sucursalNombre;
   final String accessToken;
   final String refreshToken;
+  /// Aviso de pago del servicio próximo a vencer (null si no aplica).
+  final String? avisoPago;
 
   const UserModel({
     required this.id,
@@ -54,6 +56,7 @@ class UserModel extends Equatable {
     required this.sucursalNombre,
     required this.accessToken,
     required this.refreshToken,
+    this.avisoPago,
   });
 
   factory UserModel.fromLoginResponse(Map<String, dynamic> json) {
@@ -72,6 +75,7 @@ class UserModel extends Equatable {
       sucursalNombre: '',
       accessToken:   d['accessToken']?.toString() ?? '',
       refreshToken:  d['refreshToken']?.toString() ?? '',
+      avisoPago:     d['avisoPago']?.toString(),
     );
   }
 
@@ -80,6 +84,7 @@ class UserModel extends Equatable {
     'rol': rol.name, 'sucursalId': sucursalId, 'restaurantId': restaurantId,
     'tenantId': tenantId, 'sucursalNombre': sucursalNombre,
     'accessToken': accessToken, 'refreshToken': refreshToken,
+    'avisoPago': avisoPago,
   };
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -94,6 +99,7 @@ class UserModel extends Equatable {
     sucursalNombre: json['sucursalNombre']?.toString() ?? '',
     accessToken:   json['accessToken']?.toString() ?? '',
     refreshToken:  json['refreshToken']?.toString() ?? '',
+    avisoPago:     json['avisoPago']?.toString(),
   );
 
   @override

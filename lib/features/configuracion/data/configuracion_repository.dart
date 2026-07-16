@@ -549,6 +549,21 @@ class ConfiguracionRepository {
     return RestaurantModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Fija la fecha del próximo pago del servicio (null = quitar el control).
+  Future<RestaurantModel> fijarProximoPago(String restaurantId, DateTime? fecha) async {
+    final f = fecha == null
+        ? ''
+        : '?fecha=${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+    final r = await _dio.patch('/api/restaurants/$restaurantId/proximo-pago$f');
+    return RestaurantModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Registra el pago del mes: corre la fecha de próximo pago un mes adelante.
+  Future<RestaurantModel> registrarPagoRestaurant(String restaurantId) async {
+    final r = await _dio.patch('/api/restaurants/$restaurantId/registrar-pago');
+    return RestaurantModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<List<SucursalModel>> getSucursalesByRestaurant(String restaurantId) async {
     final r = await _dio.get('/api/sucursales/restaurant/$restaurantId');
     final List data = r.data['data'] ?? [];

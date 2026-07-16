@@ -10,6 +10,7 @@ import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
+import '../../../shared/widgets/aviso_pago_banner.dart';
 import '../../../shared/widgets/stat_card.dart';
 
 class CajeroDashboard extends StatelessWidget {
@@ -117,6 +118,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const AvisoPagoBanner(),
               _buildGreeting(),
               const SizedBox(height: 24),
               _buildCajaStatus(context),

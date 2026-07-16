@@ -555,6 +555,8 @@ class _RestaurantRowState extends State<_RestaurantRow> {
   bool _loading  = false;
   bool _expanded = false;
 
+  RestaurantModel get _r => widget.restaurant;
+
   Future<void> _loadSucursales() async {
     setState(() => _loading = true);
     try {
@@ -562,6 +564,135 @@ class _RestaurantRowState extends State<_RestaurantRow> {
       setState(() { _sucursales = s; _loading = false; });
     } catch (_) {
       setState(() => _loading = false);
+    }
+  }
+
+  static String _fmtFecha(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  /// Chip con el estado de pago: verde al día, ámbar por vencer (≤2 días),
+  /// rojo vencido, gris sin control de pago configurado.
+  Widget _buildPagoChip() {
+    final fecha = _r.proximoPago;
+    String texto;
+    Color color;
+    if (fecha == null) {
+      texto = 'Sin pago';
+      color = AppColors.textSecondary;
+    } else {
+      final hoy = DateTime.now();
+      final dias = DateTime(fecha.year, fecha.month, fecha.day)
+          .difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+      final corta = '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}';
+      if (dias < 0) {
+        texto = 'Vencido $corta';
+        color = AppColors.error;
+      } else if (dias <= 2) {
+        texto = 'Vence $corta';
+        color = AppColors.warning;
+      } else {
+        texto = 'Pago $corta';
+        color = AppColors.success;
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(texto,
+          style: TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+
+  Future<void> _registrarPago() async {
+    final nueva = _r.proximoPago == null
+        ? null
+        : DateTime(_r.proximoPago!.year, _r.proximoPago!.month + 1, _r.proximoPago!.day);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Registrar pago', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Text(
+          '¿Registrar el pago de "${_r.nombre}"?'
+          '${nueva != null ? '\nEl próximo pago quedará para el ${_fmtFecha(nueva)}.' : ''}',
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Registrar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final actualizado = await widget.repo.registrarPagoRestaurant(_r.restaurantId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Pago registrado. Próximo pago: '
+              '${actualizado.proximoPago != null ? _fmtFecha(actualizado.proximoPago!) : '-'}'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<void> _cambiarFechaPago() async {
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: _r.proximoPago ?? DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2040),
+      helpText: 'Fecha del próximo pago',
+    );
+    if (fecha == null) return;
+    try {
+      await widget.repo.fijarProximoPago(_r.restaurantId, fecha);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Próximo pago: ${_fmtFecha(fecha)}'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<void> _quitarControlPago() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Quitar control de pago', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Text(
+          '"${_r.nombre}" dejará de recibir avisos de pago y nunca se bloqueará. ¿Continuar?',
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quitar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.repo.fijarProximoPago(_r.restaurantId, null);
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  void _showError(Object e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+      );
     }
   }
 
@@ -583,6 +714,29 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                 Expanded(
                   child: Text(widget.restaurant.nombre,
                       style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
+                ),
+                _buildPagoChip(),
+                PopupMenuButton<String>(
+                  tooltip: 'Pago del servicio',
+                  icon: const Icon(Icons.more_vert_rounded, size: 18, color: AppColors.textSecondary),
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'pago':   _registrarPago();
+                      case 'fecha':  _cambiarFechaPago();
+                      case 'quitar': _quitarControlPago();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (_r.proximoPago != null)
+                      const PopupMenuItem(value: 'pago',
+                          child: Text('Registrar pago (+1 mes)', style: TextStyle(fontFamily: 'Poppins', fontSize: 13))),
+                    PopupMenuItem(value: 'fecha',
+                        child: Text(_r.proximoPago == null ? 'Fijar fecha de pago' : 'Cambiar fecha de pago',
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
+                    if (_r.proximoPago != null)
+                      const PopupMenuItem(value: 'quitar',
+                          child: Text('Quitar control de pago', style: TextStyle(fontFamily: 'Poppins', fontSize: 13))),
+                  ],
                 ),
                 Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: AppColors.textSecondary),
               ],

@@ -177,12 +177,15 @@ class RestaurantModel {
   final String tenantId;
   final String nombre;
   final bool activo;
+  /// Fecha del próximo pago del servicio (null = sin control de pago).
+  final DateTime? proximoPago;
 
   const RestaurantModel({
     required this.restaurantId,
     required this.tenantId,
     required this.nombre,
     required this.activo,
+    this.proximoPago,
   });
 
   factory RestaurantModel.fromJson(Map<String, dynamic> j) => RestaurantModel(
@@ -190,6 +193,7 @@ class RestaurantModel {
     tenantId:     j['tenantId']?.toString() ?? '',
     nombre:       j['nombre']?.toString() ?? '',
     activo:       j['activo'] ?? true,
+    proximoPago:  j['proximoPago'] != null ? DateTime.tryParse(j['proximoPago'].toString()) : null,
   );
 }
 

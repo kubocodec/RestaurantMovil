@@ -10,6 +10,7 @@ import '../../../features/mesas/data/mesas_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
+import '../../../shared/widgets/aviso_pago_banner.dart';
 import '../../../shared/widgets/stat_card.dart';
 
 class AdminDashboard extends StatelessWidget {
@@ -119,6 +120,7 @@ class _AdminBodyState extends State<_AdminBody> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const AvisoPagoBanner(),
             _buildHeader(context),
             const SizedBox(height: 24),
             _buildStats(context),
