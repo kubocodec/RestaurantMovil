@@ -43,6 +43,9 @@ dependencies:
   print_bluetooth_thermal: ^1.1.0
   permission_handler: ^11.3.1
 
+  # Descubrimiento de impresoras de red por mDNS/Bonjour
+  multicast_dns: ^0.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

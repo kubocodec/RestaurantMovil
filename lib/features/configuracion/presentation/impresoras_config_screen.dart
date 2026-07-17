@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/printing/comanda_printer.dart';
+import '../../../core/printing/network_printer_scanner.dart';
 import '../data/configuracion_repository.dart';
 
 /// Configuración de impresoras de comandas (cocina, barra, etc.).
@@ -132,7 +135,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Al enviar una orden, cada ítem se imprime en la impresora asignada a su categoría (ej: bebidas → barra, platos fuertes → cocina). Usa la IP de la impresora en la red local (puerto 9100 por defecto) y/o su Bluetooth como respaldo si falla la red.',
+                  'Al enviar una orden, cada ítem se imprime en la impresora asignada a su categoría (ej: bebidas → barra, platos fuertes → cocina). Usa el botón de búsqueda para detectar impresoras en la red WiFi y/o configura su Bluetooth como respaldo si falla la red.',
                   style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
                 ),
               ),
@@ -202,7 +205,26 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                 TextField(
                   controller: ipCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'IP en la red local', hintText: 'ej: 192.168.1.50'),
+                  decoration: InputDecoration(
+                    labelText: 'IP en la red local',
+                    hintText: 'ej: 192.168.1.50',
+                    suffixIcon: IconButton(
+                      tooltip: 'Buscar impresoras en la red',
+                      icon: const Icon(Icons.wifi_find_rounded),
+                      onPressed: () async {
+                        final sel = await showDialog<ImpresoraRed>(
+                          context: ctx,
+                          builder: (_) => const _BuscarImpresorasRedDialog(),
+                        );
+                        if (sel != null) {
+                          setDialogState(() {
+                            ipCtrl.text = sel.ip;
+                            puertoCtrl.text = sel.puerto.toString();
+                          });
+                        }
+                      },
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -541,6 +563,131 @@ class _ImpresoraCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Busca impresoras en la red WiFi (mDNS + escaneo de puertos comunes) y
+/// deja elegir una; devuelve la [ImpresoraRed] seleccionada o null.
+class _BuscarImpresorasRedDialog extends StatefulWidget {
+  const _BuscarImpresorasRedDialog();
+
+  @override
+  State<_BuscarImpresorasRedDialog> createState() => _BuscarImpresorasRedDialogState();
+}
+
+class _BuscarImpresorasRedDialogState extends State<_BuscarImpresorasRedDialog> {
+  NetworkPrinterScanner? _scanner;
+  StreamSubscription<ImpresoraRed>? _sub;
+  final List<ImpresoraRed> _encontradas = [];
+  double _avance = 0;
+  bool _buscando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarBusqueda();
+  }
+
+  void _iniciarBusqueda() {
+    _sub?.cancel();
+    _scanner?.cancelar();
+    setState(() {
+      _encontradas.clear();
+      _avance = 0;
+      _buscando = true;
+    });
+    final scanner = NetworkPrinterScanner();
+    _scanner = scanner;
+    _sub = scanner.buscar(onAvance: (a) {
+      if (mounted) setState(() => _avance = a);
+    }).listen(
+      (imp) { if (mounted) setState(() => _encontradas.add(imp)); },
+      onDone: () { if (mounted) setState(() => _buscando = false); },
+    );
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _scanner?.cancelar();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Expanded(
+            child: Text('Impresoras en la red',
+                style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+          ),
+          if (_buscando)
+            const SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_buscando) ...[
+              LinearProgressIndicator(value: _avance > 0 ? _avance : null),
+              const SizedBox(height: 6),
+              const Text('Buscando por mDNS y escaneando la subred...',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+              const SizedBox(height: 10),
+            ],
+            if (_encontradas.isEmpty && !_buscando)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No se encontraron impresoras.\n\n'
+                  'Verifica que la impresora esté encendida y en la misma red WiFi. '
+                  'Si usa un puerto poco común, escribe su IP y puerto manualmente.',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _encontradas.length,
+                itemBuilder: (_, i) {
+                  final imp = _encontradas[i];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.print_outlined, color: AppColors.earth2),
+                    title: Text(
+                      imp.nombre ?? imp.ip,
+                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    subtitle: Text(
+                      '${imp.ip}:${imp.puerto} · ${imp.fuente}',
+                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                    onTap: () => Navigator.pop(context, imp),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        if (!_buscando)
+          TextButton.icon(
+            onPressed: _iniciarBusqueda,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Buscar de nuevo'),
+          ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      ],
     );
   }
 }
