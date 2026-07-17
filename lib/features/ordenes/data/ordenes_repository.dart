@@ -73,6 +73,22 @@ class OrdenesRepository {
     return data.map((j) => DetalleOrdenModel.fromJson(j)).toList();
   }
 
+  // Mover unidades de items a otra mesa (ej. 2 de 3 tigrillos).
+  // Devuelve la orden destino (existente de esa mesa o recién creada).
+  Future<OrdenModel> moverItems({
+    required String ordenId,
+    required String mesaDestinoId,
+    required Map<String, int> cantidadesPorDetalle, // detalleId -> cantidad
+  }) async {
+    final r = await _dio.post('/api/ordenes/$ordenId/mover-items', data: {
+      'mesaDestinoId': mesaDestinoId,
+      'items': cantidadesPorDetalle.entries
+          .map((e) => {'detalleId': e.key, 'cantidad': e.value})
+          .toList(),
+    });
+    return OrdenModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   // Mover la orden a otra mesa (el cliente se cambió de sitio)
   Future<void> cambiarMesa(String ordenId, String mesaId) async {
     await _dio.patch('/api/ordenes/$ordenId/mesa', queryParameters: {'mesaId': mesaId});

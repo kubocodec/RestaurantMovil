@@ -331,10 +331,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
       backgroundColor: AppColors.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _CambiarMesaSheet(
-        numeroOrden: orden.numeroOrden,
-        mesaActual: widget.mesaNombre,
-        libres: libres,
+      builder: (ctx) => _ElegirMesaSheet(
+        titulo: 'Mover orden #${orden.numeroOrden}',
+        subtitulo: 'De ${widget.mesaNombre} a una mesa libre:',
+        mesas: libres,
       ),
     );
     if (destino == null || !mounted) return;
@@ -364,6 +364,99 @@ class _OrdenScreenState extends State<OrdenScreen> {
     }
   }
 
+  /// El cliente ya no quiere todos los platos aquí (ej. pidió 3 tigrillos y
+  /// se queda con 1): elegir cantidades por ítem y pasarlas a otra mesa.
+  /// Si la mesa destino tiene orden abierta se suman a ella; si está libre
+  /// se crea una orden nueva.
+  Future<void> _moverItems() async {
+    final orden = _ordenExistente;
+    if (orden == null) return;
+
+    final movibles = orden.detalles
+        .where((d) => d.estado != 'CANCELADO' && d.cantidad - d.cantidadFacturada > 0)
+        .toList();
+    if (movibles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No hay items que se puedan mover (ya están cobrados o cancelados)'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+
+    // Paso 1: elegir qué items y cuántas unidades
+    final seleccion = await showModalBottomSheet<Map<String, int>>(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _MoverItemsSheet(numeroOrden: orden.numeroOrden, detalles: movibles),
+    );
+    if (seleccion == null || seleccion.isEmpty || !mounted) return;
+
+    // Paso 2: elegir mesa destino (libre u ocupada; ocupada = se suma a su orden)
+    List<MesaModel> candidatas;
+    try {
+      final mesas = await MesasRepository().getMesasBySucursal(_sucursalId);
+      candidatas = mesas
+          .where((m) => (m.isLibre || m.isOcupada) && m.mesaId != widget.mesaId)
+          .toList();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (candidatas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No hay otras mesas disponibles'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+
+    final totalUnidades = seleccion.values.fold(0, (s, n) => s + n);
+    final destino = await showModalBottomSheet<MesaModel>(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _ElegirMesaSheet(
+        titulo: 'Mover $totalUnidades item${totalUnidades == 1 ? '' : 's'} de la orden #${orden.numeroOrden}',
+        subtitulo: 'Elige la mesa destino (si está ocupada, se suman a su orden):',
+        mesas: candidatas,
+      ),
+    );
+    if (destino == null || !mounted) return;
+
+    // Paso 3: mover
+    setState(() => _enviando = true);
+    try {
+      final ordenDestino = await _repo.moverItems(
+        ordenId: orden.ordenId,
+        mesaDestinoId: destino.mesaId,
+        cantidadesPorDetalle: seleccion,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Items movidos a la mesa ${destino.numeroMesa} (orden #${ordenDestino.numeroOrden})'),
+        backgroundColor: AppColors.success,
+      ));
+      // Recargar: la orden origen quedó con menos items (o cancelada si se movió todo)
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -379,6 +472,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
               tooltip: 'Cambiar de mesa',
               icon: const Icon(Icons.swap_horiz_rounded),
               onPressed: _enviando ? null : _cambiarMesa,
+            ),
+          // Mover solo algunos items (o unidades) a otra mesa
+          if (_ordenExistente != null)
+            IconButton(
+              tooltip: 'Mover items a otra mesa',
+              icon: const Icon(Icons.call_split_rounded),
+              onPressed: _enviando ? null : _moverItems,
             ),
           if (_totalItems > 0)
             Stack(
@@ -927,16 +1027,17 @@ class _OrdenScreenState extends State<OrdenScreen> {
 
 // ── Subwidgets ───────────────────────────────────────────────────────────────
 
-/// Hoja para elegir la mesa libre a la que se mueve la orden.
-class _CambiarMesaSheet extends StatelessWidget {
-  final int numeroOrden;
-  final String mesaActual;
-  final List<MesaModel> libres;
+/// Hoja para elegir la mesa a la que se mueve una orden o algunos items.
+/// Colorea cada mesa según su estado (libre/ocupada).
+class _ElegirMesaSheet extends StatelessWidget {
+  final String titulo;
+  final String subtitulo;
+  final List<MesaModel> mesas;
 
-  const _CambiarMesaSheet({
-    required this.numeroOrden,
-    required this.mesaActual,
-    required this.libres,
+  const _ElegirMesaSheet({
+    required this.titulo,
+    required this.subtitulo,
+    required this.mesas,
   });
 
   @override
@@ -963,12 +1064,14 @@ class _CambiarMesaSheet extends StatelessWidget {
                   children: [
                     const Icon(Icons.swap_horiz_rounded, color: AppColors.primary, size: 20),
                     const SizedBox(width: 8),
-                    Text('Mover orden #$numeroOrden',
-                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                    Expanded(
+                      child: Text(titulo,
+                        style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text('De $mesaActual a una mesa libre:',
+                Text(subtitulo,
                   style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
               ],
             ),
@@ -978,25 +1081,31 @@ class _CambiarMesaSheet extends StatelessWidget {
             child: ListView.builder(
               controller: ctrl,
               padding: EdgeInsets.fromLTRB(16, 8, 16, 8 + MediaQuery.of(context).padding.bottom),
-              itemCount: libres.length,
+              itemCount: mesas.length,
               itemBuilder: (ctx, i) {
-                final m = libres[i];
+                final m = mesas[i];
+                final color = m.isOcupada ? AppColors.mesaOcupada : AppColors.mesaLibre;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.mesaLibre.withValues(alpha: 0.06),
+                    color: color.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.mesaLibre.withValues(alpha: 0.5)),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
                   ),
                   child: ListTile(
                     onTap: () => Navigator.pop(ctx, m),
-                    leading: const Icon(Icons.table_restaurant_outlined, color: AppColors.mesaLibre),
+                    leading: Icon(
+                      m.isOcupada ? Icons.people_alt_outlined : Icons.table_restaurant_outlined,
+                      color: color),
                     title: Text(m.numeroMesa,
                       style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
-                    subtitle: m.nombreSalon.isEmpty
-                        ? null
-                        : Text(m.nombreSalon,
-                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11.5, color: AppColors.textSecondary)),
+                    subtitle: Text(
+                      [
+                        if (m.nombreSalon.isNotEmpty) m.nombreSalon,
+                        m.isOcupada ? 'Ocupada' : 'Libre',
+                      ].join(' · '),
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.5,
+                        color: m.isOcupada ? AppColors.mesaOcupada : AppColors.textSecondary)),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1009,6 +1118,171 @@ class _CambiarMesaSheet extends StatelessWidget {
                   ),
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hoja para elegir qué items (y cuántas unidades de cada uno) se mueven
+/// a otra mesa. Solo se ofrecen las unidades aún no cobradas.
+class _MoverItemsSheet extends StatefulWidget {
+  final int numeroOrden;
+  final List<DetalleOrdenModel> detalles;
+
+  const _MoverItemsSheet({required this.numeroOrden, required this.detalles});
+
+  @override
+  State<_MoverItemsSheet> createState() => _MoverItemsSheetState();
+}
+
+class _MoverItemsSheetState extends State<_MoverItemsSheet> {
+  /// detalleId -> unidades a mover (0 = no se mueve)
+  final Map<String, int> _seleccion = {};
+
+  int _max(DetalleOrdenModel d) => d.cantidad - d.cantidadFacturada;
+  int _de(DetalleOrdenModel d) => _seleccion[d.ordenDetalleId] ?? 0;
+
+  void _cambiar(DetalleOrdenModel d, int delta) {
+    setState(() {
+      final nuevo = (_de(d) + delta).clamp(0, _max(d));
+      if (nuevo == 0) {
+        _seleccion.remove(d.ordenDetalleId);
+      } else {
+        _seleccion[d.ordenDetalleId] = nuevo;
+      }
+    });
+  }
+
+  int get _totalSeleccionado => _seleccion.values.fold(0, (s, n) => s + n);
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      maxChildSize: 0.9,
+      minChildSize: 0.4,
+      expand: false,
+      builder: (_, ctrl) => Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.call_split_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('Mover items de la orden #${widget.numeroOrden}',
+                        style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text('Elige cuántas unidades de cada plato pasan a otra mesa:',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.builder(
+              controller: ctrl,
+              padding: const EdgeInsets.all(16),
+              itemCount: widget.detalles.length,
+              itemBuilder: (_, i) {
+                final d = widget.detalles[i];
+                final sel = _de(d);
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: sel > 0
+                        ? Border.all(color: AppColors.primary, width: 1.5)
+                        : Border.all(color: AppColors.divider),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(d.nombrePlato,
+                              style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                            Text(
+                              d.cantidadFacturada > 0
+                                  ? 'En la mesa: ${d.cantidad} (${d.cantidadFacturada} ya cobrados) · se pueden mover ${_max(d)}'
+                                  : 'En la mesa: ${d.cantidad}',
+                              style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      // Stepper - N +
+                      GestureDetector(
+                        onTap: sel > 0 ? () => _cambiar(d, -1) : null,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: sel > 0 ? AppColors.surfaceVariant : AppColors.surfaceVariant.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.remove, size: 18,
+                            color: sel > 0 ? AppColors.textPrimary : AppColors.textHint),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text('$sel',
+                          style: TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16,
+                            color: sel > 0 ? AppColors.primary : AppColors.textHint)),
+                      ),
+                      GestureDetector(
+                        onTap: sel < _max(d) ? () => _cambiar(d, 1) : null,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: sel < _max(d) ? AppColors.primary : AppColors.primary.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.add, size: 18, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.fromLTRB(20, 14, 20, 14 + MediaQuery.of(context).padding.bottom),
+            decoration: const BoxDecoration(
+              color: AppColors.cardBackground,
+              border: Border(top: BorderSide(color: AppColors.divider)),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _totalSeleccionado == 0
+                    ? null
+                    : () => Navigator.pop(context, Map<String, int>.from(_seleccion)),
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: Text(_totalSeleccionado == 0
+                    ? 'Elige al menos un item'
+                    : 'Elegir mesa destino ($_totalSeleccionado item${_totalSeleccionado == 1 ? '' : 's'})'),
+              ),
             ),
           ),
         ],
