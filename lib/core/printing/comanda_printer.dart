@@ -86,18 +86,27 @@ class ComandaPrinter {
     return resultados;
   }
 
+  static bool _esParaLlevar(DetalleOrdenModel d) => d.tipoServicio == 'PARA_LLEVAR';
+
   static List<int> _bytesComanda({
     required String mesa,
     required int numeroOrden,
     required String mesero,
     required List<DetalleOrdenModel> detalles,
   }) {
+    // Si toda la comanda es para llevar se anuncia en grande en la cabecera;
+    // si es mixta (mesa + algunos platos para llevar) se marca cada plato.
+    final todoParaLlevar = detalles.every(_esParaLlevar);
     final bytes = <int>[
       ..._init,
       ..._center, ..._doubleSize, ..._boldOn,
       ..._texto('COMANDA #$numeroOrden\n'),
+      if (todoParaLlevar) ..._texto('* PARA LLEVAR *\n'),
       ..._normalSize,
-      ..._texto('$mesa\n'),
+      // La mesa se imprime siempre que exista (aun si todo va para llevar,
+      // el mesero necesita saber a dónde entregar lo empacado); solo se
+      // omite cuando la orden no tiene mesa (ya lo dice el banner).
+      if (mesa != 'Para llevar') ..._texto('$mesa\n'),
       ..._boldOff, ..._left,
       ..._texto('${'-' * 32}\n'),
       ..._texto('Hora: ${_horaActual()}   Mesero: $mesero\n'),
@@ -106,6 +115,9 @@ class ComandaPrinter {
     for (final d in detalles) {
       bytes.addAll(_boldOn);
       bytes.addAll(_texto('${d.cantidad} x ${d.nombrePlato}\n'));
+      if (!todoParaLlevar && _esParaLlevar(d)) {
+        bytes.addAll(_texto('   >> PARA LLEVAR\n'));
+      }
       bytes.addAll(_boldOff);
       final obs = d.observaciones;
       if (obs != null && obs.isNotEmpty) {
