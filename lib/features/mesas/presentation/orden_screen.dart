@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/models/mesa_model.dart';
 import '../../../core/models/orden_model.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/models/user_model.dart';
@@ -10,6 +11,7 @@ import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../data/mesas_repository.dart';
 
 class _CartItem {
   final PlatoModel plato;
@@ -298,6 +300,70 @@ class _OrdenScreenState extends State<OrdenScreen> {
     }
   }
 
+  /// El cliente se cambió de mesa: elegir una mesa libre y mover la orden
+  /// para que el mesero no la pierda de vista.
+  Future<void> _cambiarMesa() async {
+    final orden = _ordenExistente;
+    if (orden == null) return;
+
+    List<MesaModel> libres;
+    try {
+      final mesas = await MesasRepository().getMesasBySucursal(_sucursalId);
+      libres = mesas.where((m) => m.isLibre && m.mesaId != widget.mesaId).toList();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (libres.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No hay mesas libres para mover la orden'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+
+    final destino = await showModalBottomSheet<MesaModel>(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _CambiarMesaSheet(
+        numeroOrden: orden.numeroOrden,
+        mesaActual: widget.mesaNombre,
+        libres: libres,
+      ),
+    );
+    if (destino == null || !mounted) return;
+
+    setState(() => _enviando = true);
+    try {
+      await _repo.cambiarMesa(orden.ordenId, destino.mesaId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Orden #${orden.numeroOrden} movida a la mesa ${destino.numeroMesa}'),
+        backgroundColor: AppColors.success,
+      ));
+      // Volver a mesas: esta pantalla quedó apuntando a la mesa anterior
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/mesero/mesas');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -307,6 +373,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ? 'Para llevar · #${_ordenExistente!.numeroOrden}'
             : widget.mesaNombre),
         actions: [
+          // El cliente se cambió de sitio: mover la orden a otra mesa libre
+          if (!widget.esParaLlevar && _ordenExistente != null)
+            IconButton(
+              tooltip: 'Cambiar de mesa',
+              icon: const Icon(Icons.swap_horiz_rounded),
+              onPressed: _enviando ? null : _cambiarMesa,
+            ),
           if (_totalItems > 0)
             Stack(
               children: [
@@ -853,6 +926,96 @@ class _OrdenScreenState extends State<OrdenScreen> {
 }
 
 // ── Subwidgets ───────────────────────────────────────────────────────────────
+
+/// Hoja para elegir la mesa libre a la que se mueve la orden.
+class _CambiarMesaSheet extends StatelessWidget {
+  final int numeroOrden;
+  final String mesaActual;
+  final List<MesaModel> libres;
+
+  const _CambiarMesaSheet({
+    required this.numeroOrden,
+    required this.mesaActual,
+    required this.libres,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      maxChildSize: 0.9,
+      minChildSize: 0.35,
+      expand: false,
+      builder: (_, ctrl) => Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.swap_horiz_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text('Mover orden #$numeroOrden',
+                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('De $mesaActual a una mesa libre:',
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.builder(
+              controller: ctrl,
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 8 + MediaQuery.of(context).padding.bottom),
+              itemCount: libres.length,
+              itemBuilder: (ctx, i) {
+                final m = libres[i];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.mesaLibre.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.mesaLibre.withValues(alpha: 0.5)),
+                  ),
+                  child: ListTile(
+                    onTap: () => Navigator.pop(ctx, m),
+                    leading: const Icon(Icons.table_restaurant_outlined, color: AppColors.mesaLibre),
+                    title: Text(m.numeroMesa,
+                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: m.nombreSalon.isEmpty
+                        ? null
+                        : Text(m.nombreSalon,
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11.5, color: AppColors.textSecondary)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person_outline, size: 14, color: AppColors.textSecondary),
+                        const SizedBox(width: 2),
+                        Text('${m.capacidad}',
+                          style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _EstadoDetalleChip extends StatelessWidget {
   final String estado;

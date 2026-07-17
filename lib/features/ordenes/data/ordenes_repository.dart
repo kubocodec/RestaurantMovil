@@ -73,6 +73,11 @@ class OrdenesRepository {
     return data.map((j) => DetalleOrdenModel.fromJson(j)).toList();
   }
 
+  // Mover la orden a otra mesa (el cliente se cambió de sitio)
+  Future<void> cambiarMesa(String ordenId, String mesaId) async {
+    await _dio.patch('/api/ordenes/$ordenId/mesa', queryParameters: {'mesaId': mesaId});
+  }
+
   // Cambiar estado de orden: usa query param ?estado=
   Future<void> cambiarEstadoOrden(String ordenId, String estado) async {
     await _dio.patch('/api/ordenes/$ordenId/estado', queryParameters: {'estado': estado});
