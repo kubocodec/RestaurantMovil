@@ -457,6 +457,95 @@ class _OrdenScreenState extends State<OrdenScreen> {
     }
   }
 
+  /// Anula la orden con motivo OBLIGATORIO. No se borra nada: queda
+  /// registrada con su detalle, el motivo y quién anuló, y el admin la ve
+  /// en Reportes → Órdenes anuladas (ej. el cliente pidió pero se fue).
+  Future<void> _anularOrden() async {
+    final orden = _ordenExistente;
+    if (orden == null) return;
+    if (orden.detalles.any((d) => d.estado != 'CANCELADO' && d.cantidadFacturada > 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('La orden tiene unidades ya cobradas: anula primero sus comprobantes'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+
+    final ctrl = TextEditingController();
+    String? errorMotivo;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: Text('Anular orden #${orden.numeroOrden}',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 17)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'La orden no se borra: queda registrada con sus '
+                '${orden.detalles.length} items y este motivo para que el '
+                'administrador vea qué pasó.',
+                style: const TextStyle(fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                maxLines: 2,
+                maxLength: 500,
+                decoration: InputDecoration(
+                  labelText: 'Motivo (obligatorio)',
+                  hintText: 'ej: el cliente tuvo que irse',
+                  errorText: errorMotivo,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Volver')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () {
+                if (ctrl.text.trim().isEmpty) {
+                  setDialog(() => errorMotivo = 'Escribe el motivo de la anulación');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Anular orden'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _enviando = true);
+    try {
+      await _repo.anularOrden(orden.ordenId, ctrl.text.trim());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Orden #${orden.numeroOrden} anulada'),
+        backgroundColor: AppColors.success,
+      ));
+      // Volver a mesas: la mesa quedó libre
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/mesero/mesas');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -479,6 +568,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
               tooltip: 'Mover items a otra mesa',
               icon: const Icon(Icons.call_split_rounded),
               onPressed: _enviando ? null : _moverItems,
+            ),
+          // Anular con motivo obligatorio (queda registrada para el admin)
+          if (_ordenExistente != null)
+            IconButton(
+              tooltip: 'Anular orden',
+              icon: const Icon(Icons.cancel_outlined),
+              onPressed: _enviando ? null : _anularOrden,
             ),
           if (_totalItems > 0)
             Stack(

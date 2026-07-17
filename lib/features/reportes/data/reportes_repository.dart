@@ -1,4 +1,5 @@
 import '../../../core/models/caja_model.dart';
+import '../../../core/models/orden_model.dart';
 import '../../../core/network/api_client.dart';
 
 class ResumenDiarioModel {
@@ -140,6 +141,32 @@ class ReporteVentasSucursalesModel {
       );
 }
 
+/// Órdenes anuladas del período: cada una con motivo, quién la anuló y
+/// el detalle completo de lo que tenía pedido.
+class ReporteOrdenesAnuladasModel {
+  final String nombreSucursal;
+  final int totalOrdenes;
+  final double totalAnulado;
+  final List<OrdenModel> ordenes;
+
+  const ReporteOrdenesAnuladasModel({
+    required this.nombreSucursal,
+    required this.totalOrdenes,
+    required this.totalAnulado,
+    required this.ordenes,
+  });
+
+  factory ReporteOrdenesAnuladasModel.fromJson(Map<String, dynamic> j) =>
+      ReporteOrdenesAnuladasModel(
+        nombreSucursal: j['nombreSucursal']?.toString() ?? '',
+        totalOrdenes:   (j['totalOrdenes'] as num?)?.toInt() ?? 0,
+        totalAnulado:   ReporteCajasDiaModel._d(j['totalAnulado']),
+        ordenes: ((j['ordenes'] as List?) ?? [])
+            .map((o) => OrdenModel.fromJson(o))
+            .toList(),
+      );
+}
+
 class ReportesRepository {
   final _dio = ApiClient.instance.dio;
 
@@ -163,6 +190,20 @@ class ReportesRepository {
       if (fecha != null) 'fecha': _fechaParam(fecha),
     });
     return ReporteCajasDiaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  // Órdenes anuladas de la sucursal en un período (solo admin)
+  Future<ReporteOrdenesAnuladasModel> getOrdenesAnuladas(
+    String sucursalId, {
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    final r = await _dio.get('/api/reportes/ordenes-anuladas', queryParameters: {
+      'sucursalId': sucursalId,
+      'desde': _fechaParam(desde),
+      'hasta': _fechaParam(hasta),
+    });
+    return ReporteOrdenesAnuladasModel.fromJson(r.data['data'] ?? r.data);
   }
 
   // Comparativo de ventas por sucursal en un período (solo admin)

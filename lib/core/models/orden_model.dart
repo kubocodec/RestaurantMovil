@@ -81,6 +81,11 @@ class OrdenModel {
   final String tipoOrigen;
   final String? observaciones;
   final DateTime fechaCreacion;
+  final DateTime? fechaCierre;
+  final String nombreUsuario;
+  // Auditoría de anulación: motivo obligatorio y quién anuló
+  final String? motivoCancelacion;
+  final String? canceladaPor;
   final List<DetalleOrdenModel> detalles;
 
   const OrdenModel({
@@ -94,6 +99,10 @@ class OrdenModel {
     required this.tipoOrigen,
     this.observaciones,
     required this.fechaCreacion,
+    this.fechaCierre,
+    this.nombreUsuario = '',
+    this.motivoCancelacion,
+    this.canceladaPor,
     required this.detalles,
   });
 
@@ -110,6 +119,10 @@ class OrdenModel {
       tipoOrigen:    j['tipoOrigen']?.toString() ?? 'MESERO',
       observaciones: j['observaciones']?.toString(),
       fechaCreacion: DateTime.tryParse(j['fechaCreacion']?.toString() ?? '') ?? DateTime.now(),
+      fechaCierre:   DateTime.tryParse(j['fechaCierre']?.toString() ?? ''),
+      nombreUsuario: j['nombreUsuario']?.toString() ?? '',
+      motivoCancelacion: j['motivoCancelacion']?.toString(),
+      canceladaPor:  j['canceladaPor']?.toString(),
       detalles:      detallesRaw.map((d) => DetalleOrdenModel.fromJson(d)).toList(),
     );
   }

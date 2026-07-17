@@ -73,6 +73,11 @@ class OrdenesRepository {
     return data.map((j) => DetalleOrdenModel.fromJson(j)).toList();
   }
 
+  // Anular la orden con motivo obligatorio (queda registrada para el admin)
+  Future<void> anularOrden(String ordenId, String motivo) async {
+    await _dio.post('/api/ordenes/$ordenId/cancelar', data: {'motivo': motivo});
+  }
+
   // Mover unidades de items a otra mesa (ej. 2 de 3 tigrillos).
   // Devuelve la orden destino (existente de esa mesa o recién creada).
   Future<OrdenModel> moverItems({
