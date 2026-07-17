@@ -569,8 +569,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
               icon: const Icon(Icons.call_split_rounded),
               onPressed: _enviando ? null : _moverItems,
             ),
-          // Anular con motivo obligatorio (queda registrada para el admin)
-          if (_ordenExistente != null)
+          // Anular con motivo obligatorio (queda registrada para el admin).
+          // Solo cajero/admin: el mesero no puede anular órdenes.
+          if (_ordenExistente != null && _puedeCobrar)
             IconButton(
               tooltip: 'Anular orden',
               icon: const Icon(Icons.cancel_outlined),
