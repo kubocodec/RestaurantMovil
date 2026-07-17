@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/user_model.dart';
+import '../../core/settings/ajustes_texto.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/bloc/auth_event.dart';
 import 'role_badge.dart';
@@ -19,7 +20,16 @@ class AppDrawer extends StatelessWidget {
           _buildHeader(context),
           Expanded(child: _buildMenu(context)),
           // El botón de salir no debe quedar bajo los botones del sistema
-          SafeArea(top: false, child: _buildLogout(context)),
+          SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTamanoTexto(context),
+                _buildLogout(context),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -91,6 +101,103 @@ class AppDrawer extends StatelessWidget {
           context.go(item.route);
         },
       )).toList(),
+    );
+  }
+
+  /// Accesibilidad: tamaño del texto de toda la app en este dispositivo.
+  /// Visible para todos los roles (cada equipo guarda su preferencia).
+  Widget _buildTamanoTexto(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
+      child: ValueListenableBuilder<double>(
+        valueListenable: AjustesTexto.instancia.factor,
+        builder: (_, __, ___) => ListTile(
+          leading: const Icon(Icons.text_fields_rounded, color: AppColors.textSecondary),
+          title: const Text(
+            'Tamaño del texto',
+            style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 14),
+          ),
+          subtitle: Text(
+            AjustesTexto.instancia.etiquetaActual,
+            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11.5, color: AppColors.textSecondary),
+          ),
+          onTap: () => _mostrarSelectorTexto(context),
+        ),
+      ),
+    );
+  }
+
+  void _mostrarSelectorTexto(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.text_fields_rounded, color: AppColors.primary, size: 20),
+                  SizedBox(width: 8),
+                  Text('Tamaño del texto',
+                    style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Se aplica a toda la app en este dispositivo. El cambio se ve al instante.',
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              ValueListenableBuilder<double>(
+                valueListenable: AjustesTexto.instancia.factor,
+                builder: (_, actual, __) => Column(
+                  children: AjustesTexto.opciones.map((o) {
+                    final seleccionado = (actual - o.factor).abs() < 0.01;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: seleccionado
+                            ? AppColors.primary.withValues(alpha: 0.08)
+                            : AppColors.cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: seleccionado ? AppColors.primary : AppColors.divider,
+                          width: seleccionado ? 1.5 : 1,
+                        ),
+                      ),
+                      child: ListTile(
+                        onTap: () => AjustesTexto.instancia.cambiar(o.factor),
+                        // textScaler fijo por fila: cada opción se previsualiza
+                        // con SU tamaño, sin depender del ajuste activo
+                        title: Text(
+                          o.etiqueta,
+                          textScaler: TextScaler.linear(o.factor),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: seleccionado ? FontWeight.w600 : FontWeight.w400,
+                            color: seleccionado ? AppColors.primary : AppColors.textPrimary,
+                          ),
+                        ),
+                        trailing: seleccionado
+                            ? const Icon(Icons.check_circle_rounded, color: AppColors.primary)
+                            : null,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

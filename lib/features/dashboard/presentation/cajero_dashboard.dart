@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/settings/ajustes_texto.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
@@ -258,10 +259,11 @@ class _CajeroBodyState extends State<_CajeroBody> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           // Columnas según el ancho real y altura fija de tarjeta: en
-          // tablet vertical las proporciones fijas aplastaban el contenido
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          // tablet vertical las proporciones fijas aplastaban el contenido.
+          // La altura escala con el tamaño de texto elegido (accesibilidad).
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 240,
-            mainAxisExtent: 150,
+            mainAxisExtent: 150 * escalaTextoDe(context),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),

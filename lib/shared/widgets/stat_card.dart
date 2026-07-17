@@ -41,11 +41,17 @@ class StatCard extends StatelessWidget {
               child: Icon(icon, color: c, size: 22),
             ),
             const SizedBox(height: 12),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+            // Con letra grande (accesibilidad) el número se encoge lo justo
+            // para no desbordar la tarjeta en vez de cortarse
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
             const SizedBox(height: 2),
