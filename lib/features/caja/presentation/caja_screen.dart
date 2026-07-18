@@ -85,34 +85,55 @@ class _CajaScreenState extends State<CajaScreen> {
     }
     final caja = _caja;
     if (caja == null || !mounted) return;
-    final ctrl = TextEditingController(text: '50.00');
+    // Sin monto por defecto: el cajero escribe lo que realmente hay en el
+    // cajón (un valor precargado invita a aceptarlo sin contar).
+    final ctrl = TextEditingController();
+    String? errorMonto;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Abrir caja'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Ingresa el monto inicial:', style: TextStyle(fontFamily: 'Poppins')),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Monto inicial', prefixText: '\$ '),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('Abrir caja'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Ingresa el monto inicial:', style: TextStyle(fontFamily: 'Poppins')),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Monto inicial',
+                  prefixText: '\$ ',
+                  hintText: '0.00',
+                  errorText: errorMonto,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () {
+                final monto = double.tryParse(ctrl.text.trim().replaceAll(',', '.'));
+                if (monto == null || monto < 0) {
+                  setDialog(() => errorMonto = 'Escribe el monto contado en el cajón');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Abrir'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Abrir')),
-        ],
       ),
     );
     if (confirm != true) return;
     try {
       await _repo.abrirCaja(
         cajaId: caja.cajaId,
-        montoInicial: double.tryParse(ctrl.text) ?? 50.0,
+        montoInicial: double.parse(ctrl.text.trim().replaceAll(',', '.')),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

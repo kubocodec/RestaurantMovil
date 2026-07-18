@@ -31,6 +31,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
   OrdenModel? _orden;
   List<MetodoPagoModel> _metodosPago = [];
+  // IVA vigente de la sucursal (lo aplica el backend al emitir); 15 solo
+  // como respaldo si el endpoint aún no existe en el servidor.
+  double _ivaPorcentaje = 15;
   String? _aperturaCierreCajaId;
   bool _loading = true;
   bool _emitiendo = false;
@@ -70,6 +73,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     try {
       final orden    = await _ordenRepo.getOrden(widget.ordenId);
       final metodos  = await _factRepo.getMetodosPago(_sucursalId);
+      final iva      = await _factRepo.getIvaVigente(_sucursalId);
       final cajas    = await _cajaRepo.getCajasBySucursal(_sucursalId);
       AperturaCajaModel? apertura;
       if (cajas.isNotEmpty) {
@@ -80,6 +84,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       setState(() {
         _orden = orden;
         _metodosPago = metodos;
+        if (iva != null) _ivaPorcentaje = iva;
         _aperturaCierreCajaId = apertura?.aperturaCierreCajaId;
         if (metodos.isNotEmpty) _selectedMetodoPagoId = metodos.first.metodoPagoId;
         // Por defecto se cobra todo lo pendiente; el cajero baja cantidades
@@ -616,8 +621,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
   Widget _buildResumen() {
     final subtotal = _subtotalSeleccionado;
-    final iva   = subtotal * 0.15;
+    final iva   = subtotal * (_ivaPorcentaje / 100);
     final total = subtotal + iva;
+    final pctLabel = _ivaPorcentaje == _ivaPorcentaje.truncateToDouble()
+        ? _ivaPorcentaje.toStringAsFixed(0)
+        : _ivaPorcentaje.toStringAsFixed(1);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -629,7 +637,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         children: [
           _ResumenRow(label: 'Subtotal', value: '\$${_fmt.format(subtotal)}'),
           const SizedBox(height: 6),
-          _ResumenRow(label: 'IVA (15%)', value: '\$${_fmt.format(iva)}'),
+          _ResumenRow(label: 'IVA ($pctLabel%)', value: '\$${_fmt.format(iva)}'),
           const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(color: AppColors.divider)),
           _ResumenRow(label: 'TOTAL', value: '\$${_fmt.format(total)}', isBold: true, color: AppColors.primary),
         ],

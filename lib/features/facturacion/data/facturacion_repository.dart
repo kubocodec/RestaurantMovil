@@ -4,11 +4,30 @@ import '../../../core/network/api_client.dart';
 class FacturacionRepository {
   final _dio = ApiClient.instance.dio;
 
-  // Métodos de pago activos de la sucursal (cada sucursal tiene su catálogo)
+  // Métodos de pago activos de la sucursal (cada sucursal tiene su catálogo).
+  // El where es un seguro extra: aunque el backend respondiera alguno
+  // inactivo, el cobro jamás debe ofrecerlo.
   Future<List<MetodoPagoModel>> getMetodosPago(String sucursalId) async {
     final r = await _dio.get('/api/metodos-pago/sucursal/$sucursalId/activos');
     final List data = r.data['data'] ?? [];
-    return data.map((j) => MetodoPagoModel.fromJson(j)).toList();
+    return data
+        .map((j) => MetodoPagoModel.fromJson(j))
+        .where((m) => m.activo)
+        .toList();
+  }
+
+  /// Porcentaje de IVA vigente de la sucursal (el mismo que aplicará el
+  /// backend al emitir). Devuelve null si el endpoint no está disponible,
+  /// para que la pantalla decida qué mostrar.
+  Future<double?> getIvaVigente(String sucursalId) async {
+    try {
+      final r = await _dio.get('/api/tasa-iva/sucursal/$sucursalId/vigente');
+      final d = r.data['data'];
+      if (d == null) return null;
+      return d is num ? d.toDouble() : double.tryParse(d.toString());
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<ClienteModel?> buscarClientePorCedula(String cedula) async {
