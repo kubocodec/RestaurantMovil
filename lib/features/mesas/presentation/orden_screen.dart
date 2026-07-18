@@ -300,6 +300,55 @@ class _OrdenScreenState extends State<OrdenScreen> {
     }
   }
 
+  /// Reimprime la comanda de los ítems ya enviados a cocina (la impresora
+  /// se quedó sin papel, se traspapeló el ticket, etc.). Sale marcada como
+  /// REIMPRESION para que cocina no la tome como pedido nuevo.
+  Future<void> _reimprimirComanda() async {
+    final orden = _ordenExistente;
+    if (orden == null) return;
+    final enviados = orden.detalles
+        .where((d) => d.estado != 'PENDIENTE' && d.estado != 'CANCELADO')
+        .toList();
+    if (enviados.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('La orden aún no tiene items enviados a cocina'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+    final authState = context.read<AuthBloc>().state;
+    final mesero = authState is AuthAuthenticated ? authState.user.nombre : '';
+
+    setState(() => _enviando = true);
+    try {
+      final resultados = await ComandaPrinter.imprimirComandas(
+        mesa: widget.mesaNombre,
+        numeroOrden: orden.numeroOrden,
+        mesero: mesero,
+        detalles: enviados,
+        esReimpresion: true,
+      );
+      if (!mounted) return;
+      if (resultados.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Ningún item tiene impresora asignada: no hay nada que reimprimir'),
+          backgroundColor: AppColors.warning,
+        ));
+      } else {
+        final fallidas = resultados.where((r) => !r.ok).toList();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(fallidas.isEmpty
+              ? 'Comanda #${orden.numeroOrden} reimpresa: ${resultados.map((r) => r.via == 'Bluetooth' ? '${r.impresora} (BT)' : r.impresora).join(', ')}'
+              : 'Falló la reimpresión en: ${fallidas.map((r) => r.impresora).join(', ')}. Revisa la impresora.'),
+          backgroundColor: fallidas.isEmpty ? AppColors.success : AppColors.warning,
+          duration: const Duration(seconds: 4),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
   /// El cliente se cambió de mesa: elegir una mesa libre y mover la orden
   /// para que el mesero no la pierda de vista.
   Future<void> _cambiarMesa() async {
@@ -555,6 +604,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ? 'Para llevar · #${_ordenExistente!.numeroOrden}'
             : widget.mesaNombre),
         actions: [
+          // Reimprimir la comanda de lo ya enviado (papel atascado, ticket perdido)
+          if (_ordenExistente != null)
+            IconButton(
+              tooltip: 'Reimprimir comanda',
+              icon: const Icon(Icons.print_outlined),
+              onPressed: _enviando ? null : _reimprimirComanda,
+            ),
           // El cliente se cambió de sitio: mover la orden a otra mesa libre
           if (!widget.esParaLlevar && _ordenExistente != null)
             IconButton(

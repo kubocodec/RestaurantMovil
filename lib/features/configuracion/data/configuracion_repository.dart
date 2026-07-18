@@ -200,8 +200,10 @@ class ConfiguracionRepository {
 
   // ── CAJAS ────────────────────────────────────────────────────────────────────
 
+  // Incluye inactivas: la configuración las muestra para poder reactivarlas
   Future<List<CajaConfigModel>> getCajas(String sucursalId) async {
-    final r = await _dio.get('/api/caja/sucursal/$sucursalId');
+    final r = await _dio.get('/api/caja/sucursal/$sucursalId',
+        queryParameters: {'incluirInactivas': true});
     final List data = r.data['data'] ?? [];
     return data.map((j) => CajaConfigModel.fromJson(j)).toList();
   }

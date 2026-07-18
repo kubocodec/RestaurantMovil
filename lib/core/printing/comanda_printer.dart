@@ -51,6 +51,7 @@ class ComandaPrinter {
     required int numeroOrden,
     required String mesero,
     required List<DetalleOrdenModel> detalles,
+    bool esReimpresion = false,
   }) async {
     final porImpresora = <String, List<DetalleOrdenModel>>{};
     for (final d in detalles) {
@@ -76,6 +77,7 @@ class ComandaPrinter {
             numeroOrden: numeroOrden,
             mesero: mesero,
             detalles: entry.value,
+            esReimpresion: esReimpresion,
           ),
         );
         resultados.add(ResultadoImpresion(nombre, true, via: via));
@@ -93,6 +95,7 @@ class ComandaPrinter {
     required int numeroOrden,
     required String mesero,
     required List<DetalleOrdenModel> detalles,
+    bool esReimpresion = false,
   }) {
     // Si toda la comanda es para llevar se anuncia en grande en la cabecera;
     // si es mixta (mesa + algunos platos para llevar) se marca cada plato.
@@ -101,6 +104,8 @@ class ComandaPrinter {
       ..._init,
       ..._center, ..._doubleSize, ..._boldOn,
       ..._texto('COMANDA #$numeroOrden\n'),
+      // Cocina debe saber que ya recibió esta comanda: no es un pedido nuevo
+      if (esReimpresion) ..._texto('* REIMPRESION *\n'),
       if (todoParaLlevar) ..._texto('* PARA LLEVAR *\n'),
       ..._normalSize,
       // La mesa se imprime siempre que exista (aun si todo va para llevar,
