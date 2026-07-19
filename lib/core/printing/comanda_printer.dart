@@ -206,14 +206,32 @@ class ComandaPrinter {
     throw Exception('Fallo por red: $errorRed');
   }
 
+  /// El primer intento tras un rato de inactividad suele fallar por timeout
+  /// (el Wi-Fi del dispositivo despierta y se resuelve ARP recién con ese
+  /// intento), así que se reintenta antes de rendirse.
+  static const _intentosRed = 3;
+
   static Future<void> _enviarPorRed(String ip, int puerto, List<int> bytes) async {
-    final socket = await Socket.connect(ip, puerto, timeout: const Duration(seconds: 4));
-    try {
-      socket.add(bytes);
-      await socket.flush();
-    } finally {
-      await socket.close();
+    Object? ultimoError;
+    for (var intento = 1; intento <= _intentosRed; intento++) {
+      try {
+        final socket =
+            await Socket.connect(ip, puerto, timeout: const Duration(seconds: 5));
+        try {
+          socket.add(bytes);
+          await socket.flush();
+        } finally {
+          await socket.close();
+        }
+        return;
+      } catch (e) {
+        ultimoError = e;
+        if (intento < _intentosRed) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      }
     }
+    throw ultimoError!;
   }
 
   static Future<void> _enviarPorBluetooth(String mac, List<int> bytes) async {
