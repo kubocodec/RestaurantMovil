@@ -57,6 +57,8 @@ class _CierreDetalleBody extends StatefulWidget {
 class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
   static final _fmt = NumberFormat('#,##0.00', 'es');
   bool _imprimiendo = false;
+  // Métodos de pago con su desglose de pagos individuales desplegado
+  final _metodosExpandidos = <String>{};
 
   CierreDetalladoModel get cierre => widget.cierre;
   ScrollController get scrollController => widget.scrollController;
@@ -265,7 +267,32 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
       titulo: 'Ventas por método de pago',
       child: Column(
         children: [
-          ...c.ventasPorMetodo.map((m) => Padding(
+          ...c.ventasPorMetodo.map((m) => _buildMetodo(c, m)),
+          const Divider(height: 16),
+          _Fila('Total cobrado', c.ventasPorMetodo.fold(0.0, (s, m) => s + m.total), fmt: _fmt, bold: true),
+        ],
+      ),
+    );
+  }
+
+  /// Fila de un método de pago. Si el turno trae el desglose de pagos,
+  /// al tocarla se despliegan los valores uno a uno (hora, factura y
+  /// referencia) para poder verificarlos, p. ej. contra el banco.
+  Widget _buildMetodo(CierreDetalladoModel c, VentaMetodoModel m) {
+    final pagos = c.pagos.where((p) => p.metodo == m.metodo).toList();
+    final expandido = _metodosExpandidos.contains(m.metodo);
+    final horaFmt = DateFormat('HH:mm', 'es');
+    return Column(
+      children: [
+        InkWell(
+          onTap: pagos.isEmpty
+              ? null
+              : () => setState(() {
+                    if (!_metodosExpandidos.remove(m.metodo)) {
+                      _metodosExpandidos.add(m.metodo);
+                    }
+                  }),
+          child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Row(
               children: [
@@ -287,13 +314,53 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
                 const SizedBox(width: 12),
                 Text('\$${_fmt.format(m.total)}',
                   style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13)),
+                if (pagos.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Icon(expandido ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: AppColors.textSecondary),
+                ],
               ],
             ),
-          )),
-          const Divider(height: 16),
-          _Fila('Total cobrado', c.ventasPorMetodo.fold(0.0, (s, m) => s + m.total), fmt: _fmt, bold: true),
-        ],
-      ),
+          ),
+        ),
+        if (expandido)
+          Container(
+            margin: const EdgeInsets.only(left: 28, bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: pagos.map((p) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${horaFmt.format(p.fecha.toLocal())}'
+                            '${(p.numeroFactura ?? '').isNotEmpty ? ' · ${p.numeroFactura}' : ''}',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12)),
+                          if ((p.referencia ?? '').trim().isNotEmpty)
+                            Text('Ref: ${p.referencia}',
+                              style: const TextStyle(
+                                fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    Text('\$${_fmt.format(p.monto)}',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12)),
+                  ],
+                ),
+              )).toList(),
+            ),
+          ),
+      ],
     );
   }
 

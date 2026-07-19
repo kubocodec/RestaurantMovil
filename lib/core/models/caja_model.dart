@@ -149,6 +149,33 @@ class VentaMetodoModel {
   );
 }
 
+/// Un pago individual del turno: sirve para verificar los valores uno a
+/// uno (p. ej. cada transferencia contra el banco). Solo se muestra en la
+/// app; el ticket impreso del cierre lleva únicamente los totales.
+class PagoDetalleModel {
+  final String metodo;
+  final double monto;
+  final DateTime fecha;
+  final String? numeroFactura;
+  final String? referencia;
+
+  const PagoDetalleModel({
+    required this.metodo,
+    required this.monto,
+    required this.fecha,
+    this.numeroFactura,
+    this.referencia,
+  });
+
+  factory PagoDetalleModel.fromJson(Map<String, dynamic> j) => PagoDetalleModel(
+    metodo:        j['metodo']?.toString() ?? '',
+    monto:         AperturaCajaModel._toDouble(j['monto']),
+    fecha:         DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
+    numeroFactura: j['numeroFactura']?.toString(),
+    referencia:    j['referencia']?.toString(),
+  );
+}
+
 /// Detalle completo de una apertura/cierre de caja: arqueo, cada ingreso
 /// y egreso, ventas por plato y desglose por método de pago.
 class CierreDetalladoModel {
@@ -173,6 +200,7 @@ class CierreDetalladoModel {
   final List<MovimientoItemModel> egresos;
   final List<VentaPlatoModel> ventasPorPlato;
   final List<VentaMetodoModel> ventasPorMetodo;
+  final List<PagoDetalleModel> pagos;
 
   const CierreDetalladoModel({
     required this.aperturaCierreCajaId,
@@ -196,6 +224,7 @@ class CierreDetalladoModel {
     required this.egresos,
     required this.ventasPorPlato,
     required this.ventasPorMetodo,
+    this.pagos = const [],
   });
 
   bool get isCerrada => estado == 'CERRADA';
@@ -229,6 +258,9 @@ class CierreDetalladoModel {
         .toList(),
     ventasPorMetodo: ((j['ventasPorMetodo'] as List?) ?? [])
         .map((v) => VentaMetodoModel.fromJson(v))
+        .toList(),
+    pagos: ((j['pagos'] as List?) ?? [])
+        .map((p) => PagoDetalleModel.fromJson(p))
         .toList(),
   );
 }

@@ -3,9 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/caja_model.dart';
+import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../shared/widgets/cierre_detalle_sheet.dart';
 import '../data/reportes_repository.dart';
 import 'comparativo_sucursales_screen.dart';
@@ -26,16 +28,37 @@ class _ReportesScreenState extends State<ReportesScreen> {
   DateTime _fecha = DateTime.now();
   bool _loading = true;
   String? _error;
+  // El admin puede consultar cualquier sucursal de su restaurant;
+  // por defecto se muestra la suya.
+  List<SucursalModel> _sucursales = [];
+  String? _sucursalSel;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _loadSucursales();
+    });
   }
 
   String get _sucursalId {
+    if (_sucursalSel != null) return _sucursalSel!;
     final s = context.read<AuthBloc>().state;
     return s is AuthAuthenticated ? s.user.sucursalId : '';
+  }
+
+  Future<void> _loadSucursales() async {
+    try {
+      final sucursales =
+          await ConfiguracionRepository().getSucursalesByRestaurant(_restaurantId);
+      if (mounted) {
+        setState(() => _sucursales = sucursales.where((s) => s.activo).toList());
+      }
+    } catch (_) {
+      // Sin la lista solo se pierde el selector; los reportes de la
+      // sucursal propia siguen funcionando.
+    }
   }
 
   String get _restaurantId {
@@ -106,20 +129,54 @@ class _ReportesScreenState extends State<ReportesScreen> {
             Container(
               color: AppColors.cardBackground,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
+              child: Column(
                 children: [
-                  const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.textSecondary),
-                  const SizedBox(width: 8),
-                  Text(
-                    esHoy ? 'Hoy' : DateFormat('EEEE d MMMM y', 'es').format(_fecha),
-                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        esHoy ? 'Hoy' : DateFormat('EEEE d MMMM y', 'es').format(_fecha),
+                        style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _elegirFecha,
+                        icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+                        label: const Text('Cambiar fecha'),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _elegirFecha,
-                    icon: const Icon(Icons.edit_calendar_outlined, size: 18),
-                    label: const Text('Cambiar fecha'),
-                  ),
+                  if (_sucursales.length > 1)
+                    Row(
+                      children: [
+                        const Icon(Icons.storefront_outlined, size: 18, color: AppColors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButton<String>(
+                            value: _sucursales.any((s) => s.sucursalId == _sucursalId)
+                                ? _sucursalId
+                                : null,
+                            isExpanded: true,
+                            underline: const SizedBox.shrink(),
+                            hint: const Text('Elige la sucursal',
+                                style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                            items: _sucursales.map((s) => DropdownMenuItem(
+                              value: s.sucursalId,
+                              child: Text(s.nombre,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                            )).toList(),
+                            onChanged: (id) {
+                              if (id == null || id == _sucursalId) return;
+                              setState(() => _sucursalSel = id);
+                              _load();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
