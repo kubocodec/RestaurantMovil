@@ -154,6 +154,8 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
           ),
         ],
         const SizedBox(height: 16),
+        _buildTotalCaja(c),
+        const SizedBox(height: 16),
         _buildArqueo(c),
         const SizedBox(height: 16),
         if (c.ventasPorMetodo.isNotEmpty) ...[
@@ -223,22 +225,78 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
     );
   }
 
+  /// Tarjeta principal: el TOTAL DE CAJA del turno en grande y, debajo,
+  /// el desglose de cada cosa que lo compone, para que se entienda de
+  /// dónde sale el número (fondo + ventas de cada método + ingresos - egresos).
+  Widget _buildTotalCaja(CierreDetalladoModel c) {
+    const blanco = TextStyle(
+      fontFamily: 'Poppins', fontSize: 12.5, color: Colors.white);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primaryDark, AppColors.primary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('TOTAL DE CAJA DEL TURNO',
+            style: TextStyle(
+              fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+              fontSize: 12, letterSpacing: 1.1, color: Colors.white70)),
+          Text('\$${_fmt.format(c.totalCaja)}',
+            style: const TextStyle(
+              fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+              fontSize: 34, color: Colors.white)),
+          const Text('Todo el dinero del turno: efectivo, tarjeta y transferencia',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.white70)),
+          const SizedBox(height: 10),
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 10),
+          const Text('¿Cómo se llega a este total?',
+            style: TextStyle(
+              fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+              fontSize: 12, color: Colors.white)),
+          const SizedBox(height: 4),
+          _FilaTotal('Fondo inicial (apertura)', c.montoInicial, fmt: _fmt, estilo: blanco),
+          if (c.ventasPorMetodo.isEmpty && c.totalVentas > 0.009)
+            _FilaTotal('Ventas del turno', c.totalVentas, fmt: _fmt, signo: '+', estilo: blanco)
+          else
+            ...c.ventasPorMetodo.map((m) =>
+              _FilaTotal('Ventas en ${m.metodo.toLowerCase()}', m.total,
+                fmt: _fmt, signo: '+', estilo: blanco)),
+          _FilaTotal('Otros ingresos a caja', c.totalIngresos, fmt: _fmt, signo: '+', estilo: blanco),
+          _FilaTotal('Egresos (gastos)', c.totalEgresos, fmt: _fmt, signo: '-', estilo: blanco),
+        ],
+      ),
+    );
+  }
+
   Widget _buildArqueo(CierreDetalladoModel c) {
-    final otrosMetodos = c.totalVentas - c.totalVentasEfectivo;
     final diferencia = c.diferencia;
     return _Card(
-      titulo: 'Arqueo de caja',
+      titulo: 'Arqueo de efectivo',
       trailing: '${c.totalFacturas} facturas',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Fila('Monto inicial', c.montoInicial, fmt: _fmt),
+          const Text(
+            'Aquí solo se cuenta el EFECTIVO del cajón. La tarjeta y la transferencia no están físicamente en la caja.',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+          const SizedBox(height: 6),
+          _Fila('Fondo inicial (apertura)', c.montoInicial, fmt: _fmt),
           _Fila('Ventas en efectivo', c.totalVentasEfectivo, fmt: _fmt, signo: '+'),
-          _Fila('Otros ingresos', c.totalIngresos, fmt: _fmt, signo: '+'),
-          _Fila('Egresos', c.totalEgresos, fmt: _fmt, signo: '-'),
+          _Fila('Otros ingresos a caja', c.totalIngresos, fmt: _fmt, signo: '+'),
+          _Fila('Egresos (gastos)', c.totalEgresos, fmt: _fmt, signo: '-'),
           const Divider(height: 16),
-          _Fila('Debe haber en caja (efectivo)', c.montoEsperado, fmt: _fmt, bold: true),
+          _Fila('Efectivo que debe haber en el cajón', c.montoEsperado, fmt: _fmt, bold: true),
           if (c.montoContado != null)
-            _Fila('Efectivo contado', c.montoContado!, fmt: _fmt, bold: true),
+            _Fila('Efectivo contado por el cajero', c.montoContado!, fmt: _fmt, bold: true),
           if (diferencia != null) ...[
             const Divider(height: 16),
             _Fila(
@@ -253,15 +311,6 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
                   : diferencia > 0 ? AppColors.warning : AppColors.error,
             ),
           ],
-          const Divider(height: 16),
-          _Fila('Ventas totales (todos los métodos)', c.totalVentas, fmt: _fmt),
-          if (otrosMetodos > 0.009)
-            _Fila('Cobrado por otros métodos de pago', otrosMetodos, fmt: _fmt),
-          // Efectivo del cajón + lo cobrado por tarjeta/transferencia:
-          // el total del turno contando todo el dinero, no solo el físico.
-          _Fila('TOTAL GENERAL (efectivo + otros métodos)',
-            c.montoEsperado + otrosMetodos,
-            fmt: _fmt, bold: true, color: AppColors.primary),
         ],
       ),
     );
@@ -504,6 +553,33 @@ class _Card extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila del desglose dentro de la tarjeta del TOTAL DE CAJA (texto claro
+/// sobre el fondo de color).
+class _FilaTotal extends StatelessWidget {
+  final String label;
+  final double valor;
+  final NumberFormat fmt;
+  final String signo;
+  final TextStyle estilo;
+  const _FilaTotal(this.label, this.valor,
+      {required this.fmt, this.signo = '', required this.estilo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(child: Text(label, style: estilo)),
+          Text('$signo\$${fmt.format(valor.abs())}',
+              style: estilo.copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
     );

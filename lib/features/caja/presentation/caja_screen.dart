@@ -387,68 +387,62 @@ class _CajaScreenState extends State<CajaScreen> {
             const SizedBox(height: 16),
             const Divider(color: Colors.white24),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _CajaStatItem(label: 'Inicial', value: '\$${_fmt.format(apertura.montoInicial)}'),
-                if (_resumen != null) ...[
-                  _CajaStatItem(label: 'Ventas', value: '\$${_fmt.format(_resumen!.totalVentas)}'),
-                  _CajaStatItem(label: 'Ingresos', value: '\$${_fmt.format(_resumen!.totalIngresos)}'),
-                  _CajaStatItem(label: 'Egresos', value: '-\$${_fmt.format(_resumen!.totalEgresos)}'),
-                ],
-              ],
-            ),
-            if (_resumen != null) ...[
-              const SizedBox(height: 12),
+            if (_resumen == null)
+              _CajaStatItem(label: 'Fondo inicial', value: '\$${_fmt.format(apertura.montoInicial)}')
+            else
+              // TOTAL DE CAJA en grande y, debajo, el desglose de cada
+              // cosa que lo compone, para que el cajero entienda de dónde
+              // sale el número sin hacer cuentas.
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Debe haber en caja (efectivo)',
-                          style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 13)),
-                        Text('\$${_fmt.format(_resumen!.montoEsperado)}',
-                          style: const TextStyle(
-                            color: Colors.white, fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w700, fontSize: 18)),
-                      ],
-                    ),
-                    if (_resumen!.totalVentas - _resumen!.totalVentasEfectivo > 0.009) ...[
-                      const SizedBox(height: 4),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Efectivo: \$${_fmt.format(_resumen!.totalVentasEfectivo)} · '
-                          'Tarjeta/Transf.: \$${_fmt.format(_resumen!.totalVentas - _resumen!.totalVentasEfectivo)}',
-                          style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 11),
-                        ),
-                      ),
-                    ],
+                    const Text('TOTAL DE CAJA DEL TURNO',
+                      style: TextStyle(
+                        color: Colors.white70, fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w600, fontSize: 11, letterSpacing: 1.1)),
+                    Text('\$${_fmt.format(_resumen!.totalCaja)}',
+                      style: const TextStyle(
+                        color: Colors.white, fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700, fontSize: 32)),
+                    const Text('Todo el dinero del turno: efectivo, tarjeta y transferencia',
+                      style: TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 10.5)),
+                    const SizedBox(height: 10),
+                    const Divider(color: Colors.white24, height: 1),
+                    const SizedBox(height: 8),
+                    _FilaCaja('Fondo inicial (apertura)', apertura.montoInicial, fmt: _fmt),
+                    _FilaCaja('Ventas en efectivo', _resumen!.totalVentasEfectivo, fmt: _fmt, signo: '+'),
+                    if (_resumen!.ventasOtrosMetodos > 0.009)
+                      _FilaCaja('Ventas con tarjeta / transferencia', _resumen!.ventasOtrosMetodos, fmt: _fmt, signo: '+'),
+                    _FilaCaja('Otros ingresos a caja', _resumen!.totalIngresos, fmt: _fmt, signo: '+'),
+                    _FilaCaja('Egresos (gastos)', _resumen!.totalEgresos, fmt: _fmt, signo: '-'),
                     const SizedBox(height: 8),
                     const Divider(color: Colors.white24, height: 1),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total del turno (todos los métodos)',
-                          style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 13)),
-                        Text(
-                          '\$${_fmt.format(_resumen!.montoEsperado + (_resumen!.totalVentas - _resumen!.totalVentasEfectivo))}',
+                        const Expanded(
+                          child: Text('Efectivo que debe haber en el cajón',
+                            style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 12.5)),
+                        ),
+                        Text('\$${_fmt.format(_resumen!.montoEsperado)}',
                           style: const TextStyle(
                             color: Colors.white, fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w700, fontSize: 18)),
+                            fontWeight: FontWeight.w700, fontSize: 17)),
                       ],
                     ),
+                    const Text('Es lo que se cuenta al cerrar la caja (sin tarjeta ni transferencia)',
+                      style: TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 10.5)),
                   ],
                 ),
               ),
-            ],
           ],
           const SizedBox(height: 16),
           SizedBox(
@@ -644,6 +638,35 @@ class _CajaScreenState extends State<CajaScreen> {
             style: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Poppins')),
           const SizedBox(height: 24),
           ElevatedButton.icon(onPressed: _loadCaja, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila del desglose del TOTAL DE CAJA (texto claro sobre la tarjeta verde).
+class _FilaCaja extends StatelessWidget {
+  final String label;
+  final double valor;
+  final NumberFormat fmt;
+  final String signo;
+  const _FilaCaja(this.label, this.valor, {required this.fmt, this.signo = ''});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(label,
+              style: const TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 12.5)),
+          ),
+          Text('$signo\$${fmt.format(valor.abs())}',
+            style: const TextStyle(
+              color: Colors.white, fontFamily: 'Poppins',
+              fontWeight: FontWeight.w600, fontSize: 12.5)),
         ],
       ),
     );

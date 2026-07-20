@@ -368,8 +368,23 @@ class ComandaPrinter {
             ..._texto('  por ${c.usuarioCierre}\n'),
         ],
         ..._texto('${'-' * 32}\n'),
-        // ── Arqueo ──
-        ..._boldOn, ..._texto('ARQUEO (EFECTIVO)\n'), ..._boldOff,
+        // ── Total de caja del turno: todo el dinero, con su desglose ──
+        ..._boldOn, ..._texto('TOTAL DE CAJA DEL TURNO\n'), ..._boldOff,
+        ..._texto(_lineaMonto('Fondo inicial', c.montoInicial)),
+        if (c.ventasPorMetodo.isEmpty && c.totalVentas > 0.009)
+          ..._texto(_lineaMonto('+ Ventas', c.totalVentas))
+        else
+          for (final m in c.ventasPorMetodo)
+            ..._texto(_lineaMonto('+ Ventas ${m.metodo}', m.total)),
+        ..._texto(_lineaMonto('+ Otros ingresos', c.totalIngresos)),
+        ..._texto(_lineaMonto('- Egresos', -c.totalEgresos)),
+        ..._center, ..._doubleSize, ..._boldOn,
+        ..._texto('TOTAL: ${c.totalCaja.toStringAsFixed(2)}\n'),
+        ..._normalSize, ..._boldOff, ..._left,
+        ..._texto('(efectivo + tarjeta + transf.)\n'),
+        ..._texto('${'-' * 32}\n'),
+        // ── Arqueo: solo el efectivo fisico del cajon ──
+        ..._boldOn, ..._texto('ARQUEO (SOLO EFECTIVO)\n'), ..._boldOff,
         ..._texto(_lineaMonto('Monto inicial', c.montoInicial)),
         ..._texto(_lineaMonto('+ Ventas efectivo', c.totalVentasEfectivo)),
         ..._texto(_lineaMonto('+ Otros ingresos', c.totalIngresos)),
@@ -387,11 +402,6 @@ class ComandaPrinter {
         bytes.addAll(_texto(_lineaMonto(etiqueta, dif)));
         bytes.addAll(_boldOff);
       }
-      // Efectivo del cajón + cobrado por otros métodos: todo el dinero del turno
-      bytes.addAll(_boldOn);
-      bytes.addAll(_texto(_lineaMonto('TOTAL GENERAL (todo)',
-          c.montoEsperado + (c.totalVentas - c.totalVentasEfectivo))));
-      bytes.addAll(_boldOff);
       bytes.addAll(_texto('${'-' * 32}\n'));
 
       // ── Ventas por método de pago ──

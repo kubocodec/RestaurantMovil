@@ -103,6 +103,14 @@ class ResumenCajaModel {
     required this.ventasPorPlato,
   });
 
+  /// Ventas cobradas por métodos distintos del efectivo (tarjeta, transferencia...).
+  double get ventasOtrosMetodos => totalVentas - totalVentasEfectivo;
+
+  /// TOTAL DE CAJA del turno contando absolutamente todo el dinero:
+  /// fondo inicial + todas las ventas (efectivo y otros métodos)
+  /// + otros ingresos - egresos. Es la misma fórmula en toda la app.
+  double get totalCaja => montoInicial + totalVentas + totalIngresos - totalEgresos;
+
   factory ResumenCajaModel.fromJson(Map<String, dynamic> j) => ResumenCajaModel(
     montoInicial:  AperturaCajaModel._toDouble(j['montoInicial']),
     totalVentas:   AperturaCajaModel._toDouble(j['totalVentas']),
@@ -228,6 +236,14 @@ class CierreDetalladoModel {
   });
 
   bool get isCerrada => estado == 'CERRADA';
+
+  /// Ventas cobradas por métodos distintos del efectivo (tarjeta, transferencia...).
+  double get ventasOtrosMetodos => totalVentas - totalVentasEfectivo;
+
+  /// TOTAL DE CAJA del turno contando absolutamente todo el dinero:
+  /// fondo inicial + todas las ventas (efectivo y otros métodos)
+  /// + otros ingresos - egresos. Es la misma fórmula en toda la app.
+  double get totalCaja => montoInicial + totalVentas + totalIngresos - totalEgresos;
 
   factory CierreDetalladoModel.fromJson(Map<String, dynamic> j) => CierreDetalladoModel(
     aperturaCierreCajaId: j['aperturaCierreCajaId']?.toString() ?? '',

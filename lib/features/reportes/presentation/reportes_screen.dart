@@ -208,7 +208,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
           _buildGananciaCard(r),
           if (_cajas != null) ...[
             const SizedBox(height: 16),
-            _buildCajasResumenCard(_cajas!),
+            _buildTotalCajaDiaCard(_cajas!),
+            const SizedBox(height: 16),
+            _buildArqueoDiaCard(_cajas!),
             const SizedBox(height: 16),
             _buildCierresCard(_cajas!),
           ],
@@ -314,13 +316,14 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  /// Resumen de caja del día: cuánto entró por cada método de pago,
-  /// cuánto salió y el faltante/sobrante total de los turnos cerrados.
-  Widget _buildCajasResumenCard(ReporteCajasDiaModel c) {
-    final cuadrada = c.totalDiferencia.abs() < 0.01;
-    final colorDif = cuadrada
-        ? AppColors.success
-        : c.totalDiferencia > 0 ? AppColors.warning : AppColors.error;
+  /// TOTAL DE CAJA del día en grande y, debajo, el desglose de cada cosa
+  /// que lo compone (fondos de apertura + ventas de cada método + otros
+  /// ingresos - egresos), sumando todos los turnos del día.
+  Widget _buildTotalCajaDiaCard(ReporteCajasDiaModel c) {
+    // Suma de los fondos con los que se abrió cada turno del día
+    final fondosIniciales =
+        c.cierres.fold(0.0, (s, cierre) => s + cierre.montoInicial);
+    final totalDia = fondosIniciales + c.totalVentas + c.totalIngresos - c.totalEgresos;
     // Ventas del día por método de pago, sumando todos los turnos
     final porMetodo = <String, double>{};
     for (final cierre in c.cierres) {
@@ -331,6 +334,58 @@ class _ReportesScreenState extends State<ReportesScreen> {
     final metodosOrdenados = porMetodo.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.cajeroColor, Color(0xFF1B5E20)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('TOTAL DE CAJA DEL DÍA',
+              style: TextStyle(
+                  color: Colors.white70, fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600, fontSize: 12, letterSpacing: 1.1)),
+          Text('\$${_fmt.format(totalDia)}',
+              style: const TextStyle(
+                  color: Colors.white, fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w700, fontSize: 32)),
+          const Text('Todo el dinero de las cajas: efectivo, tarjeta y transferencia',
+              style: TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 11)),
+          const SizedBox(height: 10),
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 10),
+          const Text('¿Cómo se llega a este total?',
+              style: TextStyle(
+                  color: Colors.white, fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600, fontSize: 12)),
+          const SizedBox(height: 4),
+          _FilaTotalDia(label: 'Fondos iniciales de apertura', valor: fondosIniciales, fmt: _fmt),
+          if (metodosOrdenados.isEmpty && c.totalVentas > 0.009)
+            _FilaTotalDia(label: 'Ventas del día', valor: c.totalVentas, fmt: _fmt, signo: '+')
+          else
+            ...metodosOrdenados.map((e) => _FilaTotalDia(
+                label: 'Ventas en ${e.key.toLowerCase()}', valor: e.value, fmt: _fmt, signo: '+')),
+          _FilaTotalDia(label: 'Otros ingresos a caja', valor: c.totalIngresos, fmt: _fmt, signo: '+'),
+          _FilaTotalDia(label: 'Egresos (gastos) de caja', valor: c.totalEgresos, fmt: _fmt, signo: '-'),
+        ],
+      ),
+    );
+  }
+
+  /// Arqueo de efectivo del día: lo que debía haber en los cajones frente
+  /// a lo que se contó al cerrar, con el sobrante/faltante resultante.
+  Widget _buildArqueoDiaCard(ReporteCajasDiaModel c) {
+    final cuadrada = c.totalDiferencia.abs() < 0.01;
+    final colorDif = cuadrada
+        ? AppColors.success
+        : c.totalDiferencia > 0 ? AppColors.warning : AppColors.error;
+    return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
@@ -340,20 +395,16 @@ class _ReportesScreenState extends State<ReportesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Caja del día',
+          const Text('Arqueo de efectivo del día',
               style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
-          const SizedBox(height: 10),
-          if (metodosOrdenados.isEmpty)
-            _FilaReporte(label: 'Ventas en efectivo', valor: c.totalVentasEfectivo, fmt: _fmt)
-          else
-            ...metodosOrdenados.map((e) =>
-                _FilaReporte(label: 'Ventas en ${e.key}', valor: e.value, fmt: _fmt)),
-          _FilaReporte(label: 'Otros ingresos a caja', valor: c.totalIngresos, fmt: _fmt),
-          _FilaReporte(label: 'Egresos (gastos) de caja', valor: c.totalEgresos, fmt: _fmt, negativo: true),
+          const SizedBox(height: 4),
+          const Text(
+            'Solo el efectivo de los cajones; la tarjeta y la transferencia no se cuentan aquí.',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+          const SizedBox(height: 8),
+          _FilaReporte(label: 'Efectivo que debía haber en cajas', valor: c.totalEsperado, fmt: _fmt),
+          _FilaReporte(label: 'Efectivo contado en los cierres', valor: c.totalContado, fmt: _fmt),
           const Divider(),
-          _FilaReporte(label: 'Efectivo esperado en cajas', valor: c.totalEsperado, fmt: _fmt),
-          _FilaReporte(label: 'Efectivo contado (cierres)', valor: c.totalContado, fmt: _fmt),
-          const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -492,6 +543,36 @@ class _MiniStat extends StatelessWidget {
                 color: Colors.white, fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 18)),
         Text(label, style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 11)),
       ],
+    );
+  }
+}
+
+/// Fila del desglose dentro de la tarjeta del TOTAL DE CAJA DEL DÍA
+/// (texto claro sobre el fondo verde).
+class _FilaTotalDia extends StatelessWidget {
+  final String label;
+  final double valor;
+  final NumberFormat fmt;
+  final String signo;
+  const _FilaTotalDia({required this.label, required this.valor, required this.fmt, this.signo = ''});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 12.5)),
+          ),
+          Text('$signo\$${fmt.format(valor.abs())}',
+              style: const TextStyle(
+                  color: Colors.white, fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600, fontSize: 12.5)),
+        ],
+      ),
     );
   }
 }
