@@ -257,6 +257,11 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
           _Fila('Ventas totales (todos los métodos)', c.totalVentas, fmt: _fmt),
           if (otrosMetodos > 0.009)
             _Fila('Cobrado por otros métodos de pago', otrosMetodos, fmt: _fmt),
+          // Efectivo del cajón + lo cobrado por tarjeta/transferencia:
+          // el total del turno contando todo el dinero, no solo el físico.
+          _Fila('TOTAL GENERAL (efectivo + otros métodos)',
+            c.montoEsperado + otrosMetodos,
+            fmt: _fmt, bold: true, color: AppColors.primary),
         ],
       ),
     );

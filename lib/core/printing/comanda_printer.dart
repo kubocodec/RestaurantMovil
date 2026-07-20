@@ -387,6 +387,11 @@ class ComandaPrinter {
         bytes.addAll(_texto(_lineaMonto(etiqueta, dif)));
         bytes.addAll(_boldOff);
       }
+      // Efectivo del cajón + cobrado por otros métodos: todo el dinero del turno
+      bytes.addAll(_boldOn);
+      bytes.addAll(_texto(_lineaMonto('TOTAL GENERAL (todo)',
+          c.montoEsperado + (c.totalVentas - c.totalVentasEfectivo))));
+      bytes.addAll(_boldOff);
       bytes.addAll(_texto('${'-' * 32}\n'));
 
       // ── Ventas por método de pago ──

@@ -430,6 +430,21 @@ class _CajaScreenState extends State<CajaScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    const Divider(color: Colors.white24, height: 1),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total del turno (todos los métodos)',
+                          style: TextStyle(color: Colors.white, fontFamily: 'Poppins', fontSize: 13)),
+                        Text(
+                          '\$${_fmt.format(_resumen!.montoEsperado + (_resumen!.totalVentas - _resumen!.totalVentasEfectivo))}',
+                          style: const TextStyle(
+                            color: Colors.white, fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w700, fontSize: 18)),
+                      ],
+                    ),
                   ],
                 ),
               ),

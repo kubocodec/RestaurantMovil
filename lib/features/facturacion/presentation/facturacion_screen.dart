@@ -236,6 +236,12 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     final metodoPagoId = _selectedMetodoPagoId;
     if (orden == null || aperturaCierreCajaId == null || metodoPagoId == null) return;
 
+    // Confirmación explícita del método de pago: evita cobros registrados
+    // como efectivo cuando fueron transferencia (y viceversa), que luego
+    // descuadran el arqueo del cierre de caja.
+    final confirmado = await _confirmarMetodoPago();
+    if (confirmado != true || !mounted) return;
+
     setState(() => _emitiendo = true);
     try {
       // Solo los ítems con cantidad elegida > 0; se cobra esa cantidad
@@ -285,6 +291,74 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     } finally {
       if (mounted) setState(() => _emitiendo = false);
     }
+  }
+
+  /// Diálogo previo al cobro que muestra el método de pago y el total en
+  /// grande para que el cajero verifique antes de registrar el pago.
+  Future<bool?> _confirmarMetodoPago() {
+    final metodo = _metodoPagoSeleccionado;
+    final nombreMetodo = metodo?.nombre ?? '';
+    final subtotal = _subtotalSeleccionado;
+    final total = subtotal + subtotal * (_ivaPorcentaje / 100);
+    final esEfectivo = nombreMetodo.toUpperCase().contains('EFECTIVO');
+    final icono = esEfectivo
+        ? Icons.payments_outlined
+        : nombreMetodo.toUpperCase().contains('TARJETA')
+            ? Icons.credit_card_outlined
+            : Icons.account_balance_outlined;
+    final color = esEfectivo ? AppColors.success : AppColors.primary;
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar cobro'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '¿Estás seguro del método de pago seleccionado?',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: color.withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                children: [
+                  Icon(icono, color: color, size: 32),
+                  const SizedBox(height: 6),
+                  Text(nombreMetodo.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                      fontSize: 18, color: color)),
+                  const SizedBox(height: 2),
+                  Text('\$${_fmt.format(total)}',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                      fontSize: 22, color: AppColors.textPrimary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cambiar método'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí, cobrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {
