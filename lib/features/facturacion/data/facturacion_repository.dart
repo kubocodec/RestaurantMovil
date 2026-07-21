@@ -91,6 +91,32 @@ class FacturacionRepository {
     return data.map((j) => FacturaModel.fromJson(j)).toList();
   }
 
+  // ---- Facturación electrónica SRI (Factuplan, vía backend) ----
+
+  Future<FacturaModel> getFactura(String facturaVentaId) async {
+    final r = await _dio.get('/api/facturas/$facturaVentaId');
+    return FacturaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Reintenta (o dispara) la emisión electrónica en el SRI.
+  Future<FacturaModel> emitirSri(String facturaVentaId) async {
+    final r = await _dio.post('/api/facturas/$facturaVentaId/sri/emitir');
+    return FacturaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Consulta el estado en el SRI y lo sincroniza en el backend.
+  Future<FacturaModel> getEstadoSri(String facturaVentaId) async {
+    final r = await _dio.get('/api/facturas/$facturaVentaId/sri/estado');
+    return FacturaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// URL temporal del RIDE (PDF, expira en ~5 min) y URL de verificación.
+  Future<({String? url, String? previewUrl})> getPdfSri(String facturaVentaId) async {
+    final r = await _dio.get('/api/facturas/$facturaVentaId/sri/pdf');
+    final d = r.data['data'] ?? {};
+    return (url: d['url']?.toString(), previewUrl: d['previewUrl']?.toString());
+  }
+
   // Registrar pago de factura
   Future<FacturaModel> registrarPago({
     required String facturaVentaId,

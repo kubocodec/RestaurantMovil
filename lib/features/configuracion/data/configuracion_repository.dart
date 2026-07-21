@@ -566,6 +566,14 @@ class ConfiguracionRepository {
     return RestaurantModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Activa/desactiva la facturación electrónica SRI del restaurante
+  /// (activar solo cuando su RUC y P12 ya estén dados de alta en Factuplan).
+  Future<RestaurantModel> setFacturacionElectronica(String restaurantId, bool activa) async {
+    final r = await _dio.patch(
+        '/api/restaurants/$restaurantId/facturacion-electronica?activa=$activa');
+    return RestaurantModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<List<SucursalModel>> getSucursalesByRestaurant(String restaurantId) async {
     final r = await _dio.get('/api/sucursales/restaurant/$restaurantId');
     final List data = r.data['data'] ?? [];

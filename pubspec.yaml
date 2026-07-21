@@ -46,6 +46,9 @@ dependencies:
   # Descubrimiento de impresoras de red por mDNS/Bonjour
   multicast_dns: ^0.3.2
 
+  # Abrir el RIDE (PDF) de la factura electrónica en el navegador
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

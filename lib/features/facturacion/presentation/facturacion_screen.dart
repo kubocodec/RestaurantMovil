@@ -13,6 +13,7 @@ import '../../../core/printing/comanda_printer.dart';
 import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../shared/widgets/sri_estado_panel.dart';
 import '../data/facturacion_repository.dart';
 
 class FacturacionScreen extends StatefulWidget {
@@ -777,13 +778,18 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
   final _configRepo = ConfiguracionRepository();
   bool _imprimiendo = false;
 
+  /// El backend emite la factura electrónica en segundo plano tras el
+  /// cobro; el panel SRI la va actualizando (así la impresión ya lleva la
+  /// clave de acceso).
+  late FacturaModel _factura = widget.factura;
+
   static const _ticketStyle = TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35);
   static const _ticketBold =
       TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35, fontWeight: FontWeight.w700);
 
   @override
   Widget build(BuildContext context) {
-    final f = widget.factura;
+    final f = _factura;
     return AlertDialog(
       title: Row(
         children: [
@@ -833,6 +839,11 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 if (f.propina > 0) _filaTicket('Propina', f.propina),
                 _filaTicket('TOTAL', f.total, bold: true),
                 Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
+                SriEstadoPanel(
+                  factura: f,
+                  autoConsultar: true,
+                  onActualizada: (actualizada) => setState(() => _factura = actualizada),
+                ),
               ],
             ),
           ),
@@ -897,7 +908,7 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
         mac: elegida.mac,
-        factura: widget.factura,
+        factura: _factura,
         items: widget.items,
         metodoPago: widget.metodoPago,
         esFactura: widget.esFactura,

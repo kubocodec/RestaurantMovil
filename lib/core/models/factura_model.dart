@@ -100,6 +100,13 @@ class FacturaModel {
   final String? direccionSucursal;
   final String? telefonoSucursal;
 
+  // Facturación electrónica SRI (null = no enviada al SRI)
+  final String? sriEstado; // PROCESANDO | AUTORIZADA | RECHAZADA | ERROR
+  final String? sriClaveAcceso;
+  final String? sriAutorizacion;
+  final String? sriSecuencial;
+  final String? sriMensaje;
+
   const FacturaModel({
     required this.facturaVentaId,
     required this.numeroFactura,
@@ -123,6 +130,11 @@ class FacturaModel {
     this.rucSucursal,
     this.direccionSucursal,
     this.telefonoSucursal,
+    this.sriEstado,
+    this.sriClaveAcceso,
+    this.sriAutorizacion,
+    this.sriSecuencial,
+    this.sriMensaje,
   });
 
   factory FacturaModel.fromJson(Map<String, dynamic> j) => FacturaModel(
@@ -148,6 +160,11 @@ class FacturaModel {
     rucSucursal:       j['rucSucursal']?.toString(),
     direccionSucursal: j['direccionSucursal']?.toString(),
     telefonoSucursal:  j['telefonoSucursal']?.toString(),
+    sriEstado:         j['sriEstado']?.toString(),
+    sriClaveAcceso:    j['sriClaveAcceso']?.toString(),
+    sriAutorizacion:   j['sriAutorizacion']?.toString(),
+    sriSecuencial:     j['sriSecuencial']?.toString(),
+    sriMensaje:        j['sriMensaje']?.toString(),
   );
 
   /// Con cédula/RUC de cliente es factura; sin cliente es recibo
@@ -155,6 +172,10 @@ class FacturaModel {
   bool get esFactura => cedulaRucCliente?.isNotEmpty ?? false;
 
   bool get isAnulada => estado == 'ANULADA';
+
+  /// True si el comprobante fue (o intentó ser) emitido electrónicamente.
+  bool get tieneSri => sriEstado != null && sriEstado!.isNotEmpty;
+  bool get sriAutorizada => sriEstado == 'AUTORIZADA';
 
   static double _toDouble(dynamic v) {
     if (v == null) return 0.0;

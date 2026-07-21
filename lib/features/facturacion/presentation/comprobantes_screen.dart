@@ -8,6 +8,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../shared/widgets/sri_estado_panel.dart';
 import '../../configuracion/data/configuracion_repository.dart';
 import '../data/facturacion_repository.dart';
 
@@ -243,6 +244,33 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
   }
 }
 
+/// Sello compacto del estado SRI en la lista de comprobantes.
+class _SriMiniChip extends StatelessWidget {
+  final String estado;
+
+  const _SriMiniChip({required this.estado});
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, texto) = switch (estado) {
+      'AUTORIZADA' => (AppColors.success, 'SRI ✓'),
+      'PROCESANDO' => (AppColors.warning, 'SRI…'),
+      _            => (AppColors.error, 'SRI ✗'),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(texto,
+          style: TextStyle(
+            fontFamily: 'Poppins', fontSize: 9,
+            fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+}
+
 class _FiltroChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -329,6 +357,10 @@ class _ComprobanteCard extends StatelessWidget {
                                 fontFamily: 'Poppins', fontSize: 9,
                                 fontWeight: FontWeight.w700, color: AppColors.error)),
                         ),
+                      ],
+                      if (!f.isAnulada && f.tieneSri) ...[
+                        const SizedBox(width: 6),
+                        _SriMiniChip(estado: f.sriEstado!),
                       ],
                     ],
                   ),
@@ -447,6 +479,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                     if (f.propina > 0) _filaTicket('Propina', f.propina),
                     _filaTicket('TOTAL', f.total, bold: true),
                     if (metodoPago.isNotEmpty) Text('Pago: $metodoPago', style: _ticketStyle),
+                    if (!f.isAnulada) SriEstadoPanel(factura: f),
                   ],
                 ),
               ),

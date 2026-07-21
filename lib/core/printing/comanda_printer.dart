@@ -325,6 +325,22 @@ class ComandaPrinter {
       bytes.addAll(_texto(_lineaMonto('TOTAL', f.total)));
       bytes.addAll(_boldOff);
       bytes.addAll(_texto('Pago: $metodoPago\n'));
+      // Factura electrónica SRI: clave de acceso y autorización en el
+      // ticket (la clave de 49 dígitos se parte en dos líneas de 32 cols)
+      if (f.sriClaveAcceso?.isNotEmpty ?? false) {
+        final clave = f.sriClaveAcceso!;
+        bytes.addAll(_texto('${'-' * 32}\n'));
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto('FACTURA ELECTRONICA\n'));
+        bytes.addAll(_boldOff);
+        bytes.addAll(_texto('CLAVE DE ACCESO:\n'));
+        for (var i = 0; i < clave.length; i += 32) {
+          bytes.addAll(_texto('${clave.substring(i, i + 32 > clave.length ? clave.length : i + 32)}\n'));
+        }
+        if (f.sriAutorizada) {
+          bytes.addAll(_texto('AUTORIZADA - AMBIENTE ${f.sriAutorizacion?.startsWith('TEST') ?? false ? 'PRUEBAS' : 'PRODUCCION'}\n'));
+        }
+      }
       bytes.addAll(_texto('${'-' * 32}\n'));
       bytes.addAll(_center);
       bytes.addAll(_texto('¡Gracias por su visita!\n'));

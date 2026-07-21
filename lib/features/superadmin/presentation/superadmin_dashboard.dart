@@ -696,6 +696,50 @@ class _RestaurantRowState extends State<_RestaurantRow> {
     }
   }
 
+  /// Activar/desactivar la facturación electrónica SRI. Solo debe activarse
+  /// cuando el RUC y el certificado P12 del restaurante ya están dados de
+  /// alta en Factuplan; si no, cada cobro intentará emitir y fallará.
+  Future<void> _toggleFacturacionElectronica() async {
+    final activar = !_r.facturacionElectronica;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(activar ? 'Activar facturación electrónica' : 'Desactivar facturación electrónica',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Text(
+          activar
+              ? 'Cada cobro de "${_r.nombre}" emitirá una factura electrónica en el SRI.\n\n'
+                'Antes de activar, confirma que el RUC de sus sucursales y su certificado '
+                'P12 ya están registrados en Factuplan.'
+              : '"${_r.nombre}" dejará de emitir facturas electrónicas en el SRI '
+                'y volverá a los comprobantes internos. ¿Continuar?',
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(activar ? 'Activar' : 'Desactivar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.repo.setFacturacionElectronica(_r.restaurantId, activar);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(activar
+              ? 'Facturación electrónica activada'
+              : 'Facturación electrónica desactivada'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -724,6 +768,7 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                       case 'pago':   _registrarPago();
                       case 'fecha':  _cambiarFechaPago();
                       case 'quitar': _quitarControlPago();
+                      case 'sri':    _toggleFacturacionElectronica();
                     }
                   },
                   itemBuilder: (_) => [
@@ -736,6 +781,12 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                     if (_r.proximoPago != null)
                       const PopupMenuItem(value: 'quitar',
                           child: Text('Quitar control de pago', style: TextStyle(fontFamily: 'Poppins', fontSize: 13))),
+                    PopupMenuItem(value: 'sri',
+                        child: Text(
+                            _r.facturacionElectronica
+                                ? 'Desactivar facturación electrónica'
+                                : 'Activar facturación electrónica (SRI)',
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
                   ],
                 ),
                 Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: AppColors.textSecondary),
