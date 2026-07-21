@@ -696,6 +696,52 @@ class _RestaurantRowState extends State<_RestaurantRow> {
     }
   }
 
+  /// Renombra el restaurante (p. ej. cambió el nombre comercial del negocio).
+  Future<void> _editarRestaurante() async {
+    final nombreCtrl = TextEditingController(text: _r.nombre);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar restaurante',
+            style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: nombreCtrl,
+          autofocus: true,
+          decoration: _inputDecoration('Nombre del restaurante *'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _purple),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Guardar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final nombre = nombreCtrl.text.trim();
+    if (nombre.isEmpty) {
+      _showError(Exception('El nombre es requerido'));
+      return;
+    }
+    try {
+      await widget.repo.actualizarRestaurant(
+        restaurantId: _r.restaurantId,
+        tenantId:     _r.tenantId,
+        nombre:       nombre,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Restaurante actualizado'), backgroundColor: AppColors.success,
+        ));
+      }
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
   /// Activar/desactivar la facturación electrónica SRI. Solo debe activarse
   /// cuando el RUC y el certificado P12 del restaurante ya están dados de
   /// alta en Factuplan; si no, cada cobro intentará emitir y fallará.
@@ -765,6 +811,7 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                   icon: const Icon(Icons.more_vert_rounded, size: 18, color: AppColors.textSecondary),
                   onSelected: (v) {
                     switch (v) {
+                      case 'editar': _editarRestaurante();
                       case 'pago':   _registrarPago();
                       case 'fecha':  _cambiarFechaPago();
                       case 'quitar': _quitarControlPago();
@@ -772,6 +819,8 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                     }
                   },
                   itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'editar',
+                        child: Text('Editar restaurante', style: TextStyle(fontFamily: 'Poppins', fontSize: 13))),
                     if (_r.proximoPago != null)
                       const PopupMenuItem(value: 'pago',
                           child: Text('Registrar pago (+1 mes)', style: TextStyle(fontFamily: 'Poppins', fontSize: 13))),
@@ -833,6 +882,8 @@ class _RestaurantRowState extends State<_RestaurantRow> {
         sucursal:     s,
         restaurantId: widget.restaurant.restaurantId,
         tenantId:     widget.tenantId,
+        repo:         widget.repo,
+        onUpdated:    _loadSucursales,
       )).toList(),
     );
   }
@@ -863,17 +914,21 @@ class _CrearSucursalDialog extends StatefulWidget {
 
 class _CrearSucursalDialogState extends State<_CrearSucursalDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _nombre    = TextEditingController();
-  final _direccion = TextEditingController();
-  final _ciudad    = TextEditingController();
-  final _telefono  = TextEditingController();
-  final _codigo    = TextEditingController();
-  bool _saving     = false;
+  final _nombre      = TextEditingController();
+  final _direccion   = TextEditingController();
+  final _ciudad      = TextEditingController();
+  final _telefono    = TextEditingController();
+  final _email       = TextEditingController();
+  final _ruc         = TextEditingController();
+  final _razonSocial = TextEditingController();
+  final _codigo      = TextEditingController();
+  bool _saving       = false;
 
   @override
   void dispose() {
     _nombre.dispose(); _direccion.dispose(); _ciudad.dispose();
-    _telefono.dispose(); _codigo.dispose();
+    _telefono.dispose(); _email.dispose(); _ruc.dispose();
+    _razonSocial.dispose(); _codigo.dispose();
     super.dispose();
   }
 
@@ -887,6 +942,9 @@ class _CrearSucursalDialogState extends State<_CrearSucursalDialog> {
         direccion:             _direccion.text.trim(),
         ciudad:                _ciudad.text.trim(),
         telefono:              _telefono.text.trim(),
+        email:                 _email.text.trim(),
+        ruc:                   _ruc.text.trim(),
+        razonSocial:           _razonSocial.text.trim(),
         codigoEstablecimiento: _codigo.text.trim(),
       );
       widget.onCreated();
@@ -920,6 +978,12 @@ class _CrearSucursalDialogState extends State<_CrearSucursalDialog> {
                 _field(_ciudad,    'Ciudad'),
                 const SizedBox(height: 12),
                 _field(_telefono,  'Teléfono', keyboard: TextInputType.phone),
+                const SizedBox(height: 12),
+                _field(_email,     'Email', keyboard: TextInputType.emailAddress),
+                const SizedBox(height: 12),
+                _field(_ruc,       'RUC (para factura electrónica)', keyboard: TextInputType.number),
+                const SizedBox(height: 12),
+                _field(_razonSocial, 'Razón social'),
                 const SizedBox(height: 12),
                 _field(_codigo,    'Código establecimiento (ej: 001)', keyboard: TextInputType.number),
               ],
@@ -959,11 +1023,15 @@ class _SucursalConfigRow extends StatelessWidget {
   final SucursalModel sucursal;
   final String restaurantId;
   final String tenantId;
+  final ConfiguracionRepository repo;
+  final VoidCallback onUpdated;
 
   const _SucursalConfigRow({
     required this.sucursal,
     required this.restaurantId,
     required this.tenantId,
+    required this.repo,
+    required this.onUpdated,
   });
 
   @override
@@ -1002,10 +1070,27 @@ class _SucursalConfigRow extends StatelessWidget {
                     children: [
                       Text(sucursal.nombre,
                           style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.primary)),
-                      Text(sucursal.direccion,
+                      Text(
+                          (sucursal.ruc?.isNotEmpty ?? false)
+                              ? 'RUC: ${sucursal.ruc} · ${sucursal.direccion}'
+                              : sucursal.direccion,
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, color: AppColors.textSecondary),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Editar datos (RUC, razón social...)',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => _EditarSucursalDialog(
+                      sucursal:     sucursal,
+                      restaurantId: restaurantId,
+                      repo:         repo,
+                      onSaved:      onUpdated,
+                    ),
                   ),
                 ),
                 Container(
@@ -1028,6 +1113,163 @@ class _SucursalConfigRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── DIALOG: EDITAR SUCURSAL ─────────────────────────────────────────────────
+
+/// Edición de los datos de la sucursal. El RUC y la razón social son los
+/// datos fiscales con los que sale la factura electrónica: si el cliente
+/// cambia de RUC o de nombre comercial, se corrige aquí (y el nuevo RUC
+/// debe darse de alta como contribuyente en Factuplan).
+class _EditarSucursalDialog extends StatefulWidget {
+  final SucursalModel sucursal;
+  final String restaurantId;
+  final ConfiguracionRepository repo;
+  final VoidCallback onSaved;
+
+  const _EditarSucursalDialog({
+    required this.sucursal,
+    required this.restaurantId,
+    required this.repo,
+    required this.onSaved,
+  });
+
+  @override
+  State<_EditarSucursalDialog> createState() => _EditarSucursalDialogState();
+}
+
+class _EditarSucursalDialogState extends State<_EditarSucursalDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nombre      = TextEditingController(text: widget.sucursal.nombre);
+  late final _direccion   = TextEditingController(text: widget.sucursal.direccion);
+  late final _ciudad      = TextEditingController(text: widget.sucursal.ciudad ?? '');
+  late final _telefono    = TextEditingController(text: widget.sucursal.telefono ?? '');
+  late final _email       = TextEditingController(text: widget.sucursal.email ?? '');
+  late final _ruc         = TextEditingController(text: widget.sucursal.ruc ?? '');
+  late final _razonSocial = TextEditingController(text: widget.sucursal.razonSocial ?? '');
+  late final _codigo      = TextEditingController(text: widget.sucursal.codigoEstablecimiento ?? '');
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nombre.dispose(); _direccion.dispose(); _ciudad.dispose();
+    _telefono.dispose(); _email.dispose(); _ruc.dispose();
+    _razonSocial.dispose(); _codigo.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.repo.actualizarSucursal(
+        sucursalId:            widget.sucursal.sucursalId,
+        restaurantId:          widget.restaurantId,
+        nombre:                _nombre.text.trim(),
+        direccion:             _direccion.text.trim(),
+        ciudad:                _ciudad.text.trim(),
+        telefono:              _telefono.text.trim(),
+        email:                 _email.text.trim(),
+        ruc:                   _ruc.text.trim(),
+        razonSocial:           _razonSocial.text.trim(),
+        codigoEstablecimiento: _codigo.text.trim(),
+      );
+      widget.onSaved();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Sucursal actualizada'), backgroundColor: AppColors.success,
+        ));
+      }
+    } catch (e) {
+      setState(() => _saving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Editar ${widget.sucursal.nombre}',
+          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _campo(_nombre,    'Nombre de la sucursal *', requerido: true),
+                const SizedBox(height: 12),
+                _campo(_direccion, 'Dirección *', requerido: true),
+                const SizedBox(height: 12),
+                _campo(_ciudad,    'Ciudad'),
+                const SizedBox(height: 12),
+                _campo(_telefono,  'Teléfono', teclado: TextInputType.phone),
+                const SizedBox(height: 12),
+                _campo(_email,     'Email (consumidor final SRI)', teclado: TextInputType.emailAddress),
+                const SizedBox(height: 16),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Datos fiscales (factura electrónica)',
+                      style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 12)),
+                ),
+                const SizedBox(height: 8),
+                _campo(_ruc, 'RUC (13 dígitos)', teclado: TextInputType.number,
+                    validador: (v) {
+                      final ruc = (v ?? '').trim();
+                      if (ruc.isEmpty) return null; // sin RUC = sin facturación electrónica
+                      if (ruc.length != 13 || int.tryParse(ruc) == null) {
+                        return 'El RUC debe tener 13 dígitos';
+                      }
+                      return null;
+                    }),
+                const SizedBox(height: 12),
+                _campo(_razonSocial, 'Razón social'),
+                const SizedBox(height: 12),
+                _campo(_codigo, 'Código establecimiento (ej: 001)', teclado: TextInputType.number),
+                const SizedBox(height: 8),
+                const Text(
+                  'Si cambias el RUC, recuerda dar de alta el nuevo contribuyente '
+                  '(con su P12) en Factuplan antes de seguir facturando.',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: _saving ? null : _save,
+          style: ElevatedButton.styleFrom(backgroundColor: _purple),
+          child: _saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Guardar', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+  }
+
+  TextFormField _campo(TextEditingController ctrl, String label, {
+    bool requerido = false,
+    TextInputType teclado = TextInputType.text,
+    String? Function(String?)? validador,
+  }) {
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: teclado,
+      decoration: _inputDecoration(label),
+      validator: validador ??
+          (requerido ? (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null : null),
     );
   }
 }

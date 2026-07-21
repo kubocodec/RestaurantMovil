@@ -206,6 +206,14 @@ class SucursalModel {
   final String restaurantId;
   final String nombre;
   final String direccion;
+  final String? ciudad;
+  final String? telefono;
+  final String? email;
+  /// RUC del contribuyente: con él se emite la factura electrónica
+  /// (debe coincidir con el contribuyente dado de alta en Factuplan).
+  final String? ruc;
+  final String? razonSocial;
+  final String? codigoEstablecimiento;
   final bool activo;
 
   const SucursalModel({
@@ -213,6 +221,12 @@ class SucursalModel {
     required this.restaurantId,
     required this.nombre,
     required this.direccion,
+    this.ciudad,
+    this.telefono,
+    this.email,
+    this.ruc,
+    this.razonSocial,
+    this.codigoEstablecimiento,
     required this.activo,
   });
 
@@ -221,6 +235,12 @@ class SucursalModel {
     restaurantId: j['restaurantId']?.toString() ?? '',
     nombre:       j['nombre']?.toString() ?? '',
     direccion:    j['direccion']?.toString() ?? '',
+    ciudad:       j['ciudad']?.toString(),
+    telefono:     j['telefono']?.toString(),
+    email:        j['email']?.toString(),
+    ruc:          j['ruc']?.toString(),
+    razonSocial:  j['razonSocial']?.toString(),
+    codigoEstablecimiento: j['codigoEstablecimiento']?.toString(),
     activo:       j['activo'] ?? true,
   );
 }

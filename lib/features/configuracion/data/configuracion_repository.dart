@@ -586,6 +586,9 @@ class ConfiguracionRepository {
     required String direccion,
     String? ciudad,
     String? telefono,
+    String? email,
+    String? ruc,
+    String? razonSocial,
     String? codigoEstablecimiento,
   }) async {
     final r = await _dio.post('/api/sucursales', data: {
@@ -594,10 +597,56 @@ class ConfiguracionRepository {
       'direccion':    direccion,
       if (ciudad != null && ciudad.isNotEmpty)                     'ciudad':                ciudad,
       if (telefono != null && telefono.isNotEmpty)                 'telefono':              telefono,
+      if (email != null && email.isNotEmpty)                       'email':                 email,
+      if (ruc != null && ruc.isNotEmpty)                           'ruc':                   ruc,
+      if (razonSocial != null && razonSocial.isNotEmpty)           'razonSocial':           razonSocial,
       if (codigoEstablecimiento != null && codigoEstablecimiento.isNotEmpty)
         'codigoEstablecimiento': codigoEstablecimiento,
     });
     return SucursalModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Actualiza los datos de la sucursal, incluidos RUC y razón social (con
+  /// los que se emite la factura electrónica). El PUT reemplaza todos los
+  /// campos: siempre enviar el formulario completo prellenado.
+  Future<SucursalModel> actualizarSucursal({
+    required String sucursalId,
+    required String restaurantId,
+    required String nombre,
+    required String direccion,
+    String? ciudad,
+    String? telefono,
+    String? email,
+    String? ruc,
+    String? razonSocial,
+    String? codigoEstablecimiento,
+  }) async {
+    final r = await _dio.put('/api/sucursales/$sucursalId', data: {
+      'restaurantId':          restaurantId,
+      'nombre':                nombre,
+      'direccion':             direccion,
+      'ciudad':                ciudad,
+      'telefono':              telefono,
+      'email':                 email,
+      'ruc':                   ruc,
+      'razonSocial':           razonSocial,
+      'codigoEstablecimiento': codigoEstablecimiento,
+    });
+    return SucursalModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Renombra el restaurante (el backend conserva logo y colores si no se
+  /// envían).
+  Future<RestaurantModel> actualizarRestaurant({
+    required String restaurantId,
+    required String tenantId,
+    required String nombre,
+  }) async {
+    final r = await _dio.put('/api/restaurants/$restaurantId', data: {
+      'tenantId': tenantId,
+      'nombre':   nombre,
+    });
+    return RestaurantModel.fromJson(r.data['data'] ?? r.data);
   }
 
   // ── Impresoras de comandas ──────────────────────────────────────────────
