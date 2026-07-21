@@ -35,41 +35,64 @@ class ApiClient {
     handler.next(options);
   }
 
+  // Refresh en curso, compartido para que varios 401 simultáneos no disparen
+  // renovaciones en paralelo.
+  Future<String?>? _refreshFuture;
+
   Future<void> _onError(
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
     if (err.response?.statusCode == 401) {
       try {
-        final refreshToken = await AuthStorage.getRefreshToken();
-        if (refreshToken != null) {
-          // Dio limpio: sin interceptores, para no inyectar el token vencido
-          // ni re-entrar en este handler si el refresh también falla.
-          final refreshDio = Dio(BaseOptions(
-            baseUrl: ApiConstants.baseUrl,
-            connectTimeout: ApiConstants.connectTimeout,
-            receiveTimeout: ApiConstants.receiveTimeout,
-            headers: {'Content-Type': 'application/json'},
-          ));
-          final response = await refreshDio.post(
-            ApiConstants.refresh,
-            data: {'refreshToken': refreshToken},
-          );
-          final data = response.data['data'];
-          final newToken = data['accessToken'];
-          await AuthStorage.updateAccessToken(newToken);
-          if (data['refreshToken'] != null) {
-            await AuthStorage.updateRefreshToken(data['refreshToken']);
-          }
+        final newToken = await (_refreshFuture ??= _refreshAccessToken()
+            .whenComplete(() => _refreshFuture = null));
+        if (newToken != null) {
           err.requestOptions.headers['Authorization'] = 'Bearer $newToken';
           final retryResponse = await _dio.fetch(err.requestOptions);
           return handler.resolve(retryResponse);
         }
       } catch (_) {
-        await AuthStorage.clear();
+        // El manejo de la sesión ya se hizo en _refreshAccessToken; se deja
+        // pasar el error original para que la pantalla lo muestre.
       }
     }
     handler.next(err);
+  }
+
+  Future<String?> _refreshAccessToken() async {
+    final refreshToken = await AuthStorage.getRefreshToken();
+    if (refreshToken == null) return null;
+    // Dio limpio: sin interceptores, para no inyectar el token vencido
+    // ni re-entrar en este handler si el refresh también falla.
+    final refreshDio = Dio(BaseOptions(
+      baseUrl: ApiConstants.baseUrl,
+      connectTimeout: ApiConstants.connectTimeout,
+      receiveTimeout: ApiConstants.receiveTimeout,
+      headers: {'Content-Type': 'application/json'},
+    ));
+    try {
+      final response = await refreshDio.post(
+        ApiConstants.refresh,
+        data: {'refreshToken': refreshToken},
+      );
+      final data = response.data['data'];
+      final newToken = data['accessToken'] as String;
+      await AuthStorage.updateAccessToken(newToken);
+      if (data['refreshToken'] != null) {
+        await AuthStorage.updateRefreshToken(data['refreshToken']);
+      }
+      return newToken;
+    } on DioException catch (e) {
+      // Solo se cierra la sesión si el servidor rechazó el refresh de forma
+      // definitiva (token vencido/inválido o acceso suspendido). Un fallo de
+      // red no debe borrar la sesión: el siguiente intento puede funcionar.
+      final status = e.response?.statusCode;
+      if (status == 401 || status == 403 || status == 422) {
+        await AuthStorage.clear();
+      }
+      rethrow;
+    }
   }
 
   static String parseError(dynamic error) {
