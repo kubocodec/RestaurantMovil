@@ -42,6 +42,10 @@ class ComandaPrinter {
   static const _cut = [0x1D, 0x56, 0x42, 0x00];
   static const _feed = [0x1B, 0x64, 0x04]; // 4 líneas antes del corte
 
+  /// Columnas en fuente normal. Las impresoras del negocio son de 80mm
+  /// (48 columnas); para papel de 58mm cambiar a 32.
+  static const int _cols = 48;
+
   /// Agrupa los detalles por impresora y envía una comanda a cada una.
   /// Los detalles sin impresora asignada (sin IP ni Bluetooth) se ignoran
   /// (quedan solo en el KDS).
@@ -113,9 +117,9 @@ class ComandaPrinter {
       // omite cuando la orden no tiene mesa (ya lo dice el banner).
       if (mesa != 'Para llevar') ..._texto('$mesa\n'),
       ..._boldOff, ..._left,
-      ..._texto('${'-' * 32}\n'),
+      ..._texto('${'-' * _cols}\n'),
       ..._texto('Hora: ${_horaActual()}   Mesero: $mesero\n'),
-      ..._texto('${'-' * 32}\n'),
+      ..._texto('${'-' * _cols}\n'),
     ];
     for (final d in detalles) {
       bytes.addAll(_boldOn);
@@ -129,7 +133,7 @@ class ComandaPrinter {
         bytes.addAll(_texto('   >> $obs\n'));
       }
     }
-    bytes.addAll(_texto('${'-' * 32}\n'));
+    bytes.addAll(_texto('${'-' * _cols}\n'));
     bytes.addAll(_feed);
     bytes.addAll(_cut);
     return bytes;
@@ -150,13 +154,13 @@ class ComandaPrinter {
       ..._texto('PRUEBA DE\nIMPRESION\n'),
       ..._normalSize, ..._boldOff,
       ..._left,
-      ..._texto('${'-' * 32}\n'),
+      ..._texto('${'-' * _cols}\n'),
       ..._texto('Impresora: $nombre\n'),
       if (area != null && area.isNotEmpty) ..._texto('Area: $area\n'),
       if (ip != null && ip.isNotEmpty) ..._texto('Red: $ip:$puerto\n'),
       if (mac != null && mac.isNotEmpty) ..._texto('Bluetooth: $mac\n'),
       ..._texto('Fecha: ${_fechaHora(DateTime.now())}\n'),
-      ..._texto('${'-' * 32}\n'),
+      ..._texto('${'-' * _cols}\n'),
       ..._center, ..._boldOn,
       ..._texto('CONEXION OK\n'),
       ..._boldOff, ..._left,
@@ -306,7 +310,7 @@ class ComandaPrinter {
         if (f.nombreSucursal.isNotEmpty) ..._texto('${f.nombreSucursal}\n'),
         if (f.direccionSucursal?.isNotEmpty ?? false) ..._texto('${f.direccionSucursal}\n'),
         if (f.telefonoSucursal?.isNotEmpty ?? false) ..._texto('Tel: ${f.telefonoSucursal}\n'),
-        ..._texto('${'=' * 32}\n'),
+        ..._texto('${'=' * _cols}\n'),
         // ── Tipo y número de comprobante ──
         ..._boldOn,
         ..._texto('$titulo\n'),
@@ -322,30 +326,35 @@ class ComandaPrinter {
       // parte en líneas de 32 columnas, centrada como en el RIDE) ──
       if (esElectronica) {
         final clave = f.sriClaveAcceso!;
-        bytes.addAll(_texto('${'-' * 32}\n'));
+        bytes.addAll(_texto('${'-' * _cols}\n'));
         bytes.addAll(_center);
         bytes.addAll(_boldOn);
         bytes.addAll(_texto('AUTORIZACION / CLAVE DE ACCESO\n'));
         bytes.addAll(_boldOff);
-        for (var i = 0; i < clave.length; i += 32) {
-          bytes.addAll(_texto('${clave.substring(i, i + 32 > clave.length ? clave.length : i + 32)}\n'));
+        if (clave.length <= _cols) {
+          bytes.addAll(_texto('$clave\n'));
+        } else {
+          // Partida en dos líneas balanceadas (25 + 24 en 49 dígitos)
+          final mitad = (clave.length + 1) ~/ 2;
+          bytes.addAll(_texto('${clave.substring(0, mitad)}\n'));
+          bytes.addAll(_texto('${clave.substring(mitad)}\n'));
         }
         bytes.addAll(_left);
       }
 
       // ── Quién atendió y a quién se factura ──
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
       if (f.cajero?.isNotEmpty ?? false) bytes.addAll(_texto('Cajero: ${f.cajero}\n'));
       bytes.addAll(_texto('${f.lugar?.isNotEmpty ?? false ? '${f.lugar} - ' : ''}Orden #${f.numeroOrden}\n'));
       bytes.addAll(_texto('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}\n'));
       bytes.addAll(_texto('CI/RUC: ${(f.cedulaRucCliente?.isNotEmpty ?? false) ? f.cedulaRucCliente : '9999999999999'}\n'));
 
       // ── Detalle ──
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
       for (final it in items) {
         bytes.addAll(_texto(_lineaMonto('${it.cantidad} x ${it.nombre}', it.subtotal)));
       }
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
       bytes.addAll(_texto(_lineaMonto('Subtotal', f.subtotal)));
       if (f.descuento > 0) bytes.addAll(_texto(_lineaMonto('Descuento', -f.descuento)));
       bytes.addAll(_texto(_lineaMonto('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva)));
@@ -354,7 +363,7 @@ class ComandaPrinter {
       bytes.addAll(_texto(_lineaMonto('TOTAL', f.total)));
       bytes.addAll(_boldOff);
       bytes.addAll(_texto('Son: ${_totalEnLetras(f.total)}\n'));
-      bytes.addAll(_texto('-------- Forma de pago ---------\n'));
+      bytes.addAll(_texto(_tituloSeparador('Forma de pago')));
       if (f.pagos.isNotEmpty) {
         for (final p in f.pagos) {
           bytes.addAll(_texto(_lineaMonto(p.nombreMetodoPago, p.monto)));
@@ -362,19 +371,17 @@ class ComandaPrinter {
       } else {
         bytes.addAll(_texto(_lineaMonto(metodoPago, f.total)));
       }
-      bytes.addAll(_texto('${'=' * 32}\n'));
+      bytes.addAll(_texto('${'=' * _cols}\n'));
 
       // ── Pie ──
       bytes.addAll(_center);
       bytes.addAll(_texto('¡Gracias por su preferencia!\n'));
       if (esElectronica) {
-        bytes.addAll(_texto('Su factura electronica fue\n'));
-        bytes.addAll(_texto('enviada al correo registrado.\n'));
-        bytes.addAll(_texto('Verifiquela con la clave de\n'));
-        bytes.addAll(_texto('acceso en www.sri.gob.ec\n'));
+        bytes.addAll(_texto('Su factura electronica fue enviada\n'));
+        bytes.addAll(_texto('al correo registrado. Verifiquela con\n'));
+        bytes.addAll(_texto('la clave de acceso en www.sri.gob.ec\n'));
       } else {
-        bytes.addAll(_texto('Documento interno sin validez\n'));
-        bytes.addAll(_texto('tributaria.\n'));
+        bytes.addAll(_texto('Documento interno sin validez tributaria.\n'));
       }
       bytes.addAll(_left);
       bytes.addAll(_feed);
@@ -382,6 +389,15 @@ class ComandaPrinter {
 
       return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
     }
+  }
+
+  /// Título centrado entre guiones al ancho del papel:
+  /// "---------- Forma de pago ----------".
+  static String _tituloSeparador(String titulo) {
+    final resto = _cols - titulo.length - 2;
+    if (resto < 2) return '$titulo\n';
+    final izq = resto ~/ 2;
+    return '${'-' * izq} $titulo ${'-' * (resto - izq)}\n';
   }
 
   /// Ambiente SRI para el ticket: por la autorización de pruebas (prefijo
@@ -453,7 +469,7 @@ class ComandaPrinter {
         if (nombreSucursal != null && nombreSucursal.isNotEmpty)
           ..._texto('$nombreSucursal\n'),
         ..._left,
-        ..._texto('${'-' * 32}\n'),
+        ..._texto('${'-' * _cols}\n'),
         ..._texto('Apertura: ${_fechaHora(c.fechaApertura.toLocal())}\n'),
         ..._texto('  por ${c.usuarioApertura}\n'),
         if (c.fechaCierre != null) ...[
@@ -461,7 +477,7 @@ class ComandaPrinter {
           if (c.usuarioCierre?.isNotEmpty ?? false)
             ..._texto('  por ${c.usuarioCierre}\n'),
         ],
-        ..._texto('${'-' * 32}\n'),
+        ..._texto('${'-' * _cols}\n'),
         // ── Total de caja del turno: todo el dinero, con su desglose ──
         ..._boldOn, ..._texto('TOTAL DE CAJA DEL TURNO\n'), ..._boldOff,
         ..._texto(_lineaMonto('Fondo inicial', c.montoInicial)),
@@ -476,7 +492,7 @@ class ComandaPrinter {
         ..._texto('TOTAL: ${c.totalCaja.toStringAsFixed(2)}\n'),
         ..._normalSize, ..._boldOff, ..._left,
         ..._texto('(efectivo + tarjeta + transf.)\n'),
-        ..._texto('${'-' * 32}\n'),
+        ..._texto('${'-' * _cols}\n'),
         // ── Arqueo: solo el efectivo fisico del cajon ──
         ..._boldOn, ..._texto('ARQUEO (SOLO EFECTIVO)\n'), ..._boldOff,
         ..._texto(_lineaMonto('Monto inicial', c.montoInicial)),
@@ -496,7 +512,7 @@ class ComandaPrinter {
         bytes.addAll(_texto(_lineaMonto(etiqueta, dif)));
         bytes.addAll(_boldOff);
       }
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
 
       // ── Ventas por método de pago ──
       bytes.addAll(_boldOn);
@@ -513,7 +529,7 @@ class ComandaPrinter {
             'TOTAL (${c.totalFacturas} fact.)', c.totalVentas)));
         bytes.addAll(_boldOff);
       }
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
 
       // ── Ingresos extra ──
       bytes.addAll(_boldOn);
@@ -528,7 +544,7 @@ class ComandaPrinter {
         }
         bytes.addAll(_texto(_lineaMonto('Total ingresos', c.totalIngresos)));
       }
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
 
       // ── Egresos ──
       bytes.addAll(_boldOn);
@@ -543,7 +559,7 @@ class ComandaPrinter {
         }
         bytes.addAll(_texto(_lineaMonto('Total egresos', c.totalEgresos)));
       }
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'-' * _cols}\n'));
 
       // ── Ventas por plato ──
       if (c.ventasPorPlato.isNotEmpty) {
@@ -553,12 +569,12 @@ class ComandaPrinter {
         for (final v in c.ventasPorPlato) {
           bytes.addAll(_texto(_lineaMonto('${v.cantidad} x ${v.plato}', v.total)));
         }
-        bytes.addAll(_texto('${'-' * 32}\n'));
+        bytes.addAll(_texto('${'-' * _cols}\n'));
       }
 
       if ((c.observaciones ?? '').trim().isNotEmpty) {
         bytes.addAll(_texto('Obs: ${c.observaciones}\n'));
-        bytes.addAll(_texto('${'-' * 32}\n'));
+        bytes.addAll(_texto('${'-' * _cols}\n'));
       }
 
       bytes.addAll(_center);
@@ -575,9 +591,9 @@ class ComandaPrinter {
   static String _lineaMonto(String concepto, double monto) {
     final valor = monto.toStringAsFixed(2);
     var nombre = concepto;
-    final ancho = 32 - valor.length - 1;
+    final ancho = _cols - valor.length - 1;
     if (nombre.length > ancho) nombre = nombre.substring(0, ancho);
-    return '$nombre${' ' * (32 - nombre.length - valor.length)}$valor\n';
+    return '$nombre${' ' * (_cols - nombre.length - valor.length)}$valor\n';
   }
 
   static String _fechaHora(DateTime d) =>
