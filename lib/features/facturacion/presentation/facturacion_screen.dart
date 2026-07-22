@@ -779,6 +779,7 @@ class _ComprobanteDialog extends StatefulWidget {
 
 class _ComprobanteDialogState extends State<_ComprobanteDialog> {
   final _configRepo = ConfiguracionRepository();
+  final _factRepo = FacturacionRepository();
   bool _imprimiendo = false;
 
   /// El backend emite la factura electrónica en segundo plano tras el
@@ -882,6 +883,15 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
   Future<void> _imprimir() async {
     setState(() => _imprimiendo = true);
     try {
+      // Si la emisión SRI aún no se refleja (corre en segundo plano tras el
+      // cobro), refrescar antes de imprimir para que el ticket lleve la
+      // clave de acceso. Si falla, se imprime igual como comprobante.
+      if (!_factura.tieneSri) {
+        try {
+          final f = await _factRepo.getFactura(_factura.facturaVentaId);
+          if (f.tieneSri && mounted) setState(() => _factura = f);
+        } catch (_) {}
+      }
       final impresoras = (await _configRepo.getImpresoras(widget.sucursalId))
           .where((i) => i.activo && i.imprimible)
           .toList();

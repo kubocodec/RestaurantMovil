@@ -290,9 +290,14 @@ class ComandaPrinter {
   }) async {
     {
       final f = factura;
+      final esElectronica = f.sriClaveAcceso?.isNotEmpty ?? false;
+      final titulo = esElectronica
+          ? 'FACTURA ELECTRONICA'
+          : esFactura ? 'FACTURA' : 'RECIBO';
+
       final bytes = <int>[
         ..._init,
-        // ── Cabecera: restaurant y sucursal ──
+        // ── Cabecera: emisor (como exige el RIDE) ──
         ..._center, ..._doubleSize, ..._boldOn,
         ..._texto('${f.nombreRestaurant.isNotEmpty ? f.nombreRestaurant : f.nombreSucursal}\n'),
         ..._normalSize, ..._boldOff,
@@ -301,18 +306,42 @@ class ComandaPrinter {
         if (f.nombreSucursal.isNotEmpty) ..._texto('${f.nombreSucursal}\n'),
         if (f.direccionSucursal?.isNotEmpty ?? false) ..._texto('${f.direccionSucursal}\n'),
         if (f.telefonoSucursal?.isNotEmpty ?? false) ..._texto('Tel: ${f.telefonoSucursal}\n'),
-        ..._left,
-        ..._texto('${'-' * 32}\n'),
+        ..._texto('${'=' * 32}\n'),
+        // ── Tipo y número de comprobante ──
         ..._boldOn,
-        ..._texto('${esFactura ? 'FACTURA' : 'RECIBO'} No. ${f.numeroFactura}\n'),
+        ..._texto('$titulo\n'),
+        ..._texto('No. ${f.numeroFactura}\n'),
         ..._boldOff,
+        if (esElectronica)
+          ..._texto('AMBIENTE: ${_ambienteSri(f)}\n'),
+        ..._left,
         ..._texto('Fecha: ${_fechaHora(f.fecha.toLocal())}\n'),
-        ..._texto('Orden: #${f.numeroOrden}\n'),
-        ..._texto('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}\n'),
-        if (f.cedulaRucCliente?.isNotEmpty ?? false)
-          ..._texto('CI/RUC: ${f.cedulaRucCliente}\n'),
-        ..._texto('${'-' * 32}\n'),
       ];
+
+      // ── Autorización / clave de acceso SRI (la clave de 49 dígitos se
+      // parte en líneas de 32 columnas, centrada como en el RIDE) ──
+      if (esElectronica) {
+        final clave = f.sriClaveAcceso!;
+        bytes.addAll(_texto('${'-' * 32}\n'));
+        bytes.addAll(_center);
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto('AUTORIZACION / CLAVE DE ACCESO\n'));
+        bytes.addAll(_boldOff);
+        for (var i = 0; i < clave.length; i += 32) {
+          bytes.addAll(_texto('${clave.substring(i, i + 32 > clave.length ? clave.length : i + 32)}\n'));
+        }
+        bytes.addAll(_left);
+      }
+
+      // ── Quién atendió y a quién se factura ──
+      bytes.addAll(_texto('${'-' * 32}\n'));
+      if (f.cajero?.isNotEmpty ?? false) bytes.addAll(_texto('Cajero: ${f.cajero}\n'));
+      bytes.addAll(_texto('${f.lugar?.isNotEmpty ?? false ? '${f.lugar} - ' : ''}Orden #${f.numeroOrden}\n'));
+      bytes.addAll(_texto('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}\n'));
+      bytes.addAll(_texto('CI/RUC: ${(f.cedulaRucCliente?.isNotEmpty ?? false) ? f.cedulaRucCliente : '9999999999999'}\n'));
+
+      // ── Detalle ──
+      bytes.addAll(_texto('${'-' * 32}\n'));
       for (final it in items) {
         bytes.addAll(_texto(_lineaMonto('${it.cantidad} x ${it.nombre}', it.subtotal)));
       }
@@ -324,32 +353,81 @@ class ComandaPrinter {
       bytes.addAll(_boldOn);
       bytes.addAll(_texto(_lineaMonto('TOTAL', f.total)));
       bytes.addAll(_boldOff);
-      bytes.addAll(_texto('Pago: $metodoPago\n'));
-      // Factura electrónica SRI: clave de acceso y autorización en el
-      // ticket (la clave de 49 dígitos se parte en dos líneas de 32 cols)
-      if (f.sriClaveAcceso?.isNotEmpty ?? false) {
-        final clave = f.sriClaveAcceso!;
-        bytes.addAll(_texto('${'-' * 32}\n'));
-        bytes.addAll(_boldOn);
-        bytes.addAll(_texto('FACTURA ELECTRONICA\n'));
-        bytes.addAll(_boldOff);
-        bytes.addAll(_texto('CLAVE DE ACCESO:\n'));
-        for (var i = 0; i < clave.length; i += 32) {
-          bytes.addAll(_texto('${clave.substring(i, i + 32 > clave.length ? clave.length : i + 32)}\n'));
+      bytes.addAll(_texto('Son: ${_totalEnLetras(f.total)}\n'));
+      bytes.addAll(_texto('-------- Forma de pago ---------\n'));
+      if (f.pagos.isNotEmpty) {
+        for (final p in f.pagos) {
+          bytes.addAll(_texto(_lineaMonto(p.nombreMetodoPago, p.monto)));
         }
-        if (f.sriAutorizada) {
-          bytes.addAll(_texto('AUTORIZADA - AMBIENTE ${f.sriAutorizacion?.startsWith('TEST') ?? false ? 'PRUEBAS' : 'PRODUCCION'}\n'));
-        }
+      } else {
+        bytes.addAll(_texto(_lineaMonto(metodoPago, f.total)));
       }
-      bytes.addAll(_texto('${'-' * 32}\n'));
+      bytes.addAll(_texto('${'=' * 32}\n'));
+
+      // ── Pie ──
       bytes.addAll(_center);
-      bytes.addAll(_texto('¡Gracias por su visita!\n'));
+      bytes.addAll(_texto('¡Gracias por su preferencia!\n'));
+      if (esElectronica) {
+        bytes.addAll(_texto('Su factura electronica fue\n'));
+        bytes.addAll(_texto('enviada al correo registrado.\n'));
+        bytes.addAll(_texto('Verifiquela con la clave de\n'));
+        bytes.addAll(_texto('acceso en www.sri.gob.ec\n'));
+      } else {
+        bytes.addAll(_texto('Documento interno sin validez\n'));
+        bytes.addAll(_texto('tributaria.\n'));
+      }
       bytes.addAll(_left);
       bytes.addAll(_feed);
       bytes.addAll(_cut);
 
       return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
     }
+  }
+
+  /// Ambiente SRI para el ticket: por la autorización de pruebas (prefijo
+  /// TEST) o por el dígito 24 de la clave de acceso (1=pruebas 2=producción).
+  static String _ambienteSri(FacturaModel f) {
+    if (f.sriAutorizacion?.startsWith('TEST') ?? false) return 'PRUEBAS';
+    final clave = f.sriClaveAcceso ?? '';
+    if (clave.length == 49 && clave[23] == '1') return 'PRUEBAS';
+    return 'PRODUCCION';
+  }
+
+  /// Total en letras como en los comprobantes impresos:
+  /// 8.25 → "OCHO DOLARES CON 25/100".
+  static String _totalEnLetras(double total) {
+    final entero = total.floor();
+    final centavos = ((total - entero) * 100).round();
+    final palabra = entero == 1 ? 'DOLAR' : 'DOLARES';
+    return '${_numeroEnLetras(entero)} $palabra CON ${centavos.toString().padLeft(2, '0')}/100';
+  }
+
+  static String _numeroEnLetras(int n) {
+    const unidades = ['CERO', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS',
+      'SIETE', 'OCHO', 'NUEVE', 'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE',
+      'QUINCE', 'DIECISEIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE', 'VEINTE'];
+    const decenas = ['', '', 'VEINTI', 'TREINTA', 'CUARENTA', 'CINCUENTA',
+      'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+    const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS',
+      'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+    if (n <= 20) return unidades[n];
+    if (n < 30) return 'VEINTI${unidades[n - 20]}';
+    if (n < 100) {
+      final d = n ~/ 10, u = n % 10;
+      return u == 0 ? decenas[d] : '${decenas[d]} Y ${unidades[u]}';
+    }
+    if (n == 100) return 'CIEN';
+    if (n < 1000) {
+      final c = n ~/ 100, resto = n % 100;
+      return resto == 0 ? centenas[c] : '${centenas[c]} ${_numeroEnLetras(resto)}';
+    }
+    if (n < 1000000) {
+      final miles = n ~/ 1000, resto = n % 1000;
+      final prefijo = miles == 1 ? 'MIL' : '${_numeroEnLetras(miles)} MIL';
+      return resto == 0 ? prefijo : '$prefijo ${_numeroEnLetras(resto)}';
+    }
+    return '$n';
   }
 
   /// Imprime el ticket de cierre de caja con todo el detalle del turno:

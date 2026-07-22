@@ -95,6 +95,9 @@ class FacturaModel {
   final double total;
   final String? nombreCliente;
   final String? cedulaRucCliente;
+  /// Quién cobró y dónde ("Mesa 10" / "Para llevar") — para el ticket.
+  final String? cajero;
+  final String? lugar;
   final DateTime fecha;
   final List<ItemVendidoModel> items;
   final List<PagoModel> pagos;
@@ -128,6 +131,8 @@ class FacturaModel {
     required this.total,
     this.nombreCliente,
     this.cedulaRucCliente,
+    this.cajero,
+    this.lugar,
     required this.fecha,
     this.items = const [],
     this.pagos = const [],
@@ -158,6 +163,8 @@ class FacturaModel {
     total:          _toDouble(j['total']),
     nombreCliente:  j['nombreCliente']?.toString(),
     cedulaRucCliente: j['cedulaRucCliente']?.toString(),
+    cajero:         j['cajero']?.toString(),
+    lugar:          j['lugar']?.toString(),
     fecha:          DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
     items: ((j['items'] as List?) ?? []).map((e) => ItemVendidoModel.fromJson(e)).toList(),
     pagos: ((j['pagos'] as List?) ?? []).map((e) => PagoModel.fromJson(e)).toList(),
