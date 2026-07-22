@@ -47,12 +47,32 @@ class FacturacionRepository {
     String? cedulaRuc,
     String? email,
     String? telefono,
+    String? direccion,
   }) async {
     final r = await _dio.post('/api/clientes', data: {
       'nombre': nombre,
       if (cedulaRuc != null && cedulaRuc.isNotEmpty) 'cedulaRuc': cedulaRuc,
       if (email != null && email.isNotEmpty)         'email':     email,
       if (telefono != null && telefono.isNotEmpty)   'telefono':  telefono,
+      if (direccion != null && direccion.isNotEmpty) 'direccion': direccion,
+    });
+    return ClienteModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Actualiza los datos del cliente (la cédula/RUC es su identidad y el
+  /// backend no la cambia). El PUT reemplaza email/teléfono/dirección.
+  Future<ClienteModel> actualizarCliente({
+    required String clienteId,
+    required String nombre,
+    String? email,
+    String? telefono,
+    String? direccion,
+  }) async {
+    final r = await _dio.put('/api/clientes/$clienteId', data: {
+      'nombre':    nombre,
+      'email':     email,
+      'telefono':  telefono,
+      'direccion': direccion,
     });
     return ClienteModel.fromJson(r.data['data'] ?? r.data);
   }

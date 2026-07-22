@@ -108,97 +108,32 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         setState(() => _clienteEncontrado = cliente);
       } else {
         setState(() => _clienteEncontrado = null);
-        _ofrecerRegistroCliente();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Cliente no encontrado. Regístralo con el formulario.'),
+          backgroundColor: AppColors.warning,
+        ));
+        _abrirFormularioCliente();
       }
     }
   }
 
-  void _ofrecerRegistroCliente() {
-    final nombreCtrl = TextEditingController();
-    final cedulaCtrl = TextEditingController(text: _cedulaCtrl.text.trim());
-    final telefonoCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-
-    showDialog(
+  /// Abre el formulario de cliente: sin [cliente] registra uno nuevo
+  /// (prellenando la cédula ya digitada); con [cliente] edita sus datos.
+  Future<void> _abrirFormularioCliente({ClienteModel? cliente}) async {
+    final resultado = await showDialog<ClienteModel>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Registrar cliente',
-            style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('El cliente no existe. Regístralo para incluirlo en la factura.',
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nombreCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Nombre / Razón social *'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: cedulaCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Cédula / RUC *'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: telefonoCtrl,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Teléfono'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final nombre = nombreCtrl.text.trim();
-              final cedula = cedulaCtrl.text.trim();
-              if (nombre.isEmpty || cedula.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Nombre y cédula/RUC son requeridos')),
-                );
-                return;
-              }
-              Navigator.pop(ctx);
-              try {
-                final cliente = await _factRepo.crearCliente(
-                  nombre: nombre,
-                  cedulaRuc: cedula,
-                  telefono: telefonoCtrl.text.trim(),
-                  email: emailCtrl.text.trim(),
-                );
-                if (mounted) {
-                  setState(() {
-                    _clienteEncontrado = cliente;
-                    _cedulaCtrl.text = cliente.cedulaRuc;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Cliente registrado'), backgroundColor: AppColors.success,
-                  ));
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error,
-                  ));
-                }
-              }
-            },
-            child: const Text('Registrar'),
-          ),
-        ],
+      builder: (_) => _ClienteFormDialog(
+        repo:          _factRepo,
+        cliente:       cliente,
+        cedulaInicial: cliente == null ? _cedulaCtrl.text.trim() : null,
       ),
     );
+    if (resultado != null && mounted) {
+      setState(() {
+        _clienteEncontrado = resultado;
+        _cedulaCtrl.text = resultado.cedulaRuc;
+      });
+    }
   }
 
   int _cantidadDe(String ordenDetalleId) => _cantidadesElegidas[ordenDetalleId] ?? 0;
@@ -626,30 +561,98 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
               child: TextField(
                 controller: _cedulaCtrl,
                 keyboardType: TextInputType.number,
+                onSubmitted: (_) => _buscarCliente(),
                 decoration: const InputDecoration(labelText: 'Cédula / RUC', prefixIcon: Icon(Icons.badge_outlined)),
               ),
             ),
             const SizedBox(width: 8),
             IconButton(
+              tooltip: 'Buscar cliente',
               onPressed: _buscarCliente,
               icon: const Icon(Icons.search),
               style: IconButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             ),
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: 'Registrar cliente nuevo',
+              onPressed: () => _abrirFormularioCliente(),
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              style: IconButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: Colors.white),
+            ),
           ],
         ),
-        if (_clienteEncontrado != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
+        if (_clienteEncontrado != null) _buildClienteCard(_clienteEncontrado!),
+      ],
+    );
+  }
+
+  /// Tarjeta con TODOS los datos del cliente para que el cajero los
+  /// verifique antes de facturar (el email es clave: ahí llega la factura
+  /// electrónica) y los corrija con el lápiz si cambiaron.
+  Widget _buildClienteCard(ClienteModel c) {
+    Widget dato(IconData icono, String texto, {bool alerta = false}) => Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          Icon(icono, size: 14, color: alerta ? AppColors.warning : AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(texto,
+              style: TextStyle(
+                fontFamily: 'Poppins', fontSize: 12,
+                color: alerta ? AppColors.warning : AppColors.textSecondary),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.check_circle, color: AppColors.success, size: 16),
-                const SizedBox(width: 4),
-                Text('Cliente: ${_clienteEncontrado!.nombre}',
-                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.success)),
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(c.nombre,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 13.5,
+                          fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+                dato(Icons.badge_outlined, 'CI/RUC: ${c.cedulaRuc}'),
+                c.tieneEmail
+                    ? dato(Icons.email_outlined, c.email!)
+                    : dato(Icons.email_outlined,
+                        'Sin email: la factura irá al email de la sucursal', alerta: true),
+                if (c.telefono?.isNotEmpty ?? false) dato(Icons.phone_outlined, c.telefono!),
+                if (c.direccion?.isNotEmpty ?? false) dato(Icons.place_outlined, c.direccion!),
               ],
             ),
           ),
-      ],
+          IconButton(
+            tooltip: 'Editar datos del cliente',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _abrirFormularioCliente(cliente: c),
+            icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+          ),
+        ],
+      ),
     );
   }
 
@@ -928,6 +931,169 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
     } finally {
       if (mounted) setState(() => _imprimiendo = false);
     }
+  }
+}
+
+/// Formulario de cliente para el cobro: registra uno nuevo o edita los
+/// datos del encontrado (la cédula/RUC identifica al cliente y no se cambia
+/// al editar). Devuelve el ClienteModel guardado al cerrar.
+class _ClienteFormDialog extends StatefulWidget {
+  final FacturacionRepository repo;
+  final ClienteModel? cliente;   // null = registrar nuevo
+  final String? cedulaInicial;   // prellenar cédula al registrar
+
+  const _ClienteFormDialog({required this.repo, this.cliente, this.cedulaInicial});
+
+  @override
+  State<_ClienteFormDialog> createState() => _ClienteFormDialogState();
+}
+
+class _ClienteFormDialogState extends State<_ClienteFormDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nombre    = TextEditingController(text: widget.cliente?.nombre ?? '');
+  late final _cedula    = TextEditingController(
+      text: widget.cliente?.cedulaRuc ?? widget.cedulaInicial ?? '');
+  late final _email     = TextEditingController(text: widget.cliente?.email ?? '');
+  late final _telefono  = TextEditingController(text: widget.cliente?.telefono ?? '');
+  late final _direccion = TextEditingController(text: widget.cliente?.direccion ?? '');
+  bool _saving = false;
+
+  bool get _esEdicion => widget.cliente != null;
+
+  @override
+  void dispose() {
+    _nombre.dispose(); _cedula.dispose(); _email.dispose();
+    _telefono.dispose(); _direccion.dispose();
+    super.dispose();
+  }
+
+  Future<void> _guardar() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final ClienteModel guardado;
+      if (_esEdicion) {
+        guardado = await widget.repo.actualizarCliente(
+          clienteId: widget.cliente!.clienteId,
+          nombre:    _nombre.text.trim(),
+          email:     _email.text.trim(),
+          telefono:  _telefono.text.trim(),
+          direccion: _direccion.text.trim(),
+        );
+      } else {
+        guardado = await widget.repo.crearCliente(
+          nombre:    _nombre.text.trim(),
+          cedulaRuc: _cedula.text.trim(),
+          email:     _email.text.trim(),
+          telefono:  _telefono.text.trim(),
+          direccion: _direccion.text.trim(),
+        );
+      }
+      if (mounted) {
+        Navigator.pop(context, guardado);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_esEdicion ? 'Cliente actualizado' : 'Cliente registrado'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    } catch (e) {
+      setState(() => _saving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_esEdicion ? 'Editar cliente' : 'Registrar cliente',
+          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nombre,
+                  autofocus: !_esEdicion,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                      labelText: 'Nombre / Razón social *',
+                      prefixIcon: Icon(Icons.person_outline)),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'El nombre es requerido' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _cedula,
+                  enabled: !_esEdicion,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Cédula / RUC *',
+                    prefixIcon: const Icon(Icons.badge_outlined),
+                    helperText: _esEdicion ? 'La cédula/RUC no se puede cambiar' : null,
+                  ),
+                  validator: (v) {
+                    final ced = (v ?? '').trim();
+                    if (ced.isEmpty) return 'La cédula/RUC es requerida';
+                    if (ced.length != 10 && ced.length != 13) {
+                      return 'Debe tener 10 (cédula) o 13 (RUC) dígitos';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (recibe la factura electrónica)',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  validator: (v) {
+                    final email = (v ?? '').trim();
+                    if (email.isEmpty) return null; // opcional: cae al email de la sucursal
+                    if (!email.contains('@') || !email.contains('.')) return 'Email inválido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _telefono,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Teléfono', prefixIcon: Icon(Icons.phone_outlined)),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _direccion,
+                  decoration: const InputDecoration(
+                      labelText: 'Dirección', prefixIcon: Icon(Icons.place_outlined)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context),
+            child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: _saving ? null : _guardar,
+          child: _saving
+              ? const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : Text(_esEdicion ? 'Guardar cambios' : 'Registrar'),
+        ),
+      ],
+    );
   }
 }
 

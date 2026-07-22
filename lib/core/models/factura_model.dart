@@ -28,6 +28,7 @@ class ClienteModel {
   final String cedulaRuc;
   final String? email;
   final String? telefono;
+  final String? direccion;
 
   const ClienteModel({
     required this.clienteId,
@@ -35,6 +36,7 @@ class ClienteModel {
     required this.cedulaRuc,
     this.email,
     this.telefono,
+    this.direccion,
   });
 
   factory ClienteModel.fromJson(Map<String, dynamic> j) => ClienteModel(
@@ -43,7 +45,12 @@ class ClienteModel {
     cedulaRuc: j['cedulaRuc']?.toString() ?? '',
     email:     j['email']?.toString(),
     telefono:  j['telefono']?.toString(),
+    direccion: j['direccion']?.toString(),
   );
+
+  /// El SRI exige email en la factura electrónica; sin él, el backend usa
+  /// el email de la sucursal como respaldo.
+  bool get tieneEmail => email != null && email!.trim().isNotEmpty;
 }
 
 /// Línea vendida dentro de un comprobante emitido.
