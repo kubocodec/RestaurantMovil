@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
@@ -118,6 +119,12 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
     );
   }
 
+  bool get _esSuperAdmin {
+    final authState = context.read<AuthBloc>().state;
+    return authState is AuthAuthenticated &&
+        authState.user.rol == UserRole.superadmin;
+  }
+
   Widget _buildBody() {
     final s = _status;
     if (s == null) return const SizedBox.shrink();
@@ -177,14 +184,16 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
               color: AppColors.success,
               onTap: () => _goTo(MetodosPagoConfigScreen(sucursalId: _sucursalId)),
             ),
-            _buildItem(
-              icon: Icons.people_outline_rounded,
-              label: 'Usuarios del personal',
-              subtitle: 'Cajero, mesero, cocinero',
-              done: s.tieneUsuarios,
-              color: AppColors.info,
-              onTap: () => _goTo(UsuariosConfigScreen(sucursalId: _sucursalId)),
-            ),
+            // Solo el superadmin puede crear/administrar usuarios
+            if (_esSuperAdmin)
+              _buildItem(
+                icon: Icons.people_outline_rounded,
+                label: 'Usuarios del personal',
+                subtitle: 'Cajero, mesero, cocinero',
+                done: s.tieneUsuarios,
+                color: AppColors.info,
+                onTap: () => _goTo(UsuariosConfigScreen(sucursalId: _sucursalId)),
+              ),
             _buildItem(
               icon: Icons.print_outlined,
               label: 'Impresoras de comandas',
