@@ -61,6 +61,9 @@ class OrdenesRepository {
     required int cantidad,
     String tipoServicio = 'EN_MESA',
     String? observaciones,
+    // Id de intento: si el mismo ítem llega dos veces (timeout + reintento)
+    // el backend devuelve el ya guardado en vez de duplicar el plato.
+    String? clientRequestId,
   }) async {
     final r = await _dio.post('/api/ordenes/$ordenId/detalles', data: {
       'platoId':      platoId,
@@ -68,6 +71,7 @@ class OrdenesRepository {
       'tipoServicio': tipoServicio,
       if (observaciones != null && observaciones.isNotEmpty)
         'observaciones': observaciones,
+      if (clientRequestId != null) 'clientRequestId': clientRequestId,
     });
     return DetalleOrdenModel.fromJson(r.data['data'] ?? r.data);
   }

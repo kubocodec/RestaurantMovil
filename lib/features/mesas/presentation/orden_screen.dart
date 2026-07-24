@@ -17,16 +17,32 @@ import '../data/mesas_repository.dart';
 
 class _CartItem {
   final PlatoModel plato;
-  int cantidad = 1;
-  String? notas;
 
-  /// EN_MESA o PARA_LLEVAR: cada plato puede ser distinto (ej. comen en la
-  /// mesa pero piden un postre para llevar).
-  String tipoServicio;
+  _CartItem(this.plato, {String tipoServicio = 'EN_MESA'})
+      : _tipoServicio = tipoServicio;
 
-  _CartItem(this.plato, {this.tipoServicio = 'EN_MESA'});
-  double get subtotal => plato.precio * cantidad;
-  bool get esParaLlevar => tipoServicio == 'PARA_LLEVAR';
+  int _cantidad = 1;
+  String? _notas;
+  String _tipoServicio;
+
+  /// Id de intento propio del ítem, estable entre reintentos: si el envío
+  /// falló por timeout pero el servidor sí lo guardó, el reintento se
+  /// reconoce como el mismo ítem y no duplica el plato en la comanda.
+  /// Editar el ítem lo descarta: ya no es el mismo pedido, así que el
+  /// reintento debe guardar la versión corregida.
+  String? requestId;
+
+  int get cantidad => _cantidad;
+  set cantidad(int v) { _cantidad = v; requestId = null; }
+
+  String? get notas => _notas;
+  set notas(String? v) { _notas = v; requestId = null; }
+
+  String get tipoServicio => _tipoServicio;
+  set tipoServicio(String v) { _tipoServicio = v; requestId = null; }
+
+  double get subtotal => plato.precio * _cantidad;
+  bool get esParaLlevar => _tipoServicio == 'PARA_LLEVAR';
 }
 
 class OrdenScreen extends StatefulWidget {
@@ -275,14 +291,18 @@ class _OrdenScreenState extends State<OrdenScreen> {
       if (_ordenExistente != null) {
         orden = _ordenExistente!;
         // Cada ítem que entra sale del carrito: si uno falla, el reintento
-        // envía solo los que faltan y no duplica los ya guardados.
+        // envía solo los que faltan y no duplica los ya guardados. El
+        // requestId cubre el caso límite: el servidor lo guardó pero la
+        // respuesta se perdió, así que el ítem seguía en el carrito.
         for (final item in List.of(_carrito)) {
+          item.requestId ??= _generarRequestId();
           await _repo.agregarDetalle(
             ordenId: orden.ordenId,
             platoId: item.plato.platoId,
             cantidad: item.cantidad,
             tipoServicio: item.tipoServicio,
             observaciones: item.notas,
+            clientRequestId: item.requestId,
           );
           _carrito.remove(item);
         }
