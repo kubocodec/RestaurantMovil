@@ -205,6 +205,14 @@ class _OrdenScreenState extends State<OrdenScreen> {
   double get _total => _carrito.fold(0, (s, i) => s + i.subtotal);
   int get _totalItems => _carrito.fold(0, (s, i) => s + i.cantidad);
 
+  /// Ítems ya guardados en la orden que nunca llegaron a la comanda (el
+  /// envío a cocina o la impresión falló). Sin esto el botón desaparecía
+  /// junto con el carrito y el pedido se quedaba sin salir a cocina.
+  int get _pendientesPorEnviar =>
+      (_ordenExistente?.detalles ?? const [])
+          .where((d) => d.estado == 'PENDIENTE')
+          .length;
+
   Future<void> _confirmarOrden() async {
     // El candado se activa ANTES de abrir el diálogo: sin él, un doble tap
     // abría DOS diálogos apilados y al terminar el envío el pop cerraba el
@@ -376,6 +384,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
         }
       }
     } catch (e) {
+      // La orden pudo quedar a medias (ítems guardados sin salir a cocina):
+      // se relee del servidor para que el botón de reintento muestre lo que
+      // realmente quedó pendiente.
+      await _recargarOrdenTrasFallo();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
@@ -383,6 +395,19 @@ class _OrdenScreenState extends State<OrdenScreen> {
       }
     } finally {
       if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  /// Relee la orden tras un envío fallido. Si la relectura también falla se
+  /// ignora: el error del envío es el que importa mostrar.
+  Future<void> _recargarOrdenTrasFallo() async {
+    final id = _ordenExistente?.ordenId;
+    if (id == null) return;
+    try {
+      final actualizada = await _repo.getOrden(id);
+      if (mounted) setState(() => _ordenExistente = actualizada);
+    } catch (_) {
+      // Sin conexión: se conserva lo que ya se tenía en pantalla.
     }
   }
 
@@ -744,7 +769,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
                 ? _buildError()
                 : _buildBody(),
       ),
-      bottomNavigationBar: _totalItems > 0
+      bottomNavigationBar: _totalItems > 0 || _pendientesPorEnviar > 0
           ? _buildBottomBar()
           : (_mostrarCobrar ? _buildCobrarBar() : null),
     );
@@ -1153,6 +1178,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
   }
 
   Widget _buildBottomBar() {
+    // Carrito vacío pero con ítems ya guardados que no salieron a cocina:
+    // la barra queda como reintento del envío, no como un pedido nuevo.
+    final soloReintento = _totalItems == 0 && _pendientesPorEnviar > 0;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(
@@ -1167,10 +1195,16 @@ class _OrdenScreenState extends State<OrdenScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$_totalItems items',
+              Text(soloReintento ? 'Sin enviar a cocina' : '$_totalItems items',
                 style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
-              Text('\$${_total.toStringAsFixed(2)}',
-                style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 18, color: AppColors.primary)),
+              Text(soloReintento
+                    ? '$_pendientesPorEnviar ${_pendientesPorEnviar == 1 ? 'plato' : 'platos'}'
+                    : '\$${_total.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: soloReintento ? AppColors.warning : AppColors.primary)),
             ],
           ),
           const SizedBox(width: 16),
@@ -1179,8 +1213,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
               onPressed: _enviando ? null : _confirmarOrden,
               icon: _enviando
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send_outlined),
-              label: Text(_enviando ? 'Enviando...' : 'Enviar a cocina'),
+                  : Icon(soloReintento ? Icons.refresh_rounded : Icons.send_outlined),
+              label: Text(_enviando
+                  ? 'Enviando...'
+                  : soloReintento ? 'Reintentar envío' : 'Enviar a cocina'),
             ),
           ),
         ],
