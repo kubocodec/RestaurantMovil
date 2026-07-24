@@ -233,23 +233,37 @@ class _OrdenScreenState extends State<OrdenScreen> {
       OrdenModel orden;
       if (_ordenExistente != null) {
         orden = _ordenExistente!;
+        // Cada ítem que entra sale del carrito: si uno falla, el reintento
+        // envía solo los que faltan y no duplica los ya guardados.
+        for (final item in List.of(_carrito)) {
+          await _repo.agregarDetalle(
+            ordenId: orden.ordenId,
+            platoId: item.plato.platoId,
+            cantidad: item.cantidad,
+            tipoServicio: item.tipoServicio,
+            observaciones: item.notas,
+          );
+          _carrito.remove(item);
+        }
       } else {
+        // Orden + ítems en una sola llamada (transacción única en el
+        // backend): si algo falla no queda una orden en blanco creada.
         orden = await _repo.crearOrden(
           mesaId: widget.mesaId,
           // Sin mesa el backend necesita la sucursal para la orden
           sucursalId: widget.esParaLlevar ? _sucursalId : null,
           tipoOrden: widget.esParaLlevar ? 'PARA_LLEVAR' : _tipoOrden,
           tipoOrigen: 'MESERO',
-        );
-      }
-
-      for (final item in _carrito) {
-        await _repo.agregarDetalle(
-          ordenId: orden.ordenId,
-          platoId: item.plato.platoId,
-          cantidad: item.cantidad,
-          tipoServicio: item.tipoServicio,
-          observaciones: item.notas,
+          items: [
+            for (final item in _carrito)
+              {
+                'platoId': item.plato.platoId,
+                'cantidad': item.cantidad,
+                'tipoServicio': item.tipoServicio,
+                if (item.notas != null && item.notas!.isNotEmpty)
+                  'observaciones': item.notas,
+              },
+          ],
         );
       }
 

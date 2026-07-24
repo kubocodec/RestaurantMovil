@@ -28,7 +28,8 @@ class OrdenesRepository {
     return OrdenModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  // Paso 1: Crear orden (sin items).
+  // Crear orden. Con `items` el backend crea la orden Y sus ítems en una
+  // sola transacción: si un plato falla no queda una orden en blanco.
   // Sin mesa (para llevar) el backend exige la sucursal.
   Future<OrdenModel> crearOrden({
     String? mesaId,
@@ -36,6 +37,7 @@ class OrdenesRepository {
     required String tipoOrden,     // EN_MESA | PARA_LLEVAR
     String tipoOrigen = 'MESERO',
     String? observaciones,
+    List<Map<String, dynamic>>? items,
   }) async {
     final r = await _dio.post('/api/ordenes', data: {
       if (mesaId != null) 'mesaId': mesaId,
@@ -43,6 +45,7 @@ class OrdenesRepository {
       'tipoOrden':    tipoOrden,
       'tipoOrigen':   tipoOrigen,
       if (observaciones != null) 'observaciones': observaciones,
+      if (items != null && items.isNotEmpty) 'items': items,
     });
     return OrdenModel.fromJson(r.data['data'] ?? r.data);
   }
