@@ -38,6 +38,9 @@ class OrdenesRepository {
     String tipoOrigen = 'MESERO',
     String? observaciones,
     List<Map<String, dynamic>>? items,
+    // Id de intento: si el mismo llega dos veces (timeout + reintento) el
+    // backend devuelve la orden ya creada en vez de duplicarla.
+    String? clientRequestId,
   }) async {
     final r = await _dio.post('/api/ordenes', data: {
       if (mesaId != null) 'mesaId': mesaId,
@@ -46,6 +49,7 @@ class OrdenesRepository {
       'tipoOrigen':   tipoOrigen,
       if (observaciones != null) 'observaciones': observaciones,
       if (items != null && items.isNotEmpty) 'items': items,
+      if (clientRequestId != null) 'clientRequestId': clientRequestId,
     });
     return OrdenModel.fromJson(r.data['data'] ?? r.data);
   }

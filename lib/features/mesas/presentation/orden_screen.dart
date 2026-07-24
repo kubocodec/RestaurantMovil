@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -57,6 +59,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
   OrdenModel? _ordenExistente;
   bool _loading = true;
   bool _enviando = false;
+  // Candado síncrono: un doble tap rápido llega antes del rebuild que
+  // desactiva el botón, así que la bandera de UI no basta por sí sola.
+  bool _dialogoEnvioAbierto = false;
+  // Id del intento de envío actual. Se conserva entre reintentos para que el
+  // backend detecte el duplicado (timeout: la orden entró pero la respuesta
+  // no llegó) y devuelva la misma orden en vez de crear otra.
+  String? _envioRequestId;
   String? _error;
   final List<_CartItem> _carrito = [];
   late String _tipoOrden = widget.esParaLlevar ? 'PARA_LLEVAR' : 'EN_MESA';
@@ -181,7 +190,28 @@ class _OrdenScreenState extends State<OrdenScreen> {
   int get _totalItems => _carrito.fold(0, (s, i) => s + i.cantidad);
 
   Future<void> _confirmarOrden() async {
-    if (_carrito.isEmpty) return;
+    // El candado se activa ANTES de abrir el diálogo: sin él, un doble tap
+    // abría DOS diálogos apilados y al terminar el envío el pop cerraba el
+    // segundo diálogo en vez de salir de la pantalla — el botón reaparecía
+    // habilitado con el carrito intacto y el mesero reenviaba (duplicado).
+    if (_enviando || _dialogoEnvioAbierto) return;
+    if (_carrito.isEmpty) {
+      // Sin ítems nuevos solo tiene sentido reintentar el envío a cocina de
+      // una orden ya creada (ej. la orden entró pero ese paso falló).
+      if (_ordenExistente == null) return;
+      await _enviarOrden();
+      return;
+    }
+    _dialogoEnvioAbierto = true;
+    // El diálogo responde una sola vez: un doble tap en sus botones hacía
+    // pop dos veces (el segundo pop se llevaba la pantalla de la orden).
+    var respondido = false;
+    void responder(BuildContext ctx, bool valor) {
+      if (respondido) return;
+      respondido = true;
+      Navigator.pop(ctx, valor);
+    }
+    try {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -217,15 +247,26 @@ class _OrdenScreenState extends State<OrdenScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enviar a cocina')),
+          TextButton(onPressed: () => responder(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => responder(ctx, true), child: const Text('Enviar a cocina')),
         ],
       ),
     );
     if (confirmed == true) await _enviarOrden();
+    } finally {
+      _dialogoEnvioAbierto = false;
+    }
+  }
+
+  /// Id único de intento para la creación idempotente en el backend.
+  String _generarRequestId() {
+    final rnd = Random();
+    return '${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}'
+        '-${rnd.nextInt(1 << 30).toRadixString(16)}';
   }
 
   Future<void> _enviarOrden() async {
+    if (_enviando) return; // reentrada: un tap ya está en curso
     setState(() => _enviando = true);
     final authState = context.read<AuthBloc>().state;
     final mesero = authState is AuthAuthenticated ? authState.user.nombre : '';
@@ -248,12 +289,17 @@ class _OrdenScreenState extends State<OrdenScreen> {
       } else {
         // Orden + ítems en una sola llamada (transacción única en el
         // backend): si algo falla no queda una orden en blanco creada.
+        // El requestId se conserva entre reintentos: si la orden entró pero
+        // la respuesta se perdió (timeout), el backend devuelve la misma
+        // orden en vez de crear un duplicado.
+        _envioRequestId ??= _generarRequestId();
         orden = await _repo.crearOrden(
           mesaId: widget.mesaId,
           // Sin mesa el backend necesita la sucursal para la orden
           sucursalId: widget.esParaLlevar ? _sucursalId : null,
           tipoOrden: widget.esParaLlevar ? 'PARA_LLEVAR' : _tipoOrden,
           tipoOrigen: 'MESERO',
+          clientRequestId: _envioRequestId,
           items: [
             for (final item in _carrito)
               {
@@ -265,6 +311,12 @@ class _OrdenScreenState extends State<OrdenScreen> {
               },
           ],
         );
+        // La orden ya existe con todos sus ítems: si fallara un paso
+        // siguiente (enviar a cocina, imprimir), el reintento debe REUSARLA,
+        // no crear otra. El carrito se vacía porque sus ítems ya entraron.
+        _ordenExistente = orden;
+        _envioRequestId = null;
+        _carrito.clear();
       }
 
       // Marca los ítems como ENVIADO y obtiene su impresora asignada
