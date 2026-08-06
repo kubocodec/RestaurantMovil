@@ -77,11 +77,14 @@ class FacturacionRepository {
     return ClienteModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  // Emitir factura (requiere aperturaCierreCajaId)
+  /// Emite el comprobante del cobro (requiere aperturaCierreCajaId).
+  /// [tipoComprobante] es 'NOTA_VENTA' (interna, por defecto) o 'FACTURA':
+  /// solo la factura la transmite el backend al SRI.
   Future<FacturaModel> emitirFactura({
     required String ordenId,
     required String aperturaCierreCajaId,
     String? clienteId,
+    String tipoComprobante = 'NOTA_VENTA',
     required List<Map<String, dynamic>> detalles, // [{ordenDetalleId, cantidad}]
     double descuento = 0,
     double propina = 0,
@@ -91,6 +94,7 @@ class FacturacionRepository {
       'ordenId':               ordenId,
       'aperturaCierreCajaId':  aperturaCierreCajaId,
       if (clienteId != null) 'clienteId': clienteId,
+      'tipoComprobante':       tipoComprobante,
       'detalles':  detalles,
       'descuento': descuento,
       'propina':   propina,
@@ -99,7 +103,7 @@ class FacturacionRepository {
     return FacturaModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  /// Historial de comprobantes (facturas y recibos) de la sucursal en un día.
+  /// Historial de comprobantes (notas de venta y facturas) de la sucursal en un día.
   Future<List<FacturaModel>> getComprobantes(String sucursalId, {DateTime? fecha}) async {
     final r = await _dio.get('/api/facturas/sucursal/$sucursalId', queryParameters: {
       if (fecha != null)
@@ -118,9 +122,14 @@ class FacturacionRepository {
     return FacturaModel.fromJson(r.data['data'] ?? r.data);
   }
 
-  /// Reintenta (o dispara) la emisión electrónica en el SRI.
-  Future<FacturaModel> emitirSri(String facturaVentaId) async {
-    final r = await _dio.post('/api/facturas/$facturaVentaId/sri/emitir');
+  /// Emite (o reintenta) la factura electrónica en el SRI. Con [clienteId]
+  /// convierte en factura una nota de venta ya cobrada, asignándole el
+  /// cliente que la pidió.
+  Future<FacturaModel> emitirSri(String facturaVentaId, {String? clienteId}) async {
+    final r = await _dio.post(
+      '/api/facturas/$facturaVentaId/sri/emitir',
+      queryParameters: {if (clienteId != null) 'clienteId': clienteId},
+    );
     return FacturaModel.fromJson(r.data['data'] ?? r.data);
   }
 

@@ -13,6 +13,7 @@ import '../../../core/printing/comanda_printer.dart';
 import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../shared/widgets/cliente_form_dialog.dart';
 import '../../../shared/widgets/sri_estado_panel.dart';
 import '../data/facturacion_repository.dart';
 
@@ -48,7 +49,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// (ordenDetalleId → cantidad elegida, entre 0 y lo pendiente).
   Map<String, int> _cantidadesElegidas = {};
 
-  // false = recibo a consumidor final; true = factura con datos del cliente
+  /// false = nota de venta (comprobante interno, no va al SRI) — es lo
+  /// predeterminado; true = factura electrónica con datos del cliente, solo
+  /// cuando el cliente la pide.
   bool _esFactura = false;
 
   @override
@@ -122,7 +125,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   Future<void> _abrirFormularioCliente({ClienteModel? cliente}) async {
     final resultado = await showDialog<ClienteModel>(
       context: context,
-      builder: (_) => _ClienteFormDialog(
+      builder: (_) => ClienteFormDialog(
         repo:          _factRepo,
         cliente:       cliente,
         cedulaInicial: cliente == null ? _cedulaCtrl.text.trim() : null,
@@ -204,6 +207,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         ordenId: widget.ordenId,
         aperturaCierreCajaId: aperturaCierreCajaId,
         clienteId: _esFactura ? _clienteEncontrado?.clienteId : null,
+        tipoComprobante: _esFactura ? 'FACTURA' : 'NOTA_VENTA',
         detalles: detalles,
       );
 
@@ -519,7 +523,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           children: [
             Expanded(
               child: ChoiceChip(
-                label: const Text('Recibo (consumidor final)'),
+                label: const Text('Nota de venta'),
                 selected: !_esFactura,
                 onSelected: (_) => setState(() => _esFactura = false),
                 selectedColor: AppColors.primary,
@@ -541,6 +545,15 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _esFactura
+              ? 'Se emitirá factura electrónica al SRI con los datos del cliente.'
+              : 'Comprobante interno del local; no se envía al SRI. '
+                'Elige Factura solo si el cliente la pide.',
+          style: const TextStyle(
+            fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
         ),
         if (_esFactura) _buildDatosCliente(),
       ],
@@ -734,7 +747,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             : const Icon(Icons.point_of_sale_rounded),
         label: Text(_emitiendo
             ? 'Cobrando...'
-            : _esFactura ? 'Cobrar y emitir factura' : 'Cobrar (recibo)'),
+            : _esFactura ? 'Cobrar y emitir factura' : 'Cobrar (nota de venta)'),
       ),
     );
   }
@@ -799,7 +812,7 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         children: [
           const Icon(Icons.check_circle, color: AppColors.success),
           const SizedBox(width: 8),
-          Text(widget.esFactura ? 'Factura emitida' : 'Recibo emitido',
+          Text(widget.esFactura ? 'Factura emitida' : 'Nota de venta emitida',
               style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 17)),
         ],
       ),
@@ -828,7 +841,8 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 if (f.telefonoSucursal?.isNotEmpty ?? false)
                   Text('Tel: ${f.telefonoSucursal}', textAlign: TextAlign.center, style: _ticketStyle),
                 const Divider(),
-                Text('${widget.esFactura ? 'FACTURA' : 'RECIBO'} No. ${f.numeroFactura}', style: _ticketBold),
+                Text('${widget.esFactura ? 'FACTURA' : 'NOTA DE VENTA'} No. ${f.numeroFactura}',
+                    style: _ticketBold),
                 Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(f.fecha.toLocal())}', style: _ticketStyle),
                 Text('Orden: #${f.numeroOrden}', style: _ticketStyle),
                 Text('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}', style: _ticketStyle),
@@ -843,11 +857,14 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 if (f.propina > 0) _filaTicket('Propina', f.propina),
                 _filaTicket('TOTAL', f.total, bold: true),
                 Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
-                SriEstadoPanel(
-                  factura: f,
-                  autoConsultar: true,
-                  onActualizada: (actualizada) => setState(() => _factura = actualizada),
-                ),
+                // Solo la factura viaja al SRI: en la nota de venta no hay
+                // nada que consultar.
+                if (widget.esFactura)
+                  SriEstadoPanel(
+                    factura: f,
+                    autoConsultar: true,
+                    onActualizada: (actualizada) => setState(() => _factura = actualizada),
+                  ),
               ],
             ),
           ),
@@ -886,7 +903,8 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
       // Si la emisión SRI aún no se refleja (corre en segundo plano tras el
       // cobro), refrescar antes de imprimir para que el ticket lleve la
       // clave de acceso. Si falla, se imprime igual como comprobante.
-      if (!_factura.tieneSri) {
+      // En la nota de venta no aplica: no se envía al SRI.
+      if (widget.esFactura && !_factura.tieneSri) {
         try {
           final f = await _factRepo.getFactura(_factura.facturaVentaId);
           if (f.tieneSri && mounted) setState(() => _factura = f);
@@ -941,169 +959,6 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
     } finally {
       if (mounted) setState(() => _imprimiendo = false);
     }
-  }
-}
-
-/// Formulario de cliente para el cobro: registra uno nuevo o edita los
-/// datos del encontrado (la cédula/RUC identifica al cliente y no se cambia
-/// al editar). Devuelve el ClienteModel guardado al cerrar.
-class _ClienteFormDialog extends StatefulWidget {
-  final FacturacionRepository repo;
-  final ClienteModel? cliente;   // null = registrar nuevo
-  final String? cedulaInicial;   // prellenar cédula al registrar
-
-  const _ClienteFormDialog({required this.repo, this.cliente, this.cedulaInicial});
-
-  @override
-  State<_ClienteFormDialog> createState() => _ClienteFormDialogState();
-}
-
-class _ClienteFormDialogState extends State<_ClienteFormDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final _nombre    = TextEditingController(text: widget.cliente?.nombre ?? '');
-  late final _cedula    = TextEditingController(
-      text: widget.cliente?.cedulaRuc ?? widget.cedulaInicial ?? '');
-  late final _email     = TextEditingController(text: widget.cliente?.email ?? '');
-  late final _telefono  = TextEditingController(text: widget.cliente?.telefono ?? '');
-  late final _direccion = TextEditingController(text: widget.cliente?.direccion ?? '');
-  bool _saving = false;
-
-  bool get _esEdicion => widget.cliente != null;
-
-  @override
-  void dispose() {
-    _nombre.dispose(); _cedula.dispose(); _email.dispose();
-    _telefono.dispose(); _direccion.dispose();
-    super.dispose();
-  }
-
-  Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    try {
-      final ClienteModel guardado;
-      if (_esEdicion) {
-        guardado = await widget.repo.actualizarCliente(
-          clienteId: widget.cliente!.clienteId,
-          nombre:    _nombre.text.trim(),
-          email:     _email.text.trim(),
-          telefono:  _telefono.text.trim(),
-          direccion: _direccion.text.trim(),
-        );
-      } else {
-        guardado = await widget.repo.crearCliente(
-          nombre:    _nombre.text.trim(),
-          cedulaRuc: _cedula.text.trim(),
-          email:     _email.text.trim(),
-          telefono:  _telefono.text.trim(),
-          direccion: _direccion.text.trim(),
-        );
-      }
-      if (mounted) {
-        Navigator.pop(context, guardado);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_esEdicion ? 'Cliente actualizado' : 'Cliente registrado'),
-          backgroundColor: AppColors.success,
-        ));
-      }
-    } catch (e) {
-      setState(() => _saving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error,
-        ));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(_esEdicion ? 'Editar cliente' : 'Registrar cliente',
-          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nombre,
-                  autofocus: !_esEdicion,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                      labelText: 'Nombre / Razón social *',
-                      prefixIcon: Icon(Icons.person_outline)),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'El nombre es requerido' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _cedula,
-                  enabled: !_esEdicion,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Cédula / RUC *',
-                    prefixIcon: const Icon(Icons.badge_outlined),
-                    helperText: _esEdicion ? 'La cédula/RUC no se puede cambiar' : null,
-                  ),
-                  validator: (v) {
-                    final ced = (v ?? '').trim();
-                    if (ced.isEmpty) return 'La cédula/RUC es requerida';
-                    if (ced.length != 10 && ced.length != 13) {
-                      return 'Debe tener 10 (cédula) o 13 (RUC) dígitos';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email (recibe la factura electrónica)',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  validator: (v) {
-                    final email = (v ?? '').trim();
-                    if (email.isEmpty) return null; // opcional: cae al email de la sucursal
-                    if (!email.contains('@') || !email.contains('.')) return 'Email inválido';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _telefono,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                      labelText: 'Teléfono', prefixIcon: Icon(Icons.phone_outlined)),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _direccion,
-                  decoration: const InputDecoration(
-                      labelText: 'Dirección', prefixIcon: Icon(Icons.place_outlined)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: _saving ? null : () => Navigator.pop(context),
-            child: const Text('Cancelar')),
-        ElevatedButton(
-          onPressed: _saving ? null : _guardar,
-          child: _saving
-              ? const SizedBox(width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(_esEdicion ? 'Guardar cambios' : 'Registrar'),
-        ),
-      ],
-    );
   }
 }
 

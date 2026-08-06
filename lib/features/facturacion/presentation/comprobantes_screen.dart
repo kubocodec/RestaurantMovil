@@ -8,12 +8,13 @@ import '../../../core/network/api_client.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../shared/widgets/cliente_form_dialog.dart';
 import '../../../shared/widgets/sri_estado_panel.dart';
 import '../../configuracion/data/configuracion_repository.dart';
 import '../data/facturacion_repository.dart';
 
-/// Historial de recibos y facturas emitidos: para reimprimir o consultar
-/// cuando el cliente vuelve a pedir su comprobante.
+/// Historial de notas de venta y facturas emitidas: para reimprimir, consultar
+/// o emitir la factura cuando el cliente la pide después de haber pagado.
 class ComprobantesScreen extends StatefulWidget {
   const ComprobantesScreen({super.key});
 
@@ -29,14 +30,14 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
   bool _loading = true;
   String? _error;
 
-  /// Clasificación: TODOS | FACTURA | RECIBO | ANULADA
+  /// Clasificación: TODOS | FACTURA | NOTA_VENTA | ANULADA
   String _filtro = 'TODOS';
 
   List<FacturaModel> get _visibles => switch (_filtro) {
-    'FACTURA' => _comprobantes.where((c) => c.esFactura && !c.isAnulada).toList(),
-    'RECIBO'  => _comprobantes.where((c) => !c.esFactura && !c.isAnulada).toList(),
-    'ANULADA' => _comprobantes.where((c) => c.isAnulada).toList(),
-    _         => _comprobantes,
+    'FACTURA'    => _comprobantes.where((c) => c.esFactura && !c.isAnulada).toList(),
+    'NOTA_VENTA' => _comprobantes.where((c) => c.esNotaVenta && !c.isAnulada).toList(),
+    'ANULADA'    => _comprobantes.where((c) => c.isAnulada).toList(),
+    _            => _comprobantes,
   };
 
   String get _sucursalId {
@@ -82,7 +83,7 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Recibos y Facturas'),
+        title: const Text('Notas de venta y Facturas'),
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
       ),
       body: SafeArea(
@@ -157,7 +158,7 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
         .where((c) => !c.isAnulada)
         .fold(0.0, (s, c) => s + c.total);
     final facturas = _comprobantes.where((c) => c.esFactura && !c.isAnulada).length;
-    final recibos  = _comprobantes.where((c) => !c.esFactura && !c.isAnulada).length;
+    final notas    = _comprobantes.where((c) => c.esNotaVenta && !c.isAnulada).length;
     final anuladas = _comprobantes.where((c) => c.isAnulada).length;
 
     return Column(
@@ -180,9 +181,9 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
                 onTap: () => setState(() => _filtro = 'FACTURA'),
               ),
               _FiltroChip(
-                label: 'Recibos ($recibos)',
-                selected: _filtro == 'RECIBO',
-                onTap: () => setState(() => _filtro = 'RECIBO'),
+                label: 'Notas de venta ($notas)',
+                selected: _filtro == 'NOTA_VENTA',
+                onTap: () => setState(() => _filtro = 'NOTA_VENTA'),
               ),
               _FiltroChip(
                 label: 'Anulados ($anuladas)',
@@ -239,6 +240,9 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
         factura: f,
         fmt: _fmt,
         sucursalId: _sucursalId,
+        // Si la nota de venta se convirtió en factura, el listado debe
+        // reflejarlo al cerrar la hoja.
+        onEmitida: _load,
       ),
     );
   }
@@ -342,7 +346,7 @@ class _ComprobanteCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text('${f.esFactura ? 'Factura' : 'Recibo'} ${f.numeroFactura}',
+                      Text('${f.esFactura ? 'Factura' : 'Nota de venta'} ${f.numeroFactura}',
                           style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
                       if (f.isAnulada) ...[
                         const SizedBox(width: 6),
@@ -389,11 +393,14 @@ class _DetalleComprobanteSheet extends StatefulWidget {
   final FacturaModel factura;
   final NumberFormat fmt;
   final String sucursalId;
+  /// Se llama cuando la nota de venta pasó a ser factura electrónica.
+  final VoidCallback? onEmitida;
 
   const _DetalleComprobanteSheet({
     required this.factura,
     required this.fmt,
     required this.sucursalId,
+    this.onEmitida,
   });
 
   @override
@@ -402,15 +409,24 @@ class _DetalleComprobanteSheet extends StatefulWidget {
 
 class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
   final _configRepo = ConfiguracionRepository();
+  final _factRepo = FacturacionRepository();
   bool _imprimiendo = false;
+  bool _emitiendo = false;
+
+  /// Cambia si la nota de venta se convierte en factura desde aquí.
+  late FacturaModel _factura = widget.factura;
 
   static const _ticketStyle = TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35);
   static const _ticketBold =
       TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35, fontWeight: FontWeight.w700);
 
+  /// La factura solo se puede pedir sobre una nota de venta ya cobrada.
+  bool get _puedeEmitirFactura =>
+      _factura.esNotaVenta && !_factura.isAnulada && _factura.estado == 'PAGADA';
+
   @override
   Widget build(BuildContext context) {
-    final f = widget.factura;
+    final f = _factura;
     final metodoPago = f.pagos.map((p) => p.nombreMetodoPago).join(', ');
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -434,7 +450,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${f.esFactura ? 'Factura' : 'Recibo'} ${f.numeroFactura}${f.isAnulada ? ' (ANULADA)' : ''}',
+                    '${f.esFactura ? 'Factura' : 'Nota de venta'} ${f.numeroFactura}${f.isAnulada ? ' (ANULADA)' : ''}',
                     style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16),
                   ),
                 ),
@@ -464,7 +480,8 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                     if (f.direccionSucursal?.isNotEmpty ?? false)
                       Text(f.direccionSucursal!, textAlign: TextAlign.center, style: _ticketStyle),
                     const Divider(),
-                    Text('${f.esFactura ? 'FACTURA' : 'RECIBO'} No. ${f.numeroFactura}', style: _ticketBold),
+                    Text('${f.esFactura ? 'FACTURA' : 'NOTA DE VENTA'} No. ${f.numeroFactura}',
+                        style: _ticketBold),
                     Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(f.fecha.toLocal())}', style: _ticketStyle),
                     Text('Orden: #${f.numeroOrden}', style: _ticketStyle),
                     Text('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}', style: _ticketStyle),
@@ -479,7 +496,8 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                     if (f.propina > 0) _filaTicket('Propina', f.propina),
                     _filaTicket('TOTAL', f.total, bold: true),
                     if (metodoPago.isNotEmpty) Text('Pago: $metodoPago', style: _ticketStyle),
-                    if (!f.isAnulada) SriEstadoPanel(factura: f),
+                    // La nota de venta no va al SRI: no hay estado que mostrar.
+                    if (!f.isAnulada && f.esFactura) SriEstadoPanel(factura: f),
                   ],
                 ),
               ),
@@ -491,23 +509,44 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
               color: AppColors.cardBackground,
               border: Border(top: BorderSide(color: AppColors.divider)),
             ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _imprimiendo ? null : _imprimir,
-                    icon: _imprimiendo
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.print_outlined, size: 18),
-                    label: Text(_imprimiendo ? 'Imprimiendo...' : 'Reimprimir'),
+                if (_puedeEmitirFactura) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _emitiendo ? null : _emitirFactura,
+                      icon: _emitiendo
+                          ? const SizedBox(width: 14, height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: Text(_emitiendo
+                          ? 'Emitiendo...'
+                          : 'Emitir factura (el cliente la pidió)'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cerrar'),
-                  ),
+                  const SizedBox(height: 8),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _imprimiendo ? null : _imprimir,
+                        icon: _imprimiendo
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.print_outlined, size: 18),
+                        label: Text(_imprimiendo ? 'Imprimiendo...' : 'Reimprimir'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cerrar'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -526,6 +565,39 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
         Text('\$${monto.toStringAsFixed(2)}', style: style),
       ],
     );
+  }
+
+  /// Convierte la nota de venta en factura electrónica: pide los datos del
+  /// cliente (el SRI los exige) y la envía. El cobro no se toca — es el
+  /// mismo comprobante, ahora transmitido.
+  Future<void> _emitirFactura() async {
+    final cliente = await showDialog<ClienteModel>(
+      context: context,
+      builder: (_) => _ClienteFacturaDialog(repo: _factRepo, total: _factura.total),
+    );
+    if (cliente == null || !mounted) return;
+
+    setState(() => _emitiendo = true);
+    try {
+      final actualizada = await _factRepo.emitirSri(
+        _factura.facturaVentaId,
+        clienteId: cliente.clienteId,
+      );
+      if (!mounted) return;
+      setState(() => _factura = actualizada);
+      widget.onEmitida?.call();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Factura enviada al SRI'), backgroundColor: AppColors.success,
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _emitiendo = false);
+    }
   }
 
   Future<void> _imprimir() async {
@@ -556,7 +628,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
       );
       if (elegida == null) return;
 
-      final f = widget.factura;
+      final f = _factura;
       final via = await ComandaPrinter.imprimirRecibo(
         ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
@@ -583,5 +655,163 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
     } finally {
       if (mounted) setState(() => _imprimiendo = false);
     }
+  }
+}
+
+/// Pide el cliente para emitir la factura de una nota de venta ya cobrada:
+/// se busca por cédula/RUC y, si no está registrado, se crea al momento.
+/// El SRI exige identificar al comprador, así que no se emite sin cliente.
+class _ClienteFacturaDialog extends StatefulWidget {
+  final FacturacionRepository repo;
+  final double total;
+
+  const _ClienteFacturaDialog({required this.repo, required this.total});
+
+  @override
+  State<_ClienteFacturaDialog> createState() => _ClienteFacturaDialogState();
+}
+
+class _ClienteFacturaDialogState extends State<_ClienteFacturaDialog> {
+  final _cedulaCtrl = TextEditingController();
+  ClienteModel? _cliente;
+  bool _buscando = false;
+
+  @override
+  void dispose() {
+    _cedulaCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _buscar() async {
+    final cedula = _cedulaCtrl.text.trim();
+    if (cedula.isEmpty) return;
+    setState(() => _buscando = true);
+    final encontrado = await widget.repo.buscarClientePorCedula(cedula);
+    if (!mounted) return;
+    setState(() { _cliente = encontrado; _buscando = false; });
+    if (encontrado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Cliente no encontrado. Regístralo con el formulario.'),
+        backgroundColor: AppColors.warning,
+      ));
+      _registrar();
+    }
+  }
+
+  Future<void> _registrar() async {
+    final nuevo = await showDialog<ClienteModel>(
+      context: context,
+      builder: (_) => ClienteFormDialog(
+        repo: widget.repo,
+        cedulaInicial: _cedulaCtrl.text.trim(),
+      ),
+    );
+    if (nuevo != null && mounted) {
+      setState(() { _cliente = nuevo; _cedulaCtrl.text = nuevo.cedulaRuc; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _cliente;
+    return AlertDialog(
+      title: const Text('Emitir factura',
+          style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Total del comprobante: \$${widget.total.toStringAsFixed(2)}',
+                style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+            const SizedBox(height: 4),
+            const Text('La factura se envía al SRI con los datos del cliente.',
+                style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _cedulaCtrl,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    onSubmitted: (_) => _buscar(),
+                    decoration: const InputDecoration(
+                        labelText: 'Cédula / RUC', prefixIcon: Icon(Icons.badge_outlined)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Buscar cliente',
+                  onPressed: _buscando ? null : _buscar,
+                  icon: _buscando
+                      ? const SizedBox(width: 18, height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.search),
+                  style: IconButton.styleFrom(
+                      backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Registrar cliente nuevo',
+                  onPressed: _registrar,
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  style: IconButton.styleFrom(
+                      backgroundColor: AppColors.success, foregroundColor: Colors.white),
+                ),
+              ],
+            ),
+            if (c != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(c.nombre,
+                              style: const TextStyle(
+                                fontFamily: 'Poppins', fontSize: 13.5,
+                                fontWeight: FontWeight.w700),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                    Text('CI/RUC: ${c.cedulaRuc}',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
+                    Text(
+                      c.tieneEmail ? c.email! : 'Sin email: la factura irá al email de la sucursal',
+                      style: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 12,
+                        color: c.tieneEmail ? AppColors.textSecondary : AppColors.warning),
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: c == null ? null : () => Navigator.pop(context, c),
+          child: const Text('Emitir factura'),
+        ),
+      ],
+    );
   }
 }

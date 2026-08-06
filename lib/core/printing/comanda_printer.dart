@@ -18,7 +18,7 @@ class ResultadoImpresion {
   const ResultadoImpresion(this.impresora, this.ok, {this.error, this.via});
 }
 
-/// Línea de detalle para el recibo/factura impresa.
+/// Línea de detalle para la nota de venta/factura impresa.
 class ReciboItem {
   final String nombre;
   final int cantidad;
@@ -280,7 +280,7 @@ class ComandaPrinter {
     }
   }
 
-  /// Imprime el recibo o factura del cliente en la impresora indicada,
+  /// Imprime la nota de venta o factura del cliente en la impresora indicada,
   /// con la cabecera del restaurant y su sucursal.
   /// Devuelve la vía usada ('red' o 'Bluetooth').
   static Future<String> imprimirRecibo({
@@ -297,7 +297,7 @@ class ComandaPrinter {
       final esElectronica = f.sriClaveAcceso?.isNotEmpty ?? false;
       final titulo = esElectronica
           ? 'FACTURA ELECTRONICA'
-          : esFactura ? 'FACTURA' : 'RECIBO';
+          : esFactura ? 'FACTURA' : 'NOTA DE VENTA';
 
       final bytes = <int>[
         ..._init,
@@ -347,7 +347,12 @@ class ComandaPrinter {
       if (f.cajero?.isNotEmpty ?? false) bytes.addAll(_texto('Cajero: ${f.cajero}\n'));
       bytes.addAll(_texto('${f.lugar?.isNotEmpty ?? false ? '${f.lugar} - ' : ''}Orden #${f.numeroOrden}\n'));
       bytes.addAll(_texto('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}\n'));
-      bytes.addAll(_texto('CI/RUC: ${(f.cedulaRucCliente?.isNotEmpty ?? false) ? f.cedulaRucCliente : '9999999999999'}\n'));
+      // El 9999999999999 es la identificación de consumidor final del SRI:
+      // solo tiene sentido en la factura, no en la nota de venta interna.
+      if ((f.cedulaRucCliente?.isNotEmpty ?? false) || esFactura) {
+        bytes.addAll(_texto(
+            'CI/RUC: ${(f.cedulaRucCliente?.isNotEmpty ?? false) ? f.cedulaRucCliente : '9999999999999'}\n'));
+      }
 
       // ── Detalle ──
       bytes.addAll(_texto('${'-' * _cols}\n'));

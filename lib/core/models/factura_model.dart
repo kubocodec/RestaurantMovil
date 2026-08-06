@@ -87,6 +87,8 @@ class FacturaModel {
   final String ordenId;
   final int numeroOrden;
   final String estado;
+  /// NOTA_VENTA (comprobante interno) | FACTURA (se transmite al SRI)
+  final String tipoComprobante;
   final double subtotal;
   final double descuento;
   final double ivaPorcentaje;
@@ -123,6 +125,7 @@ class FacturaModel {
     required this.ordenId,
     required this.numeroOrden,
     required this.estado,
+    this.tipoComprobante = 'NOTA_VENTA',
     required this.subtotal,
     this.descuento = 0,
     this.ivaPorcentaje = 0,
@@ -155,6 +158,10 @@ class FacturaModel {
     ordenId:        j['ordenId']?.toString() ?? '',
     numeroOrden:    (j['numeroOrden'] ?? 0) as int,
     estado:         j['estado']?.toString() ?? '',
+    // Respaldo por si el servidor aún no envía el tipo: con cédula/RUC de
+    // cliente era una factura.
+    tipoComprobante: j['tipoComprobante']?.toString() ??
+        ((j['cedulaRucCliente']?.toString().isNotEmpty ?? false) ? 'FACTURA' : 'NOTA_VENTA'),
     subtotal:       _toDouble(j['subtotal']),
     descuento:      _toDouble(j['descuento']),
     ivaPorcentaje:  _toDouble(j['ivaPorcentaje']),
@@ -181,9 +188,9 @@ class FacturaModel {
     sriMensaje:        j['sriMensaje']?.toString(),
   );
 
-  /// Con cédula/RUC de cliente es factura; sin cliente es recibo
-  /// (consumidor final).
-  bool get esFactura => cedulaRucCliente?.isNotEmpty ?? false;
+  /// Factura (va al SRI) frente a nota de venta (comprobante interno).
+  bool get esFactura => tipoComprobante == 'FACTURA';
+  bool get esNotaVenta => !esFactura;
 
   bool get isAnulada => estado == 'ANULADA';
 

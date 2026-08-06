@@ -314,7 +314,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
         const SizedBox(height: 8),
         _ActionTile(
           icon: Icons.history_rounded,
-          label: 'Recibos y facturas',
+          label: 'Notas de venta y facturas',
           subtitle: 'Consultar y reimprimir comprobantes',
           color: AppColors.info,
           onTap: () => _irARuta('/cajero/comprobantes'),
