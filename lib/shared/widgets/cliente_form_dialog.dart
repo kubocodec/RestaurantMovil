@@ -71,13 +71,86 @@ class _ClienteFormDialogState extends State<ClienteFormDialog> {
         ));
       }
     } catch (e) {
-      setState(() => _saving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error,
-        ));
+      // El backend rechaza (422) si la cédula/RUC ya existe en el tenant. En
+      // vez de dejar al cajero con un error y el formulario lleno, se busca
+      // ese cliente y se le ofrece. Si la búsqueda no lo encuentra, el fallo
+      // fue otro (red, validación) y se muestra tal cual.
+      if (!_esEdicion) {
+        final existente = await widget.repo.buscarClientePorCedula(_cedula.text.trim());
+        if (existente != null && mounted) {
+          setState(() => _saving = false);
+          await _ofrecerExistente(existente);
+          return;
+        }
       }
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error,
+      ));
     }
+  }
+
+  /// La cédula ya está registrada: se muestra de quién es y se ofrece usarlo
+  /// tal cual o corregir sus datos (el email es el que recibe la factura).
+  Future<void> _ofrecerExistente(ClienteModel existente) async {
+    final accion = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ese cliente ya está registrado',
+            style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(existente.nombre,
+                style: const TextStyle(
+                  fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('CI/RUC: ${existente.cedulaRuc}',
+                style: const TextStyle(
+                  fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
+            Text(
+              existente.tieneEmail
+                  ? existente.email!
+                  : 'Sin email: la factura irá al email de la sucursal',
+              style: TextStyle(
+                fontFamily: 'Poppins', fontSize: 12.5,
+                color: existente.tieneEmail ? AppColors.textSecondary : AppColors.warning),
+            ),
+            if (existente.telefono?.isNotEmpty ?? false)
+              Text(existente.telefono!,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
+            if (existente.direccion?.isNotEmpty ?? false)
+              Text(existente.direccion!,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontSize: 12.5, color: AppColors.textSecondary)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 'cancelar'), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, 'editar'),
+              child: const Text('Editar sus datos')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, 'usar'),
+              child: const Text('Usar este cliente')),
+        ],
+      ),
+    );
+    if (!mounted || accion == null || accion == 'cancelar') return;
+
+    if (accion == 'usar') {
+      Navigator.pop(context, existente);
+      return;
+    }
+    // Editar: se abre el formulario en modo edición sobre el cliente real; si
+    // guarda, ese es el que se devuelve al cobro.
+    final actualizado = await showDialog<ClienteModel>(
+      context: context,
+      builder: (_) => ClienteFormDialog(repo: widget.repo, cliente: existente),
+    );
+    if (actualizado != null && mounted) Navigator.pop(context, actualizado);
   }
 
   @override
