@@ -8,6 +8,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../shared/widgets/cliente_busqueda.dart';
 import '../../../shared/widgets/cliente_form_dialog.dart';
 import '../../../shared/widgets/sri_estado_panel.dart';
 import '../../configuracion/data/configuracion_repository.dart';
@@ -659,8 +660,9 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
 }
 
 /// Pide el cliente para emitir la factura de una nota de venta ya cobrada:
-/// se busca por cédula/RUC y, si no está registrado, se crea al momento.
-/// El SRI exige identificar al comprador, así que no se emite sin cliente.
+/// se busca por nombre o cédula/RUC, se puede corregir sus datos y, si no
+/// está registrado, se crea al momento. El SRI exige identificar al
+/// comprador, así que no se emite sin cliente.
 class _ClienteFacturaDialog extends StatefulWidget {
   final FacturacionRepository repo;
   final double total;
@@ -672,42 +674,44 @@ class _ClienteFacturaDialog extends StatefulWidget {
 }
 
 class _ClienteFacturaDialogState extends State<_ClienteFacturaDialog> {
-  final _cedulaCtrl = TextEditingController();
+  final _busquedaCtrl = TextEditingController();
   ClienteModel? _cliente;
   bool _buscando = false;
 
   @override
   void dispose() {
-    _cedulaCtrl.dispose();
+    _busquedaCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _buscar() async {
-    final cedula = _cedulaCtrl.text.trim();
-    if (cedula.isEmpty) return;
+    if (_busquedaCtrl.text.trim().isEmpty) return;
     setState(() => _buscando = true);
-    final encontrado = await widget.repo.buscarClientePorCedula(cedula);
+    final elegido = await buscarClienteInteractivo(
+        context, widget.repo, _busquedaCtrl.text);
     if (!mounted) return;
-    setState(() { _cliente = encontrado; _buscando = false; });
-    if (encontrado == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Cliente no encontrado. Regístralo con el formulario.'),
-        backgroundColor: AppColors.warning,
-      ));
-      _registrar();
-    }
+    setState(() {
+      _buscando = false;
+      if (elegido != null) {
+        _cliente = elegido;
+        _busquedaCtrl.text = elegido.cedulaRuc;
+      }
+    });
   }
 
-  Future<void> _registrar() async {
-    final nuevo = await showDialog<ClienteModel>(
+  /// Registrar uno nuevo, o editar el encontrado si sus datos cambiaron
+  /// (el email importa: ahí llega la factura electrónica).
+  Future<void> _abrirFormulario({ClienteModel? cliente}) async {
+    final guardado = await showDialog<ClienteModel>(
       context: context,
       builder: (_) => ClienteFormDialog(
         repo: widget.repo,
-        cedulaInicial: _cedulaCtrl.text.trim(),
+        cliente: cliente,
+        cedulaInicial: cliente == null ? soloCedula(_busquedaCtrl.text) : null,
       ),
     );
-    if (nuevo != null && mounted) {
-      setState(() { _cliente = nuevo; _cedulaCtrl.text = nuevo.cedulaRuc; });
+    if (guardado != null && mounted) {
+      setState(() { _cliente = guardado; _busquedaCtrl.text = guardado.cedulaRuc; });
     }
   }
 
@@ -734,12 +738,13 @@ class _ClienteFacturaDialogState extends State<_ClienteFacturaDialog> {
               children: [
                 Expanded(
                   child: TextField(
-                    controller: _cedulaCtrl,
+                    controller: _busquedaCtrl,
                     autofocus: true,
-                    keyboardType: TextInputType.number,
+                    textCapitalization: TextCapitalization.words,
                     onSubmitted: (_) => _buscar(),
                     decoration: const InputDecoration(
-                        labelText: 'Cédula / RUC', prefixIcon: Icon(Icons.badge_outlined)),
+                        labelText: 'Nombre o cédula / RUC',
+                        prefixIcon: Icon(Icons.person_search_outlined)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -756,7 +761,7 @@ class _ClienteFacturaDialogState extends State<_ClienteFacturaDialog> {
                 const SizedBox(width: 6),
                 IconButton(
                   tooltip: 'Registrar cliente nuevo',
-                  onPressed: _registrar,
+                  onPressed: () => _abrirFormulario(),
                   icon: const Icon(Icons.person_add_alt_1_outlined),
                   style: IconButton.styleFrom(
                       backgroundColor: AppColors.success, foregroundColor: Colors.white),
@@ -772,31 +777,58 @@ class _ClienteFacturaDialogState extends State<_ClienteFacturaDialog> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.success.withValues(alpha: 0.35)),
                 ),
-                child: Column(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.check_circle, color: AppColors.success, size: 16),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(c.nombre,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(c.nombre,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins', fontSize: 13.5,
+                                      fontWeight: FontWeight.w700),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
+                          ),
+                          Text('CI/RUC: ${c.cedulaRuc}',
                               style: const TextStyle(
-                                fontFamily: 'Poppins', fontSize: 13.5,
-                                fontWeight: FontWeight.w700),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
+                                fontFamily: 'Poppins', fontSize: 12,
+                                color: AppColors.textSecondary)),
+                          Text(
+                            c.tieneEmail
+                                ? c.email!
+                                : 'Sin email: la factura irá al email de la sucursal',
+                            style: TextStyle(
+                              fontFamily: 'Poppins', fontSize: 12,
+                              color: c.tieneEmail ? AppColors.textSecondary : AppColors.warning),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          ),
+                          if (c.telefono?.isNotEmpty ?? false)
+                            Text(c.telefono!,
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins', fontSize: 12,
+                                  color: AppColors.textSecondary)),
+                          if (c.direccion?.isNotEmpty ?? false)
+                            Text(c.direccion!,
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins', fontSize: 12,
+                                  color: AppColors.textSecondary),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
                     ),
-                    Text('CI/RUC: ${c.cedulaRuc}',
-                        style: const TextStyle(
-                          fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
-                    Text(
-                      c.tieneEmail ? c.email! : 'Sin email: la factura irá al email de la sucursal',
-                      style: TextStyle(
-                        fontFamily: 'Poppins', fontSize: 12,
-                        color: c.tieneEmail ? AppColors.textSecondary : AppColors.warning),
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                    IconButton(
+                      tooltip: 'Editar datos del cliente',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _abrirFormulario(cliente: c),
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
                     ),
                   ],
                 ),

@@ -13,6 +13,7 @@ import '../../../core/printing/comanda_printer.dart';
 import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../shared/widgets/cliente_busqueda.dart';
 import '../../../shared/widgets/cliente_form_dialog.dart';
 import '../../../shared/widgets/sri_estado_panel.dart';
 import '../data/facturacion_repository.dart';
@@ -103,20 +104,16 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     }
   }
 
+  /// Busca por nombre o cédula/RUC: con varias coincidencias se elige de una
+  /// lista y sin ninguna se abre el formulario para registrarlo.
   Future<void> _buscarCliente() async {
     if (_cedulaCtrl.text.trim().isEmpty) return;
-    final cliente = await _factRepo.buscarClientePorCedula(_cedulaCtrl.text.trim());
-    if (mounted) {
-      if (cliente != null) {
-        setState(() => _clienteEncontrado = cliente);
-      } else {
-        setState(() => _clienteEncontrado = null);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Cliente no encontrado. Regístralo con el formulario.'),
-          backgroundColor: AppColors.warning,
-        ));
-        _abrirFormularioCliente();
-      }
+    final cliente = await buscarClienteInteractivo(context, _factRepo, _cedulaCtrl.text);
+    if (cliente != null && mounted) {
+      setState(() {
+        _clienteEncontrado = cliente;
+        _cedulaCtrl.text = cliente.cedulaRuc;
+      });
     }
   }
 
@@ -128,7 +125,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       builder: (_) => ClienteFormDialog(
         repo:          _factRepo,
         cliente:       cliente,
-        cedulaInicial: cliente == null ? _cedulaCtrl.text.trim() : null,
+        // Solo prellena si lo digitado son dígitos: si se buscó por nombre,
+        // no es una cédula.
+        cedulaInicial: cliente == null ? soloCedula(_cedulaCtrl.text) : null,
       ),
     );
     if (resultado != null && mounted) {
@@ -573,9 +572,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             Expanded(
               child: TextField(
                 controller: _cedulaCtrl,
-                keyboardType: TextInputType.number,
+                textCapitalization: TextCapitalization.words,
                 onSubmitted: (_) => _buscarCliente(),
-                decoration: const InputDecoration(labelText: 'Cédula / RUC', prefixIcon: Icon(Icons.badge_outlined)),
+                decoration: const InputDecoration(
+                    labelText: 'Nombre o cédula / RUC',
+                    prefixIcon: Icon(Icons.person_search_outlined)),
               ),
             ),
             const SizedBox(width: 8),

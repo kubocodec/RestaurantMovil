@@ -41,6 +41,16 @@ class FacturacionRepository {
     }
   }
 
+  /// Busca clientes por nombre, cédula/RUC o email (el backend devuelve una
+  /// página; con los primeros resultados basta para elegir en el cobro).
+  Future<List<ClienteModel>> buscarClientes(String q, {int size = 20}) async {
+    final r = await _dio.get('/api/clientes/buscar',
+        queryParameters: {'q': q, 'size': size});
+    final d = r.data['data'];
+    final List lista = (d is Map ? d['content'] : d) ?? [];
+    return lista.map((j) => ClienteModel.fromJson(j)).toList();
+  }
+
   // Registrar cliente nuevo (queda vinculado a la sucursal del usuario)
   Future<ClienteModel> crearCliente({
     required String nombre,
