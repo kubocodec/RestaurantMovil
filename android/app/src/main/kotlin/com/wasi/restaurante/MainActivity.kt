@@ -1,4 +1,4 @@
-package com.restaurante.restaurant_app
+package com.wasi.restaurante
 
 import io.flutter.embedding.android.FlutterActivity
 

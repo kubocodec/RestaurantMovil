@@ -59,9 +59,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  assets:
-    - assets/images/
-    - assets/icons/
+  # El icono y el splash los consumen flutter_launcher_icons y
+  # flutter_native_splash en tiempo de build, no se empaquetan como assets.
 
 # Ícono de la app, generado desde LogoWasi.png (ver assets/icon/). Regenerar
 # con: dart run flutter_launcher_icons
