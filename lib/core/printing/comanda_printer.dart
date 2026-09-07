@@ -42,6 +42,13 @@ class ComandaPrinter {
   static const _cut = [0x1D, 0x56, 0x42, 0x00];
   static const _feed = [0x1B, 0x64, 0x04]; // 4 líneas antes del corte
 
+  /// ESC t 16: selecciona la página de códigos WPC1252, que para las letras
+  /// acentuadas es idéntica a Latin-1 (la codificación que usa [_texto]).
+  /// Sin esto la impresora arranca en CP437/CP850, donde el byte 0xE1 (la
+  /// 'á' de Latin-1) es 'ß': por eso "Bolón" salía como "Bolßn". Va después
+  /// de [_init] en cada ticket porque ESC @ resetea la página elegida.
+  static const _codePage = [0x1B, 0x74, 0x10];
+
   /// Columnas en fuente normal. Las impresoras del negocio son de 80mm
   /// (48 columnas); para papel de 58mm cambiar a 32.
   static const int _cols = 48;
@@ -105,7 +112,7 @@ class ComandaPrinter {
     // si es mixta (mesa + algunos platos para llevar) se marca cada plato.
     final todoParaLlevar = detalles.every(_esParaLlevar);
     final bytes = <int>[
-      ..._init,
+      ..._init, ..._codePage,
       ..._center, ..._doubleSize, ..._boldOn,
       ..._texto('COMANDA #$numeroOrden\n'),
       // Cocina debe saber que ya recibió esta comanda: no es un pedido nuevo
@@ -149,7 +156,7 @@ class ComandaPrinter {
     String? area,
   }) {
     final bytes = <int>[
-      ..._init,
+      ..._init, ..._codePage,
       ..._center, ..._doubleSize, ..._boldOn,
       ..._texto('PRUEBA DE\nIMPRESION\n'),
       ..._normalSize, ..._boldOff,
@@ -160,6 +167,9 @@ class ComandaPrinter {
       if (ip != null && ip.isNotEmpty) ..._texto('Red: $ip:$puerto\n'),
       if (mac != null && mac.isNotEmpty) ..._texto('Bluetooth: $mac\n'),
       ..._texto('Fecha: ${_fechaHora(DateTime.now())}\n'),
+      // Verificación de acentos: si esta línea sale con símbolos raros, la
+      // impresora no aceptó la página de códigos de [_codePage].
+      ..._texto('Acentos: Bolón Café Piña ñÑ ¿? ¡!\n'),
       ..._texto('${'-' * _cols}\n'),
       ..._center, ..._boldOn,
       ..._texto('CONEXION OK\n'),
@@ -238,26 +248,90 @@ class ComandaPrinter {
     throw ultimoError!;
   }
 
+  static const _intentosBluetooth = 3;
+
+  /// Pausa tras abrir el canal antes de escribir: la impresora necesita un
+  /// momento después de aceptar la conexión RFCOMM o descarta los primeros
+  /// bytes (el ticket sale sin cabecera).
+  static const _btPausaTrasConectar = Duration(milliseconds: 400);
+
+  /// Pausa tras cerrar antes de volver a abrir: el plugin cierra el
+  /// OutputStream pero NO el BluetoothSocket, así que el canal queda tomado
+  /// un instante más y reconectar de inmediato falla.
+  static const _btPausaTrasCerrar = Duration(milliseconds: 600);
+
+  /// Envía por Bluetooth clásico (SPP). El plugin se niega a conectar
+  /// mientras conserve el stream de una conexión anterior —y no lo limpia
+  /// solo—, así que se cierra SIEMPRE antes de abrir, y se reintenta: el
+  /// primer intento tras un rato de inactividad suele fallar igual que
+  /// pasaba por red.
   static Future<void> _enviarPorBluetooth(String mac, List<int> bytes) async {
     await _pedirPermisoBluetooth();
     if (!await PrintBluetoothThermal.bluetoothEnabled) {
       throw Exception('El Bluetooth del dispositivo esta apagado');
     }
-    // Cierra cualquier conexión previa que haya quedado abierta.
-    if (await PrintBluetoothThermal.connectionStatus) {
-      await PrintBluetoothThermal.disconnect;
+    final direccion = _macNormalizada(mac);
+    if (direccion == null) {
+      throw Exception('La MAC "$mac" no tiene formato valido (AA:BB:CC:DD:EE:FF). '
+          'Vuelve a elegir la impresora de la lista de emparejadas');
     }
-    final conectado = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
-    if (!conectado) {
-      throw Exception('No se pudo conectar a la impresora Bluetooth. '
-          'Verifica que este encendida y emparejada con este dispositivo');
+
+    Object? ultimoError;
+    for (var intento = 1; intento <= _intentosBluetooth; intento++) {
+      // No se usa connectionStatus para saber si hay conexión previa: esa
+      // comprobación escribe un byte en la impresora, o sea imprime una
+      // línea en blanco cada vez que se consulta.
+      await _cerrarBluetooth();
+      if (!await PrintBluetoothThermal.connect(macPrinterAddress: direccion)) {
+        ultimoError = Exception('la impresora no acepto la conexion');
+        continue;
+      }
+      try {
+        await Future.delayed(_btPausaTrasConectar);
+        if (!await PrintBluetoothThermal.writeBytes(bytes)) {
+          throw Exception('la impresora rechazo los datos');
+        }
+        // Esperar a que el búfer se vacíe antes de cortar el canal: cerrar
+        // de inmediato deja el ticket impreso a la mitad.
+        await Future.delayed(_pausaDrenaje(bytes.length));
+        await _cerrarBluetooth();
+        return;
+      } catch (e) {
+        ultimoError = e;
+        await _cerrarBluetooth();
+      }
     }
+    throw Exception('$ultimoError (tras $_intentosBluetooth intentos). '
+        'Revisa que este encendida, con papel, emparejada en Ajustes de '
+        'Android y que ninguna otra app la tenga tomada');
+  }
+
+  /// Tiempo de drenaje del búfer proporcional al tamaño del ticket, acotado
+  /// para que la app no se sienta lenta en comandas cortas.
+  static Duration _pausaDrenaje(int bytes) {
+    final ms = 300 + bytes ~/ 4;
+    return Duration(milliseconds: ms > 2500 ? 2500 : ms);
+  }
+
+  /// Cierra la conexión y espera a que Android libere el canal. Cerrar algo
+  /// que ya estaba cerrado no es un error: el objetivo es dejar al plugin
+  /// sin stream para que la siguiente conexión pueda abrirse.
+  static Future<void> _cerrarBluetooth() async {
     try {
-      final ok = await PrintBluetoothThermal.writeBytes(bytes);
-      if (!ok) throw Exception('No se pudieron enviar los datos por Bluetooth');
-    } finally {
       await PrintBluetoothThermal.disconnect;
+    } catch (_) {
+      // Ya estaba cerrada
     }
+    await Future.delayed(_btPausaTrasCerrar);
+  }
+
+  /// Normaliza la MAC al formato exacto que exige Android. getRemoteDevice
+  /// lanza si el formato no calza, y el plugin traga esa excepción y
+  /// devuelve un simple "false" sin decir por qué.
+  static String? _macNormalizada(String mac) {
+    final hex = mac.toUpperCase().replaceAll(RegExp(r'[^0-9A-F]'), '');
+    if (hex.length != 12) return null;
+    return List.generate(6, (i) => hex.substring(i * 2, i * 2 + 2)).join(':');
   }
 
   /// Impresoras Bluetooth ya emparejadas con el dispositivo, para elegir
@@ -300,7 +374,7 @@ class ComandaPrinter {
           : esFactura ? 'FACTURA' : 'NOTA DE VENTA';
 
       final bytes = <int>[
-        ..._init,
+        ..._init, ..._codePage,
         // ── Cabecera: emisor (como exige el RIDE) ──
         ..._center, ..._doubleSize, ..._boldOn,
         ..._texto('${f.nombreRestaurant.isNotEmpty ? f.nombreRestaurant : f.nombreSucursal}\n'),
@@ -465,7 +539,7 @@ class ComandaPrinter {
     {
       final c = cierre;
       final bytes = <int>[
-        ..._init,
+        ..._init, ..._codePage,
         ..._center, ..._doubleSize, ..._boldOn,
         ..._texto('CIERRE DE CAJA\n'),
         ..._normalSize,
