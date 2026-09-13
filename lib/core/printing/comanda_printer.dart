@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
@@ -248,57 +249,41 @@ class ComandaPrinter {
     throw ultimoError!;
   }
 
-  static const _intentosBluetooth = 3;
+  static const _intentosBluetooth = 2;
 
-  /// Pausa tras abrir el canal antes de escribir: la impresora necesita un
-  /// momento después de aceptar la conexión RFCOMM o descarta los primeros
-  /// bytes (el ticket sale sin cabecera).
-  static const _btPausaTrasConectar = Duration(milliseconds: 400);
+  /// Canal propio implementado en MainActivity.kt. Reemplaza la conexión del
+  /// plugin print_bluetooth_thermal, que en Android 12+ fallaba sin decir
+  /// por qué: exigía BLUETOOTH_SCAN, solo probaba el socket seguro (muchas
+  /// térmicas genéricas lo rechazan) y dejaba abierto el socket fallido.
+  static const _canalBluetooth = MethodChannel('com.wasi.restaurante/bluetooth');
 
-  /// Pausa tras cerrar antes de volver a abrir: el plugin cierra el
-  /// OutputStream pero NO el BluetoothSocket, así que el canal queda tomado
-  /// un instante más y reconectar de inmediato falla.
-  static const _btPausaTrasCerrar = Duration(milliseconds: 600);
-
-  /// Envía por Bluetooth clásico (SPP). El plugin se niega a conectar
-  /// mientras conserve el stream de una conexión anterior —y no lo limpia
-  /// solo—, así que se cierra SIEMPRE antes de abrir, y se reintenta: el
-  /// primer intento tras un rato de inactividad suele fallar igual que
-  /// pasaba por red.
+  /// Envía por Bluetooth clásico (SPP). El lado nativo conecta, escribe,
+  /// espera a que la impresora vacíe su búfer y cierra en una sola llamada;
+  /// aquí solo se reintenta, porque el primer intento tras un rato de
+  /// inactividad suele fallar igual que pasaba por red.
   static Future<void> _enviarPorBluetooth(String mac, List<int> bytes) async {
     await _pedirPermisoBluetooth();
-    if (!await PrintBluetoothThermal.bluetoothEnabled) {
-      throw Exception('El Bluetooth del dispositivo esta apagado');
-    }
     final direccion = _macNormalizada(mac);
     if (direccion == null) {
       throw Exception('La MAC "$mac" no tiene formato valido (AA:BB:CC:DD:EE:FF). '
           'Vuelve a elegir la impresora de la lista de emparejadas');
     }
 
-    Object? ultimoError;
+    String? ultimoError;
     for (var intento = 1; intento <= _intentosBluetooth; intento++) {
-      // No se usa connectionStatus para saber si hay conexión previa: esa
-      // comprobación escribe un byte en la impresora, o sea imprime una
-      // línea en blanco cada vez que se consulta.
-      await _cerrarBluetooth();
-      if (!await PrintBluetoothThermal.connect(macPrinterAddress: direccion)) {
-        ultimoError = Exception('la impresora no acepto la conexion');
-        continue;
-      }
       try {
-        await Future.delayed(_btPausaTrasConectar);
-        if (!await PrintBluetoothThermal.writeBytes(bytes)) {
-          throw Exception('la impresora rechazo los datos');
-        }
-        // Esperar a que el búfer se vacíe antes de cortar el canal: cerrar
-        // de inmediato deja el ticket impreso a la mitad.
-        await Future.delayed(_pausaDrenaje(bytes.length));
-        await _cerrarBluetooth();
+        await _canalBluetooth.invokeMethod<void>('imprimir', {
+          'mac': direccion,
+          'bytes': Uint8List.fromList(bytes),
+        });
         return;
-      } catch (e) {
-        ultimoError = e;
-        await _cerrarBluetooth();
+      } on PlatformException catch (e) {
+        // BT_CONFIG: apagado, sin permiso, MAC inválida. Reintentar no sirve.
+        if (e.code == 'BT_CONFIG') throw Exception(e.message ?? e.code);
+        ultimoError = e.message ?? e.code;
+        if (intento < _intentosBluetooth) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
       }
     }
     throw Exception('$ultimoError (tras $_intentosBluetooth intentos). '
@@ -306,28 +291,8 @@ class ComandaPrinter {
         'Android y que ninguna otra app la tenga tomada');
   }
 
-  /// Tiempo de drenaje del búfer proporcional al tamaño del ticket, acotado
-  /// para que la app no se sienta lenta en comandas cortas.
-  static Duration _pausaDrenaje(int bytes) {
-    final ms = 300 + bytes ~/ 4;
-    return Duration(milliseconds: ms > 2500 ? 2500 : ms);
-  }
-
-  /// Cierra la conexión y espera a que Android libere el canal. Cerrar algo
-  /// que ya estaba cerrado no es un error: el objetivo es dejar al plugin
-  /// sin stream para que la siguiente conexión pueda abrirse.
-  static Future<void> _cerrarBluetooth() async {
-    try {
-      await PrintBluetoothThermal.disconnect;
-    } catch (_) {
-      // Ya estaba cerrada
-    }
-    await Future.delayed(_btPausaTrasCerrar);
-  }
-
-  /// Normaliza la MAC al formato exacto que exige Android. getRemoteDevice
-  /// lanza si el formato no calza, y el plugin traga esa excepción y
-  /// devuelve un simple "false" sin decir por qué.
+  /// Normaliza la MAC al formato exacto que exige Android (mayúsculas y dos
+  /// puntos): getRemoteDevice lanza si el formato no calza.
   static String? _macNormalizada(String mac) {
     final hex = mac.toUpperCase().replaceAll(RegExp(r'[^0-9A-F]'), '');
     if (hex.length != 12) return null;
@@ -345,12 +310,19 @@ class ComandaPrinter {
   }
 
   static Future<void> _pedirPermisoBluetooth() async {
-    // Solo Android 12+ exige BLUETOOTH_CONNECT en tiempo de ejecución; en
-    // versiones anteriores el permiso se reporta como concedido.
+    // Solo Android 12+ exige estos permisos en tiempo de ejecución; en
+    // versiones anteriores se reportan como concedidos. Los dos son del
+    // grupo "Dispositivos cercanos" (un solo diálogo). CONNECT es el
+    // obligatorio; SCAN solo permite cancelar una búsqueda de dispositivos
+    // en curso antes de conectar, así que no se exige.
     if (!Platform.isAndroid) return;
-    final estado = await Permission.bluetoothConnect.request();
-    if (!estado.isGranted) {
-      throw Exception('Permiso de Bluetooth denegado');
+    final estados = await [
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+    ].request();
+    if (!(estados[Permission.bluetoothConnect]?.isGranted ?? false)) {
+      throw Exception('Permiso de Dispositivos cercanos denegado. '
+          'Activalo en Ajustes > Apps > Wasi > Permisos');
     }
   }
 
