@@ -912,9 +912,11 @@ class _OrdenScreenState extends State<OrdenScreen> {
           _subcategoriaFiltro = null;
         }),
       ),
+      // Las divididas llevan otro ícono: así se ve de antemano cuáles abren
+      // un segundo nivel y cuáles llevan directo a los platos.
       ...categorias.map((c) => _TipoChip(
         label: c,
-        icon: Icons.label_outline,
+        icon: _tieneSubniveles(c) ? Icons.account_tree_outlined : Icons.label_outline,
         selected: _categoriaFiltro == c,
         onTap: () => setState(() {
           _categoriaFiltro = c;
@@ -923,9 +925,14 @@ class _OrdenScreenState extends State<OrdenScreen> {
       )),
     ];
 
+    // Con el bloque de subcategorías abajo, ese padding dejaría una franja
+    // blanca colgando bajo el fondo crema.
+    final haySubcategorias =
+        _categoriaFiltro != null && _tieneSubniveles(_categoriaFiltro!);
+
     return Container(
       color: AppColors.cardBackground,
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: haySubcategorias ? 0 : 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -971,32 +978,62 @@ class _OrdenScreenState extends State<OrdenScreen> {
     );
   }
 
-  /// Segunda fila de chips, solo para la categoría elegida cuando está dividida
-  /// en varias subcategorías. Si no hay categoría elegida, o la categoría tiene
-  /// una sola subcategoría, no ocupa espacio.
+  /// Segundo nivel, solo para la categoría elegida cuando está dividida en
+  /// varias subcategorías. Va sobre fondo crema y con encabezado propio: con el
+  /// mismo chip que las categorías los dos niveles se confundían.
   Widget _buildSubcategorias() {
     final categoria = _categoriaFiltro;
     if (categoria == null || !_tieneSubniveles(categoria)) return const SizedBox.shrink();
 
-    final subs = _subcategoriasDe(categoria);
+    final deLaCategoria = _platos.where((p) => p.categoria == categoria).toList();
+    int cuantos(String sub) => deLaCategoria.where((p) => p.subcategoria == sub).length;
+
     final chips = <Widget>[
-      _TipoChip(
+      _SubChip(
         label: 'Ver todo',
-        icon: Icons.list_alt_outlined,
+        cantidad: deLaCategoria.length,
         selected: _subcategoriaFiltro == _todasLasSubs,
         onTap: () => setState(() => _subcategoriaFiltro = _todasLasSubs),
       ),
-      ...subs.map((s) => _TipoChip(
+      ..._subcategoriasDe(categoria).map((s) => _SubChip(
         label: s,
-        icon: Icons.subdirectory_arrow_right_rounded,
+        cantidad: cuantos(s),
         selected: _subcategoriaFiltro == s,
         onTap: () => setState(() => _subcategoriaFiltro = s),
       )),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+    return Container(
+      width: double.infinity,
+      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(16, 9, 16, 11),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.subdirectory_arrow_right_rounded,
+                  size: 15, color: AppColors.primary),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  'SUBCATEGORÍAS DE ${categoria.toUpperCase()}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Wrap(spacing: 8, runSpacing: 8, children: chips),
+        ],
+      ),
     );
   }
 
@@ -1232,10 +1269,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.segment_rounded, size: 56, color: AppColors.textHint),
+              const Icon(Icons.touch_app_outlined, size: 56, color: AppColors.textHint),
               const SizedBox(height: 12),
               Text(
-                'Elige una subcategoría de $categoria',
+                '$categoria tiene ${_subcategoriasDe(categoria).length} subcategorías',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontFamily: 'Poppins',
@@ -1245,11 +1282,12 @@ class _OrdenScreenState extends State<OrdenScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                '${_subcategoriasDe(categoria).length} subcategorías · ${visibles.length} platos',
+                'Toca una de las de arriba para ver sus platos,\no "Ver todo" para los ${visibles.length} juntos.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 12,
+                  height: 1.5,
                   color: AppColors.textHint,
                 ),
               ),
@@ -1731,6 +1769,60 @@ class _TipoChip extends StatelessWidget {
             Text(label, style: TextStyle(
               fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600,
               color: selected ? Colors.white : AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip del segundo nivel. Se distingue del de categoría a propósito: esquina
+/// menos redonda, contorno en vez de relleno, sin ícono y con el número de
+/// platos al lado.
+class _SubChip extends StatelessWidget {
+  final String label;
+  final int cantidad;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SubChip({
+    required this.label,
+    required this.cantidad,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primaryLight : AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? AppColors.primaryLight : AppColors.border,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: TextStyle(
+              fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.textPrimary)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: selected ? const Color(0x33FFFFFF) : AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('$cantidad', style: TextStyle(
+                fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppColors.textSecondary)),
+            ),
           ],
         ),
       ),
