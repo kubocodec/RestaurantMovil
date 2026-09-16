@@ -86,6 +86,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
   final List<_CartItem> _carrito = [];
   late String _tipoOrden = widget.esParaLlevar ? 'PARA_LLEVAR' : 'EN_MESA';
   String? _categoriaFiltro;
+  // Segundo nivel: solo aparece en categorías con varias subcategorías (ver
+  // _tieneSubniveles). En Licores, con 67 platos en 9 subcategorías, buscar en
+  // una sola lista era impracticable.
+  String? _subcategoriaFiltro;
   // Con muchas categorías el scroll horizontal era incómodo: por defecto se
   // muestran todas en varias filas y el mesero puede colapsarlas a una.
   bool _categoriasExpandidas = true;
@@ -876,6 +880,24 @@ class _OrdenScreenState extends State<OrdenScreen> {
   List<String> get _categorias =>
       _platos.map((p) => p.categoria).where((c) => c.isNotEmpty).toSet().toList()..sort();
 
+  /// Subcategorías distintas dentro de una categoría.
+  List<String> _subcategoriasDe(String categoria) => _platos
+      .where((p) => p.categoria == categoria)
+      .map((p) => p.subcategoria)
+      .where((s) => s.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+
+  /// Una categoría abre segundo nivel solo si está realmente dividida. Con una
+  /// sola subcategoría (el caso de casi toda la carta, donde se llama igual que
+  /// la categoría) el nivel extra sería un toque de más sin ganancia.
+  bool _tieneSubniveles(String categoria) => _subcategoriasDe(categoria).length >= 2;
+
+  /// Valor de _subcategoriaFiltro que pide la categoría completa. Se distingue
+  /// de null, que significa "todavía no eligió" y no muestra platos.
+  static const _todasLasSubs = '__todas__';
+
   Widget _buildCategorias() {
     final categorias = _categorias;
     if (categorias.isEmpty) return const SizedBox.shrink();
@@ -885,55 +907,96 @@ class _OrdenScreenState extends State<OrdenScreen> {
         label: 'Todos',
         icon: Icons.restaurant_menu_outlined,
         selected: _categoriaFiltro == null,
-        onTap: () => setState(() => _categoriaFiltro = null),
+        onTap: () => setState(() {
+          _categoriaFiltro = null;
+          _subcategoriaFiltro = null;
+        }),
       ),
       ...categorias.map((c) => _TipoChip(
         label: c,
         icon: Icons.label_outline,
         selected: _categoriaFiltro == c,
-        onTap: () => setState(() => _categoriaFiltro = c),
+        onTap: () => setState(() {
+          _categoriaFiltro = c;
+          _subcategoriaFiltro = null;
+        }),
       )),
     ];
 
     return Container(
       color: AppColors.cardBackground,
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: _categoriasExpandidas
-                // Todas visibles en varias filas: un toque para elegir
-                ? Padding(
-                    padding: const EdgeInsets.only(left: 16),
-                    child: Wrap(spacing: 8, runSpacing: 8, children: chips),
-                  )
-                // Colapsado: una fila con scroll horizontal (modo compacto)
-                : SizedBox(
-                    height: 36,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.only(left: 16),
-                      children: [
-                        for (final chip in chips)
-                          Padding(padding: const EdgeInsets.only(right: 8), child: chip),
-                      ],
-                    ),
-                  ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _categoriasExpandidas
+                    // Todas visibles en varias filas: un toque para elegir
+                    ? Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+                      )
+                    // Colapsado: una fila con scroll horizontal (modo compacto)
+                    : SizedBox(
+                        height: 36,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.only(left: 16),
+                          children: [
+                            for (final chip in chips)
+                              Padding(padding: const EdgeInsets.only(right: 8), child: chip),
+                          ],
+                        ),
+                      ),
+              ),
+              IconButton(
+                tooltip: _categoriasExpandidas ? 'Colapsar categorías' : 'Ver todas las categorías',
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: Icon(
+                  _categoriasExpandidas ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.textSecondary,
+                ),
+                onPressed: () => setState(() => _categoriasExpandidas = !_categoriasExpandidas),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: _categoriasExpandidas ? 'Colapsar categorías' : 'Ver todas las categorías',
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            icon: Icon(
-              _categoriasExpandidas ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-              color: AppColors.textSecondary,
-            ),
-            onPressed: () => setState(() => _categoriasExpandidas = !_categoriasExpandidas),
-          ),
+          _buildSubcategorias(),
         ],
       ),
+    );
+  }
+
+  /// Segunda fila de chips, solo para la categoría elegida cuando está dividida
+  /// en varias subcategorías. Si no hay categoría elegida, o la categoría tiene
+  /// una sola subcategoría, no ocupa espacio.
+  Widget _buildSubcategorias() {
+    final categoria = _categoriaFiltro;
+    if (categoria == null || !_tieneSubniveles(categoria)) return const SizedBox.shrink();
+
+    final subs = _subcategoriasDe(categoria);
+    final chips = <Widget>[
+      _TipoChip(
+        label: 'Ver todo',
+        icon: Icons.list_alt_outlined,
+        selected: _subcategoriaFiltro == _todasLasSubs,
+        onTap: () => setState(() => _subcategoriaFiltro = _todasLasSubs),
+      ),
+      ...subs.map((s) => _TipoChip(
+        label: s,
+        icon: Icons.subdirectory_arrow_right_rounded,
+        selected: _subcategoriaFiltro == s,
+        onTap: () => setState(() => _subcategoriaFiltro = s),
+      )),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
     );
   }
 
@@ -1141,14 +1204,61 @@ class _OrdenScreenState extends State<OrdenScreen> {
   }
 
   Widget _buildPlatosList() {
-    var visibles = _categoriaFiltro == null
+    final categoria = _categoriaFiltro;
+    final conSubniveles = categoria != null && _tieneSubniveles(categoria);
+
+    var visibles = categoria == null
         ? _platos
-        : _platos.where((p) => p.categoria == _categoriaFiltro).toList();
+        : _platos.where((p) => p.categoria == categoria).toList();
+
+    final sub = _subcategoriaFiltro;
+    if (conSubniveles && sub != null && sub != _todasLasSubs) {
+      visibles = visibles.where((p) => p.subcategoria == sub).toList();
+    }
+
     if (_busqueda.isNotEmpty) {
       visibles = visibles
           .where((p) => p.nombrePlato.toLowerCase().contains(_busqueda))
           .toList();
     }
+
+    // Categoría dividida y sin subcategoría elegida: se pide elegir en vez de
+    // volcar la lista completa. La búsqueda manda por encima, para que escribir
+    // el nombre siga encontrando el plato sin dar el rodeo.
+    if (conSubniveles && sub == null && _busqueda.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.segment_rounded, size: 56, color: AppColors.textHint),
+              const SizedBox(height: 12),
+              Text(
+                'Elige una subcategoría de $categoria',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_subcategoriasDe(categoria).length} subcategorías · ${visibles.length} platos',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  color: AppColors.textHint,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (visibles.isEmpty) {
       return Center(
         child: Column(
