@@ -1031,7 +1031,30 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ],
           ),
           const SizedBox(height: 9),
-          Wrap(spacing: 8, runSpacing: 8, children: chips),
+          // En teléfono, 9 chips en Wrap se comen media pantalla y dejan sin
+          // espacio a los platos: ahí van en una fila con scroll. En tablet sí
+          // caben todos a la vista.
+          LayoutBuilder(
+            builder: (context, c) {
+              if (c.maxWidth >= 600) {
+                return Wrap(spacing: 8, runSpacing: 8, children: chips);
+              }
+              return SizedBox(
+                height: MediaQuery.textScalerOf(context).scale(36),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
+                  children: [
+                    for (final chip in chips)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Center(child: chip),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -1265,7 +1288,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
     if (conSubniveles && sub == null && _busqueda.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1282,7 +1305,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Toca una de las de arriba para ver sus platos,\no "Ver todo" para los ${visibles.length} juntos.',
+                'Toca una de las de arriba para ver sus platos, o "Ver todo" para los ${visibles.length} juntos.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontFamily: 'Poppins',
@@ -1797,6 +1820,9 @@ class _SubChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        // Un nombre de subcategoría largo en pantalla angosta desbordaría la
+        // fila: se recorta con puntos suspensivos en vez de romper el layout.
+        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           color: selected ? AppColors.primaryLight : AppColors.cardBackground,
@@ -1809,9 +1835,11 @@ class _SubChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: TextStyle(
-              fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AppColors.textPrimary)),
+            Flexible(
+              child: Text(label, overflow: TextOverflow.ellipsis, style: TextStyle(
+                fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AppColors.textPrimary)),
+            ),
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
