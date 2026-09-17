@@ -255,6 +255,9 @@ class PlatoMasterModel {
   final String nombre;
   final String? descripcion;
   final bool activo;
+  /// Tarifa propia del plato. Null = hereda la vigente del negocio.
+  final String? tasaIvaId;
+  final double? ivaPorcentaje;
 
   const PlatoMasterModel({
     required this.platoId,
@@ -262,7 +265,14 @@ class PlatoMasterModel {
     required this.nombre,
     this.descripcion,
     required this.activo,
+    this.tasaIvaId,
+    this.ivaPorcentaje,
   });
+
+  /// Etiqueta corta para la lista: "15%" o "—" cuando hereda.
+  String get ivaTexto => ivaPorcentaje == null
+      ? '—'
+      : '${ivaPorcentaje!.toStringAsFixed(ivaPorcentaje! % 1 == 0 ? 0 : 2)}%';
 
   factory PlatoMasterModel.fromJson(Map<String, dynamic> j) => PlatoMasterModel(
     platoId:        j['platoId']?.toString() ?? '',
@@ -270,6 +280,8 @@ class PlatoMasterModel {
     nombre:         j['nombre']?.toString() ?? '',
     descripcion:    j['descripcion']?.toString(),
     activo:         j['activo'] ?? true,
+    tasaIvaId:      j['tasaIvaId']?.toString(),
+    ivaPorcentaje:  j['ivaPorcentaje'] == null ? null : TasaIvaModel._toDouble(j['ivaPorcentaje']),
   );
 }
 

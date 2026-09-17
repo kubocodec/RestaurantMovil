@@ -92,6 +92,9 @@ class FacturaModel {
   final double subtotal;
   final double descuento;
   final double ivaPorcentaje;
+  /// Desglose por tarifa (null en comprobantes viejos): base gravada y base 0%.
+  final double? subtotalGravado;
+  final double? subtotalSinIva;
   final double iva;
   final double propina;
   final double total;
@@ -129,6 +132,8 @@ class FacturaModel {
     required this.subtotal,
     this.descuento = 0,
     this.ivaPorcentaje = 0,
+    this.subtotalGravado,
+    this.subtotalSinIva,
     required this.iva,
     this.propina = 0,
     required this.total,
@@ -152,6 +157,11 @@ class FacturaModel {
     this.sriMensaje,
   });
 
+  /// El comprobante mezcla productos gravados y con tarifa 0%: solo entonces
+  /// hace falta mostrar el desglose por tarifa en el ticket.
+  bool get tieneTarifasMixtas =>
+      (subtotalGravado ?? 0) > 0 && (subtotalSinIva ?? 0) > 0;
+
   factory FacturaModel.fromJson(Map<String, dynamic> j) => FacturaModel(
     facturaVentaId: j['facturaVentaId']?.toString() ?? '',
     numeroFactura:  j['numeroFactura']?.toString() ?? '',
@@ -165,6 +175,8 @@ class FacturaModel {
     subtotal:       _toDouble(j['subtotal']),
     descuento:      _toDouble(j['descuento']),
     ivaPorcentaje:  _toDouble(j['ivaPorcentaje']),
+    subtotalGravado: j['subtotalGravado'] == null ? null : _toDouble(j['subtotalGravado']),
+    subtotalSinIva:  j['subtotalSinIva'] == null ? null : _toDouble(j['subtotalSinIva']),
     iva:            _toDouble(j['iva']),
     propina:        _toDouble(j['propina']),
     total:          _toDouble(j['total']),

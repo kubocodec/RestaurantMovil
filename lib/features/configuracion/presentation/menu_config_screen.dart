@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../inventario/data/inventario_repository.dart';
+import '../../auth/bloc/auth_bloc.dart';
+import '../../auth/bloc/auth_state.dart';
 import '../data/configuracion_repository.dart';
 
 class MenuConfigScreen extends StatefulWidget {
@@ -468,6 +471,57 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
     }
   }
 
+  /// Aplica una tarifa de IVA a TODOS los platos de la subcategoría. Con 189
+  /// platos, marcarlos uno por uno no se hace nunca.
+  Future<void> _aplicarIvaSubcategoria(BuildContext context) async {
+    final sel = await elegirTasaIva(
+      context,
+      widget.repo,
+      titulo: 'IVA de ${widget.sub.nombre}',
+      ayuda: 'Se aplica a todos los platos de esta subcategoría. '
+             'Después puedes cambiar los que sean excepción, uno por uno.',
+    );
+    if (!sel.elegido) return;
+    try {
+      final n = await widget.repo
+          .asignarTasaIvaSubcategoria(widget.sub.subcategoriaId, sel.tasaIvaId);
+      if (_expanded) await _loadPlatos();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Tarifa aplicada a $n plato${n == 1 ? '' : 's'}'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error));
+      }
+    }
+  }
+
+  /// Tarifa de un plato suelto: para las excepciones dentro de la subcategoría
+  /// (por ejemplo, solo algunas cervezas gravadas).
+  Future<void> _aplicarIvaPlato(BuildContext context, PlatoMasterModel plato) async {
+    final sel = await elegirTasaIva(
+      context,
+      widget.repo,
+      titulo: 'IVA de ${plato.nombre}',
+      ayuda: 'Tarifa de este plato en particular.',
+      tasaActualId: plato.tasaIvaId,
+    );
+    if (!sel.elegido) return;
+    try {
+      await widget.repo.asignarTasaIvaPlato(plato.platoId, sel.tasaIvaId);
+      await _loadPlatos();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -488,6 +542,14 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
                   icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 16),
                   onPressed: () => _showEditarSubDialog(context),
                   tooltip: 'Editar subcategoría',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  icon: const Icon(Icons.percent_rounded, color: AppColors.info, size: 16),
+                  onPressed: () => _aplicarIvaSubcategoria(context),
+                  tooltip: 'IVA de toda la subcategoría',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -538,6 +600,22 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
               const Icon(Icons.restaurant_outlined, size: 14, color: AppColors.cocineroColor),
               const SizedBox(width: 8),
               Expanded(child: Text(p.nombre, style: const TextStyle(fontFamily: 'Poppins', fontSize: 12))),
+              // Tarifa del plato: "—" cuando hereda la del negocio.
+              GestureDetector(
+                onTap: () => _aplicarIvaPlato(context, p),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.info.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('IVA ${p.ivaTexto}',
+                      style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 10.5,
+                          fontWeight: FontWeight.w700, color: AppColors.info)),
+                ),
+              ),
               GestureDetector(
                 onTap: () => _showEditarPlatoDialog(context, p),
                 child: const Padding(
@@ -1226,4 +1304,92 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
       ],
     );
   }
+}
+
+/// Resultado de elegir tarifa: [elegido] distingue "cancelo" de "elegi heredar".
+class SeleccionTasaIva {
+  final bool elegido;
+  final String? tasaIvaId;
+  const SeleccionTasaIva(this.elegido, this.tasaIvaId);
+}
+
+/// Pregunta qué tarifa de IVA aplicar. Sirve para un plato suelto y para una
+/// subcategoría completa; las tarifas son las del negocio (tenant).
+Future<SeleccionTasaIva> elegirTasaIva(
+  BuildContext context,
+  ConfiguracionRepository repo, {
+  required String titulo,
+  required String ayuda,
+  String? tasaActualId,
+}) async {
+  final estado = context.read<AuthBloc>().state;
+  final tenantId = estado is AuthAuthenticated ? estado.user.tenantId : '';
+  if (tenantId.isEmpty) return const SeleccionTasaIva(false, null);
+
+  List<TasaIvaModel> tasas;
+  try {
+    tasas = await repo.getTasasIva(tenantId);
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error));
+    }
+    return const SeleccionTasaIva(false, null);
+  }
+  if (!context.mounted) return const SeleccionTasaIva(false, null);
+
+  return await showDialog<SeleccionTasaIva>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(titulo,
+              style: const TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(ayuda,
+                    style: const TextStyle(
+                        fontFamily: 'Poppins', fontSize: 12.5,
+                        color: AppColors.textSecondary, height: 1.4)),
+                const SizedBox(height: 10),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                      tasaActualId == null
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                      color: AppColors.primary, size: 20),
+                  title: const Text('Hereda la del negocio',
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                  subtitle: const Text('Usa la tarifa vigente, como hasta ahora',
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11)),
+                  onTap: () => Navigator.pop(ctx, const SeleccionTasaIva(true, null)),
+                ),
+                ...tasas.where((t) => t.activo).map((t) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      leading: Icon(
+                          tasaActualId == t.tasaIvaId
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          color: AppColors.primary, size: 20),
+                      title: Text(
+                          '${t.nombre} · ${t.porcentaje.toStringAsFixed(t.porcentaje % 1 == 0 ? 0 : 2)}%',
+                          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                      onTap: () => Navigator.pop(ctx, SeleccionTasaIva(true, t.tasaIvaId)),
+                    )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, const SeleccionTasaIva(false, null)),
+                child: const Text('Cancelar')),
+          ],
+        ),
+      ) ??
+      const SeleccionTasaIva(false, null);
 }

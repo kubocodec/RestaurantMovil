@@ -408,6 +408,13 @@ class ComandaPrinter {
       bytes.addAll(_texto('${'-' * _cols}\n'));
       bytes.addAll(_texto(_lineaMonto('Subtotal', f.subtotal)));
       if (f.descuento > 0) bytes.addAll(_texto(_lineaMonto('Descuento', -f.descuento)));
+      // Con productos gravados y de tarifa 0% en la misma venta, el
+      // comprobante debe mostrar las dos bases por separado.
+      if (f.tieneTarifasMixtas) {
+        bytes.addAll(_texto(_lineaMonto('Subtotal 0%', f.subtotalSinIva!)));
+        bytes.addAll(_texto(_lineaMonto(
+            'Subtotal ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.subtotalGravado!)));
+      }
       bytes.addAll(_texto(_lineaMonto('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva)));
       if (f.propina > 0) bytes.addAll(_texto(_lineaMonto('Propina', f.propina)));
       bytes.addAll(_boldOn);

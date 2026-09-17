@@ -493,6 +493,11 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                     const Divider(),
                     _filaTicket('Subtotal', f.subtotal),
                     if (f.descuento > 0) _filaTicket('Descuento', -f.descuento),
+                    if (f.tieneTarifasMixtas) ...[
+                      _filaTicket('Subtotal 0%', f.subtotalSinIva!),
+                      _filaTicket('Subtotal ${f.ivaPorcentaje.toStringAsFixed(0)}%',
+                          f.subtotalGravado!),
+                    ],
                     _filaTicket('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva),
                     if (f.propina > 0) _filaTicket('Propina', f.propina),
                     _filaTicket('TOTAL', f.total, bold: true),

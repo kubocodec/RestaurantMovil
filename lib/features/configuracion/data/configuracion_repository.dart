@@ -416,6 +416,23 @@ class ConfiguracionRepository {
     return PlatoMasterModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Asigna la tarifa de IVA de un plato. Con [tasaIvaId] en null, el plato
+  /// vuelve a heredar la tarifa vigente del negocio.
+  Future<void> asignarTasaIvaPlato(String platoId, String? tasaIvaId) async {
+    await _dio.patch('/api/platos/$platoId/tasa-iva',
+        queryParameters: {if (tasaIvaId != null) 'tasaIvaId': tasaIvaId});
+  }
+
+  /// Aplica la misma tarifa a todos los platos de una subcategoría.
+  /// Devuelve cuántos platos quedaron con esa tarifa.
+  Future<int> asignarTasaIvaSubcategoria(String subcategoriaId, String? tasaIvaId) async {
+    final r = await _dio.patch('/api/platos/tasa-iva-masiva', queryParameters: {
+      'subcategoriaId': subcategoriaId,
+      if (tasaIvaId != null) 'tasaIvaId': tasaIvaId,
+    });
+    return (r.data['data'] as num?)?.toInt() ?? 0;
+  }
+
   /// Actualiza precio y/o disponibilidad del plato en la sucursal.
   /// El backend valida sucursalId/platoId/precio como requeridos, por eso
   /// se envía el cuerpo completo aunque solo cambie la disponibilidad.
