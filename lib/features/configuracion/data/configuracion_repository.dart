@@ -108,6 +108,12 @@ class ConfiguracionRepository {
     return TasaIvaModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Marca esta tarifa como la que heredan los platos sin tarifa propia.
+  /// El backend desmarca las demás del negocio y la activa.
+  Future<void> marcarTasaIvaPredeterminada(String tasaIvaId) async {
+    await _dio.patch('/api/tasa-iva/$tasaIvaId/predeterminada');
+  }
+
   Future<void> toggleTasaIva(String tasaIvaId) async {
     await _dio.patch('/api/tasa-iva/$tasaIvaId/toggle');
   }

@@ -109,7 +109,10 @@ class _TasaIvaScreenState extends State<TasaIvaScreen> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Debe existir al menos una tasa IVA activa y vigente para poder emitir facturas.',
+                  'Debe existir al menos una tasa IVA activa y vigente para poder emitir '
+                  'facturas. La marcada con la estrella es la que se aplica a los platos que '
+                  'no tienen tarifa propia; las demás quedan disponibles para asignarlas '
+                  'plato por plato desde el menú.',
                   style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
                 ),
               ),
@@ -126,12 +129,33 @@ class _TasaIvaScreenState extends State<TasaIvaScreen> {
               itemBuilder: (_, i) => _TasaCard(
                 tasa: _tasas[i],
                 onToggle: () => _toggle(_tasas[i]),
+                onPredeterminada: () => _marcarPredeterminada(_tasas[i]),
               ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _marcarPredeterminada(TasaIvaModel tasa) async {
+    try {
+      await _repo.marcarTasaIvaPredeterminada(tasa.tasaIvaId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Los platos sin tarifa propia ahora facturan al '
+              '${tasa.porcentaje.toStringAsFixed(0)}%'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   Future<void> _toggle(TasaIvaModel tasa) async {
@@ -230,7 +254,12 @@ class _TasaIvaScreenState extends State<TasaIvaScreen> {
 class _TasaCard extends StatelessWidget {
   final TasaIvaModel tasa;
   final VoidCallback onToggle;
-  const _TasaCard({required this.tasa, required this.onToggle});
+  final VoidCallback onPredeterminada;
+  const _TasaCard({
+    required this.tasa,
+    required this.onToggle,
+    required this.onPredeterminada,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -257,13 +286,50 @@ class _TasaCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(tasa.nombre,
-                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(tasa.nombre,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                    if (tasa.predeterminada) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withOpacity(0.14),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('Predeterminada',
+                            style: TextStyle(
+                                fontFamily: 'Poppins', fontSize: 9.5,
+                                fontWeight: FontWeight.w600, color: AppColors.success)),
+                      ),
+                    ],
+                  ],
+                ),
                 Text('${tasa.porcentaje.toStringAsFixed(0)}%  •  Vigente desde: ${tasa.vigentDesde}',
                     style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
               ],
             ),
           ),
+          // La estrella marca cuál heredan los platos sin tarifa propia. Es una
+          // decisión aparte de activo/inactivo: con IVA por plato el negocio
+          // necesita las dos tarifas activas y solo una como predeterminada.
+          if (!tasa.predeterminada)
+            IconButton(
+              tooltip: 'Usar como predeterminada',
+              icon: const Icon(Icons.star_outline_rounded,
+                  color: AppColors.textSecondary, size: 22),
+              onPressed: onPredeterminada,
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.star_rounded, color: AppColors.success, size: 22),
+            ),
           Switch(
             value: tasa.activo,
             onChanged: (_) => onToggle(),

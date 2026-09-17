@@ -5,6 +5,8 @@ class DetalleOrdenModel {
   final int cantidad;
   final double precioUnitario;
   final double subtotal;
+  /// Tarifa propia del plato; null = hereda la predeterminada del negocio.
+  final double? ivaPorcentaje;
   final String estado;
   final String tipoServicio;
   final String? observaciones;
@@ -22,6 +24,7 @@ class DetalleOrdenModel {
     required this.cantidad,
     required this.precioUnitario,
     required this.subtotal,
+    this.ivaPorcentaje,
     required this.estado,
     required this.tipoServicio,
     this.observaciones,
@@ -40,6 +43,7 @@ class DetalleOrdenModel {
     cantidad:       (j['cantidad'] as num?)?.toInt() ?? 1,
     precioUnitario: _toDouble(j['precioUnitario']),
     subtotal:       _toDouble(j['subtotal']),
+    ivaPorcentaje:  j['ivaPorcentaje'] == null ? null : _toDouble(j['ivaPorcentaje']),
     estado:         j['estado']?.toString() ?? 'PENDIENTE',
     tipoServicio:   j['tipoServicio']?.toString() ?? 'EN_MESA',
     observaciones:  j['observaciones']?.toString(),
