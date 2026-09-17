@@ -177,6 +177,19 @@ class _OrdenScreenState extends State<OrdenScreen> {
   }
 
   void _addToCart(PlatoModel plato) {
+    // Inventario: se avisa al mesero en vez de esconder el plato, para que
+    // sepa que se acabó y no crea que lo borraron del menú. El backend valida
+    // igual al guardar; esto es para no hacerle perder el viaje.
+    if (plato.controlaStock) {
+      if (plato.agotado) {
+        _avisoStock('No hay stock de ${plato.nombrePlato}');
+        return;
+      }
+      if (_inCart(plato) >= plato.unidadesDisponibles) {
+        _avisoStock('Solo quedan ${plato.unidadesDisponibles} de ${plato.nombrePlato}');
+        return;
+      }
+    }
     setState(() {
       final idx = _carrito.indexWhere((i) => i.plato.platoId == plato.platoId);
       if (idx >= 0) {
@@ -186,6 +199,20 @@ class _OrdenScreenState extends State<OrdenScreen> {
         _carrito.add(_CartItem(plato, tipoServicio: _tipoOrden));
       }
     });
+  }
+
+  void _avisoStock(String mensaje) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(mensaje)),
+        ]),
+        backgroundColor: AppColors.warning,
+        duration: const Duration(seconds: 2),
+      ));
   }
 
   void _removeFromCart(PlatoModel plato) {
@@ -1896,8 +1923,16 @@ class _PlatoTile extends StatelessWidget {
                       color: AppColors.textSecondary)),
                 ],
                 const SizedBox(height: 6),
-                Text('\$${plato.precio.toStringAsFixed(2)}',
-                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.primary)),
+                Row(
+                  children: [
+                    Text('\$${plato.precio.toStringAsFixed(2)}',
+                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.primary)),
+                    if (plato.controlaStock) ...[
+                      const SizedBox(width: 8),
+                      _EtiquetaStock(plato: plato),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -1907,7 +1942,11 @@ class _PlatoTile extends StatelessWidget {
               onTap: onAdd,
               child: Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(
+                  // Agotado: el botón se ve apagado, pero sigue respondiendo
+                  // para explicar por qué no se puede pedir.
+                  color: plato.agotado ? AppColors.textHint : AppColors.primary,
+                  borderRadius: BorderRadius.circular(10)),
                 child: const Icon(Icons.add, color: Colors.white, size: 20),
               ),
             )
@@ -2116,6 +2155,35 @@ class _CarritoSheetState extends State<_CarritoSheet> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// "AGOTADO" o "quedan 3": lo que el mesero necesita saber antes de tocar.
+class _EtiquetaStock extends StatelessWidget {
+  final PlatoModel plato;
+  const _EtiquetaStock({required this.plato});
+
+  @override
+  Widget build(BuildContext context) {
+    final agotado = plato.agotado;
+    if (!agotado && !plato.bajoMinimo) return const SizedBox.shrink();
+    final color = agotado ? AppColors.error : AppColors.warning;
+    final unidad = plato.unidad?.trim();
+    final texto = agotado
+        ? 'AGOTADO'
+        : 'quedan ${plato.unidadesDisponibles}${unidad != null && unidad.isNotEmpty ? ' $unidad' : ''}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(texto,
+        style: TextStyle(
+          fontFamily: 'Poppins', fontSize: 10.5,
+          fontWeight: FontWeight.w700, color: color)),
     );
   }
 }

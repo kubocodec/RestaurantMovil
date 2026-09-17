@@ -181,6 +181,8 @@ class RestaurantModel {
   final DateTime? proximoPago;
   /// Facturación electrónica SRI activada (Factuplan).
   final bool facturacionElectronica;
+  /// El restaurante lleva control de inventario (lo activa el proveedor).
+  final bool controlInventario;
 
   const RestaurantModel({
     required this.restaurantId,
@@ -189,6 +191,7 @@ class RestaurantModel {
     required this.activo,
     this.proximoPago,
     this.facturacionElectronica = false,
+    this.controlInventario = false,
   });
 
   factory RestaurantModel.fromJson(Map<String, dynamic> j) => RestaurantModel(
@@ -198,6 +201,7 @@ class RestaurantModel {
     activo:       j['activo'] ?? true,
     proximoPago:  j['proximoPago'] != null ? DateTime.tryParse(j['proximoPago'].toString()) : null,
     facturacionElectronica: j['facturacionElectronica'] ?? false,
+    controlInventario: j['controlInventario'] ?? false,
   );
 }
 

@@ -574,6 +574,15 @@ class ConfiguracionRepository {
     return RestaurantModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Activa/desactiva el control de inventario del restaurante. Apagado, el
+  /// módulo no existe para ese negocio: no se descuenta stock ni se muestra
+  /// nada en la app.
+  Future<RestaurantModel> setControlInventario(String restaurantId, bool activo) async {
+    final r = await _dio.patch(
+        '/api/restaurants/$restaurantId/control-inventario?activo=$activo');
+    return RestaurantModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<List<SucursalModel>> getSucursalesByRestaurant(String restaurantId) async {
     final r = await _dio.get('/api/sucursales/restaurant/$restaurantId');
     final List data = r.data['data'] ?? [];

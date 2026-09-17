@@ -786,6 +786,52 @@ class _RestaurantRowState extends State<_RestaurantRow> {
     }
   }
 
+  /// Activar/desactivar el control de inventario. Hay negocios que no llevan
+  /// inventario: para ellos el módulo debe quedar apagado y ni siquiera
+  /// aparecer en la app.
+  Future<void> _toggleControlInventario() async {
+    final activar = !_r.controlInventario;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(activar ? 'Activar control de inventario' : 'Desactivar control de inventario',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Text(
+          activar
+              ? '"${_r.nombre}" podrá controlar stock plato por plato: se descuenta '
+                'al pedir y avisa cuando queda poco.\n\n'
+                'Solo tiene sentido si van a registrar los ingresos a diario; si no, '
+                'el sistema bloqueará ventas de algo que sí tienen.'
+              : '"${_r.nombre}" dejará de controlar stock. Los platos vuelven a '
+                'venderse sin límite y el módulo desaparece de su app. '
+                'Lo cargado no se borra. ¿Continuar?',
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(activar ? 'Activar' : 'Desactivar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.repo.setControlInventario(_r.restaurantId, activar);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(activar
+              ? 'Control de inventario activado'
+              : 'Control de inventario desactivado'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -816,6 +862,7 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                       case 'fecha':  _cambiarFechaPago();
                       case 'quitar': _quitarControlPago();
                       case 'sri':    _toggleFacturacionElectronica();
+                      case 'inventario': _toggleControlInventario();
                     }
                   },
                   itemBuilder: (_) => [
@@ -835,6 +882,12 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                             _r.facturacionElectronica
                                 ? 'Desactivar facturación electrónica'
                                 : 'Activar facturación electrónica (SRI)',
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
+                    PopupMenuItem(value: 'inventario',
+                        child: Text(
+                            _r.controlInventario
+                                ? 'Desactivar control de inventario'
+                                : 'Activar control de inventario',
                             style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
                   ],
                 ),

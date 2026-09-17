@@ -3,6 +3,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/network/api_client.dart';
+import '../../inventario/data/inventario_repository.dart';
 import '../data/configuracion_repository.dart';
 
 class MenuConfigScreen extends StatefulWidget {
@@ -135,12 +136,6 @@ class _CategoriasTabState extends State<_CategoriasTab> {
   VoidCallback get onChanged => widget.onChanged;
   final _busquedaCtrl = TextEditingController();
   String _busqueda = '';
-
-  @override
-  void dispose() {
-    _busquedaCtrl.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -927,10 +922,125 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
   final _busquedaCtrl = TextEditingController();
   String _busqueda = '';
 
+  final _inventarioRepo = InventarioRepository();
+  /// Solo los restaurantes con control de inventario activado ven el botón de
+  /// stock; para el resto, el módulo no existe.
+  bool _inventarioActivo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _verSiLlevaInventario();
+  }
+
+  Future<void> _verSiLlevaInventario() async {
+    final alertas = await _inventarioRepo.getAlertas(sucursalId);
+    if (mounted) setState(() => _inventarioActivo = alertas.habilitado);
+  }
+
   @override
   void dispose() {
     _busquedaCtrl.dispose();
     super.dispose();
+  }
+
+  /// Activa o desactiva el control de stock de un plato en esta sucursal.
+  Future<void> _dialogoStock(BuildContext context, PlatoModel p) async {
+    bool controlar = p.controlaStock;
+    final stockCtrl = TextEditingController(
+        text: p.stock == null ? '' : p.unidadesDisponibles.toString());
+    final minimoCtrl = TextEditingController(
+        text: p.stockMinimo == null ? '' : p.stockMinimo!.round().toString());
+    final unidadCtrl = TextEditingController(text: p.unidad ?? '');
+
+    final guardar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Stock de ${p.nombrePlato}',
+              style: const TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: controlar,
+                  activeColor: AppColors.success,
+                  title: const Text('Controlar stock',
+                      style: TextStyle(
+                          fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: const Text(
+                      'Se descuenta al pedir y avisa cuando queda poco',
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.5)),
+                  onChanged: (v) => setDialogState(() => controlar = v),
+                ),
+                if (controlar) ...[
+                  const SizedBox(height: 6),
+                  if (!p.controlaStock)
+                    TextField(
+                      controller: stockCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'Cuánto hay ahora', isDense: true),
+                    ),
+                  if (!p.controlaStock) const SizedBox(height: 10),
+                  TextField(
+                    controller: minimoCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Avisarme cuando queden', isDense: true),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: unidadCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Unidad (botellas, porciones…)', isDense: true),
+                  ),
+                  if (p.controlaStock) ...[
+                    const SizedBox(height: 10),
+                    const Text(
+                        'El stock se mueve desde Inventario, con ingresos y ajustes, '
+                        'para que el historial no tenga huecos.',
+                        style: TextStyle(
+                            fontFamily: 'Poppins', fontSize: 11.5,
+                            color: AppColors.textSecondary, height: 1.4)),
+                  ],
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Guardar')),
+          ],
+        ),
+      ),
+    );
+    if (guardar != true) return;
+
+    try {
+      await _inventarioRepo.configurar(
+        p.sucursalPlatoId,
+        controlar: controlar,
+        stockInicial: double.tryParse(stockCtrl.text.replaceAll(',', '.')),
+        stockMinimo: double.tryParse(minimoCtrl.text.replaceAll(',', '.')),
+        unidad: unidadCtrl.text.trim(),
+      );
+      onChanged();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ApiClient.parseError(e)),
+            backgroundColor: AppColors.error));
+      }
+    }
   }
 
   void _showEditarPrecioDialog(BuildContext context, PlatoModel p) {
@@ -1052,11 +1162,37 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
                           Text('\$${p.precio.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w700)),
                           const SizedBox(width: 6),
                           const Icon(Icons.edit_outlined, size: 12, color: AppColors.textSecondary),
+                          if (p.controlaStock) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              p.agotado
+                                  ? 'AGOTADO'
+                                  : '${p.unidadesDisponibles}${(p.unidad?.trim().isNotEmpty ?? false) ? ' ${p.unidad!.trim()}' : ' en stock'}',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: p.agotado
+                                    ? AppColors.error
+                                    : p.bajoMinimo
+                                        ? AppColors.warning
+                                        : AppColors.textSecondary),
+                            ),
+                          ],
                         ],
                       ),
                     ],
                   ),
                 ),
+                if (_inventarioActivo)
+                  IconButton(
+                    tooltip: 'Control de stock',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.inventory_2_outlined, size: 20,
+                        color: p.controlaStock
+                            ? AppColors.earth2
+                            : AppColors.textHint),
+                    onPressed: () => _dialogoStock(context, p),
+                  ),
                 Switch(
                   value: p.disponible,
                   onChanged: (v) async {

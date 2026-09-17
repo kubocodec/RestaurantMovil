@@ -7,6 +7,8 @@ import '../../../core/settings/ajustes_texto.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
+import '../../../features/inventario/data/inventario_repository.dart';
+import '../../../features/inventario/presentation/inventario_screen.dart';
 import '../../../features/mesas/data/mesas_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
@@ -60,6 +62,11 @@ class _AdminBodyState extends State<_AdminBody> {
   bool _cargandoStats = true;
   Timer? _timer;
 
+  final _inventarioRepo = InventarioRepository();
+  /// Aviso de stock. Llega vacío si el restaurante no lleva inventario, y
+  /// entonces no se muestra nada.
+  AlertasInventarioModel _alertas = const AlertasInventarioModel();
+
   @override
   void initState() {
     super.initState();
@@ -93,12 +100,15 @@ class _AdminBodyState extends State<_AdminBody> {
         _reportesRepo.getResumenDiario(sucursalId),
         _mesasRepo.getMesasBySucursal(sucursalId),
         _ordenesRepo.getOrdenesActivas(sucursalId),
+        _inventarioRepo.getAlertas(sucursalId),
       ]);
       if (!mounted) return;
       final resumen = results[0] as ResumenDiarioModel;
       final mesas = results[1] as List;
       final ordenes = results[2] as List;
+      final alertas = results[3] as AlertasInventarioModel;
       setState(() {
+        _alertas = alertas;
         _ventasHoy = resumen.totalVentas;
         _facturasHoy = resumen.totalFacturas;
         _mesasOcupadas = mesas.where((m) => m.estado == 'OCUPADA').length;
@@ -122,6 +132,7 @@ class _AdminBodyState extends State<_AdminBody> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const AvisoPagoBanner(),
+            _buildAvisoInventario(context),
             _buildHeader(context),
             const SizedBox(height: 24),
             _buildStats(context),
@@ -228,6 +239,74 @@ class _AdminBodyState extends State<_AdminBody> {
     );
   }
 
+  Future<void> _abrirInventario() async {
+    final sucursalId = user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => InventarioScreen(sucursalId: sucursalId),
+    ));
+    if (mounted) _loadStats();
+  }
+
+  /// Aviso de stock para el administrador. Aparece solo (el dashboard ya se
+  /// refresca cada 30 s) y lleva directo a Inventario para reponer.
+  Widget _buildAvisoInventario(BuildContext context) {
+    if (!_alertas.hayAlgoQueAvisar) return const SizedBox.shrink();
+    final agotados = _alertas.totalAgotados;
+    final bajos = _alertas.totalBajoMinimo;
+    final color = agotados > 0 ? AppColors.error : AppColors.warning;
+    final nombres = (agotados > 0 ? _alertas.agotados : _alertas.bajoMinimo)
+        .take(3).map((i) => i.nombrePlato).join(', ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: _abrirInventario,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            children: [
+              Icon(agotados > 0 ? Icons.error_outline : Icons.warning_amber_rounded,
+                  color: color, size: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      agotados > 0
+                          ? 'Sin stock: $agotados producto${agotados == 1 ? '' : 's'}'
+                          : 'Por agotarse: $bajos producto${bajos == 1 ? '' : 's'}',
+                      style: TextStyle(
+                          fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                          fontSize: 14, color: color),
+                    ),
+                    Text(
+                      agotados > 0 && bajos > 0
+                          ? '$nombres  ·  y $bajos por agotarse'
+                          : nombres,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 12,
+                          color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildModules(BuildContext context) {
     final modules = [
       _Module(Icons.table_restaurant_outlined, 'Mesas', 'Ver y gestionar mesas', AppColors.primary, () => _irA('/mesero/mesas')),
@@ -237,6 +316,10 @@ class _AdminBodyState extends State<_AdminBody> {
       _Module(Icons.kitchen_outlined, 'Cocina', 'Estado de platos', AppColors.cocineroColor, () => _irA('/cocina')),
       _Module(Icons.bar_chart_outlined, 'Reportes', 'Estadísticas del día', AppColors.info, () => _irA('/admin/reportes')),
       _Module(Icons.settings_outlined, 'Configuración', 'Sucursal y menú', AppColors.textSecondary, () => _irA('/admin/configuracion')),
+      // Solo para los restaurantes que llevan inventario.
+      if (_alertas.habilitado)
+        _Module(Icons.inventory_2_outlined, 'Inventario', 'Stock y reposición',
+            AppColors.earth2, _abrirInventario),
     ];
 
     return Column(
