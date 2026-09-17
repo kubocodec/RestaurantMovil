@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
@@ -54,6 +55,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// predeterminado; true = factura electrónica con datos del cliente, solo
   /// cuando el cliente la pide.
   bool _esFactura = false;
+
+  /// Propina de ESTE cobro, en dólares (monto libre, no porcentaje). La
+  /// elige el cajero en el diálogo de confirmación; el backend la suma al
+  /// total sin cobrarle IVA.
+  double _propina = 0;
 
   @override
   void initState() {
@@ -208,6 +214,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         clienteId: _esFactura ? _clienteEncontrado?.clienteId : null,
         tipoComprobante: _esFactura ? 'FACTURA' : 'NOTA_VENTA',
         detalles: detalles,
+        propina: _propina,
       );
 
       final facturaPagada = await _factRepo.registrarPago(
@@ -233,12 +240,13 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   /// Diálogo previo al cobro que muestra el método de pago y el total en
-  /// grande para que el cajero verifique antes de registrar el pago.
-  Future<bool?> _confirmarMetodoPago() {
+  /// grande para que el cajero verifique antes de registrar el pago, y donde
+  /// se pregunta por la propina (monto libre en dólares, opcional).
+  Future<bool?> _confirmarMetodoPago() async {
     final metodo = _metodoPagoSeleccionado;
     final nombreMetodo = metodo?.nombre ?? '';
     final subtotal = _subtotalSeleccionado;
-    final total = subtotal + subtotal * (_ivaPorcentaje / 100);
+    final consumo = subtotal + subtotal * (_ivaPorcentaje / 100);
     final esEfectivo = nombreMetodo.toUpperCase().contains('EFECTIVO');
     final icono = esEfectivo
         ? Icons.payments_outlined
@@ -246,58 +254,160 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             ? Icons.credit_card_outlined
             : Icons.account_balance_outlined;
     final color = esEfectivo ? AppColors.success : AppColors.primary;
-    return showDialog<bool>(
+
+    // Se conserva lo ya escrito si el cajero vuelve a abrir el diálogo
+    // después de cambiar el método de pago.
+    double propina = _propina;
+    final propinaCtrl = TextEditingController(
+      text: propina > 0 ? propina.toStringAsFixed(2) : '',
+    );
+
+    final confirmado = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar cobro'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '¿Estás seguro del método de pago seleccionado?',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: color.withValues(alpha: 0.4)),
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          void fijarPropina(double v) {
+            propinaCtrl.text = v > 0 ? v.toStringAsFixed(2) : '';
+            setDialogState(() => propina = v);
+          }
+
+          return AlertDialog(
+            title: const Text('Confirmar cobro'),
+            content: SingleChildScrollView(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icono, color: color, size: 32),
-                  const SizedBox(height: 6),
-                  Text(nombreMetodo.toUpperCase(),
+                  const Text(
+                    '¿Estás seguro del método de pago seleccionado?',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
-                      fontSize: 18, color: color)),
-                  const SizedBox(height: 2),
-                  Text('\$${_fmt.format(total)}',
-                    style: const TextStyle(
-                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
-                      fontSize: 22, color: AppColors.textPrimary)),
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: color.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(icono, color: color, size: 32),
+                        const SizedBox(height: 6),
+                        Text(nombreMetodo.toUpperCase(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                            fontSize: 18, color: color)),
+                        const SizedBox(height: 2),
+                        Text('\$${_fmt.format(consumo + propina)}',
+                          style: const TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                            fontSize: 22, color: AppColors.textPrimary)),
+                        if (propina > 0) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Consumo \$${_fmt.format(consumo)}  +  '
+                            'propina \$${_fmt.format(propina)}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Poppins', fontSize: 11,
+                              color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('¿Hay propina?',
+                      style: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary)),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: propinaCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
+                    decoration: const InputDecoration(
+                      prefixText: '\$ ',
+                      hintText: '0.00',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setDialogState(
+                      () => propina = double.tryParse(v.replaceAll(',', '.')) ?? 0),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      for (final monto in [1.0, 2.0, 5.0])
+                        ActionChip(
+                          label: Text('\$${monto.toStringAsFixed(0)}'),
+                          onPressed: () => fijarPropina(monto),
+                        ),
+                      if (propina > 0)
+                        ActionChip(
+                          label: const Text('Sin propina'),
+                          onPressed: () => fijarPropina(0),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cambiar método'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sí, cobrar'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cambiar método'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // Atajo al dedazo: $100 en vez de $10 en una mesa de $25.
+                  if (propina > consumo) {
+                    final seguro = await showDialog<bool>(
+                      context: ctx,
+                      builder: (c2) => AlertDialog(
+                        title: const Text('Revisa la propina'),
+                        content: Text(
+                          'La propina (\$${_fmt.format(propina)}) es mayor que el '
+                          'consumo (\$${_fmt.format(consumo)}). ¿Es correcto?',
+                          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c2, false),
+                            child: const Text('Corregir'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(c2, true),
+                            child: const Text('Sí, es correcta'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (seguro != true) return;
+                  }
+                  if (ctx.mounted) Navigator.pop(ctx, true);
+                },
+                child: const Text('Sí, cobrar'),
+              ),
+            ],
+          );
+        },
       ),
     );
+
+    propinaCtrl.dispose();
+    if (confirmado == true) _propina = propina > 0 ? propina : 0;
+    return confirmado;
   }
 
   Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {

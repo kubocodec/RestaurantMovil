@@ -12,6 +12,7 @@ import '../../../shared/widgets/cierre_detalle_sheet.dart';
 import '../data/reportes_repository.dart';
 import 'comparativo_sucursales_screen.dart';
 import 'ordenes_anuladas_screen.dart';
+import 'propinas_screen.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -111,6 +112,13 @@ class _ReportesScreenState extends State<ReportesScreen> {
             tooltip: 'Órdenes anuladas',
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => OrdenesAnuladasScreen(sucursalId: _sucursalId),
+            )),
+          ),
+          IconButton(
+            icon: const Icon(Icons.volunteer_activism_outlined),
+            tooltip: 'Propinas',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => PropinasScreen(sucursalId: _sucursalId),
             )),
           ),
           IconButton(

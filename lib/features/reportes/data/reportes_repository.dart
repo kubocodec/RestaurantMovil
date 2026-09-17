@@ -167,6 +167,53 @@ class ReporteOrdenesAnuladasModel {
       );
 }
 
+/// Lo recaudado en propinas por un mesero en el período.
+class PropinaMeseroModel {
+  final String usuarioId;
+  final String mesero;
+  final int comprobantes;
+  final double total;
+
+  const PropinaMeseroModel({
+    required this.usuarioId,
+    required this.mesero,
+    required this.comprobantes,
+    required this.total,
+  });
+
+  factory PropinaMeseroModel.fromJson(Map<String, dynamic> j) => PropinaMeseroModel(
+        usuarioId:    j['usuarioId']?.toString() ?? '',
+        mesero:       j['mesero']?.toString() ?? '',
+        comprobantes: (j['comprobantes'] as num?)?.toInt() ?? 0,
+        total:        ReporteCajasDiaModel._d(j['total']),
+      );
+}
+
+/// Propinas cobradas en el período. El backend manda también el desglose por
+/// mesero; hoy la pantalla muestra solo el total, pero el dato ya viene.
+class ReportePropinasModel {
+  final String nombreSucursal;
+  final double totalPropinas;
+  final int comprobantesConPropina;
+  final List<PropinaMeseroModel> porMesero;
+
+  const ReportePropinasModel({
+    required this.nombreSucursal,
+    required this.totalPropinas,
+    required this.comprobantesConPropina,
+    required this.porMesero,
+  });
+
+  factory ReportePropinasModel.fromJson(Map<String, dynamic> j) => ReportePropinasModel(
+        nombreSucursal:         j['nombreSucursal']?.toString() ?? '',
+        totalPropinas:          ReporteCajasDiaModel._d(j['totalPropinas']),
+        comprobantesConPropina: (j['comprobantesConPropina'] as num?)?.toInt() ?? 0,
+        porMesero: ((j['porMesero'] as List?) ?? [])
+            .map((m) => PropinaMeseroModel.fromJson(m))
+            .toList(),
+      );
+}
+
 class ReportesRepository {
   final _dio = ApiClient.instance.dio;
 
@@ -218,5 +265,20 @@ class ReportesRepository {
       'hasta': _fechaParam(hasta),
     });
     return ReporteVentasSucursalesModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  // Propinas cobradas en un período (solo admin): total a repartir entre los
+  // meseros, con el desglose por mesero incluido en la respuesta.
+  Future<ReportePropinasModel> getPropinas(
+    String sucursalId, {
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    final r = await _dio.get('/api/reportes/propinas', queryParameters: {
+      'sucursalId': sucursalId,
+      'desde': _fechaParam(desde),
+      'hasta': _fechaParam(hasta),
+    });
+    return ReportePropinasModel.fromJson(r.data['data'] ?? r.data);
   }
 }
