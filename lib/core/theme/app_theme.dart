@@ -56,7 +56,7 @@ class AppTheme {
       // TabBar: siempre va dentro del AppBar (fondo oscuro), por eso las
       // pestañas son blancas; sin esto Material 3 usa marrón sobre marrón
       // y los títulos de las secciones apenas se ven.
-      tabBarTheme: const TabBarTheme(
+      tabBarTheme: const TabBarThemeData(
         labelColor: Colors.white,
         unselectedLabelColor: Colors.white60,
         indicatorColor: Colors.white,
@@ -75,7 +75,7 @@ class AppTheme {
       ),
 
       // Diálogos: fondo blanco y títulos oscuros bien contrastados
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: AppColors.cardBackground,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -102,7 +102,7 @@ class AppTheme {
       ),
 
       // Cards
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.cardBackground,
         elevation: 2,
         shadowColor: Colors.black12,

@@ -148,14 +148,41 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
   int _cantidadDe(String ordenDetalleId) => _cantidadesElegidas[ordenDetalleId] ?? 0;
 
-  double get _subtotalSeleccionado {
-    final orden = _orden;
-    if (orden == null) return 0;
-    return orden.detallesNoFacturados
-        .fold(0.0, (sum, d) => sum + d.precioUnitario * _cantidadDe(d.ordenDetalleId));
-  }
-
   bool get _haySeleccion => _cantidadesElegidas.values.any((c) => c > 0);
+
+  /// Desglose de lo seleccionado, agrupado por tarifa **igual que el backend**:
+  /// cada línea lleva la tarifa de su plato (o la predeterminada del negocio si
+  /// no tiene propia) y el IVA se redondea por grupo, no línea por línea.
+  ///
+  /// Antes esto era `subtotal * (una sola tasa)`, y en un negocio con la comida
+  /// al 0% y las bebidas embotelladas al 15% el cajero veía —y le decía al
+  /// cliente— un total sin el IVA de las bebidas, mientras se cobraba el
+  /// correcto. El número en pantalla tiene que ser el del comprobante.
+  _DesgloseCobro get _desglose {
+    final orden = _orden;
+    if (orden == null) return const _DesgloseCobro(0, 0, {});
+
+    // Clave en centésimas de punto para no comparar doubles entre sí.
+    final basePorTarifa = <int, double>{};
+    for (final d in orden.detallesNoFacturados) {
+      final cantidad = _cantidadDe(d.ordenDetalleId);
+      if (cantidad <= 0) continue;
+      final tarifa = d.ivaPorcentaje ?? _ivaPorcentaje;
+      final clave = (tarifa * 100).round();
+      basePorTarifa[clave] = (basePorTarifa[clave] ?? 0) + d.precioUnitario * cantidad;
+    }
+
+    double subtotal = 0;
+    double iva = 0;
+    final bases = <double, double>{};
+    basePorTarifa.forEach((clave, base) {
+      final tarifa = clave / 100;
+      subtotal += base;
+      bases[tarifa] = base;
+      if (tarifa > 0) iva += ((base * tarifa / 100) * 100).round() / 100;
+    });
+    return _DesgloseCobro(subtotal, iva, bases);
+  }
 
   bool get _puedeEmitir =>
       _haySeleccion &&
@@ -247,8 +274,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   Future<bool?> _confirmarMetodoPago() async {
     final metodo = _metodoPagoSeleccionado;
     final nombreMetodo = metodo?.nombre ?? '';
-    final subtotal = _subtotalSeleccionado;
-    final consumo = subtotal + subtotal * (_ivaPorcentaje / 100);
+    final consumo = _desglose.total;
     final esEfectivo = nombreMetodo.toUpperCase().contains('EFECTIVO');
     final icono = esEfectivo
         ? Icons.payments_outlined
@@ -847,13 +873,15 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     );
   }
 
+  static String _pct(double v) =>
+      v == v.truncateToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+
   Widget _buildResumen() {
-    final subtotal = _subtotalSeleccionado;
-    final iva   = subtotal * (_ivaPorcentaje / 100);
-    final total = subtotal + iva;
-    final pctLabel = _ivaPorcentaje == _ivaPorcentaje.truncateToDouble()
-        ? _ivaPorcentaje.toStringAsFixed(0)
-        : _ivaPorcentaje.toStringAsFixed(1);
+    final d = _desglose;
+    // Con tarifas mixtas se muestran las dos bases por separado, como en el
+    // ticket: el cliente tiene que poder ver qué parte pagó IVA.
+    final tarifas = d.basePorTarifa.keys.toList()..sort();
+    final mixta = tarifas.length > 1;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -863,11 +891,22 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       ),
       child: Column(
         children: [
-          _ResumenRow(label: 'Subtotal', value: '\$${_fmt.format(subtotal)}'),
+          _ResumenRow(label: 'Subtotal', value: '\$${_fmt.format(d.subtotal)}'),
+          if (mixta)
+            ...tarifas.map((t) => Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: _ResumenRow(
+                    label: 'Subtotal ${_pct(t)}%',
+                    value: '\$${_fmt.format(d.basePorTarifa[t]!)}',
+                  ),
+                )),
           const SizedBox(height: 6),
-          _ResumenRow(label: 'IVA ($pctLabel%)', value: '\$${_fmt.format(iva)}'),
+          _ResumenRow(
+            label: mixta ? 'IVA' : 'IVA (${_pct(tarifas.isEmpty ? _ivaPorcentaje : tarifas.first)}%)',
+            value: '\$${_fmt.format(d.iva)}',
+          ),
           const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider(color: AppColors.divider)),
-          _ResumenRow(label: 'TOTAL', value: '\$${_fmt.format(total)}', isBold: true, color: AppColors.primary),
+          _ResumenRow(label: 'TOTAL', value: '\$${_fmt.format(d.total)}', isBold: true, color: AppColors.primary),
         ],
       ),
     );
@@ -1154,4 +1193,18 @@ class _ResumenRow extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Lo que se va a cobrar, ya separado por tarifa de IVA.
+///
+/// [basePorTarifa] va de porcentaje a base imponible: `{0.0: 42.50, 15.0: 3.00}`
+/// es una mesa de almuerzos al 0% con una cerveza gravada.
+class _DesgloseCobro {
+  final double subtotal;
+  final double iva;
+  final Map<double, double> basePorTarifa;
+
+  const _DesgloseCobro(this.subtotal, this.iva, this.basePorTarifa);
+
+  double get total => subtotal + iva;
 }

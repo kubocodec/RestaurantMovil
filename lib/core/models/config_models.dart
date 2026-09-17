@@ -6,6 +6,9 @@ class TasaIvaModel {
   final String vigentDesde;
   final String? vigentHasta;
   final bool activo;
+  /// Tarifa que heredan los platos sin una propia (0% en un RIMPE, 15% en
+  /// régimen general). Solo una del negocio puede estarlo.
+  final bool predeterminada;
 
   const TasaIvaModel({
     required this.tasaIvaId,
@@ -15,6 +18,7 @@ class TasaIvaModel {
     required this.vigentDesde,
     this.vigentHasta,
     required this.activo,
+    this.predeterminada = false,
   });
 
   factory TasaIvaModel.fromJson(Map<String, dynamic> j) => TasaIvaModel(
@@ -25,6 +29,7 @@ class TasaIvaModel {
     vigentDesde: j['vigentDesde']?.toString() ?? '',
     vigentHasta: j['vigentHasta']?.toString(),
     activo:      j['activo'] ?? true,
+    predeterminada: j['predeterminada'] ?? false,
   );
 
   static double _toDouble(dynamic v) {
