@@ -10,9 +10,22 @@ repo `BackendRestaurant`, que se despliega aparte.
 - **Un push a `main` aquí no despliega nada**: el APK se compila y distribuye a mano.
   Por eso los clientes suelen andar con una versión más vieja que el servidor, y todo
   cambio de backend debe ser compatible hacia atrás.
-- **`flutter analyze` antes de cada push.** Hay ~109 avisos `info` preexistentes
-  (`withOpacity`, `unnecessary_const`); lo que no puede haber es `error` ni `warning`
-  nuevos en los archivos tocados.
+- **`flutter analyze` antes de cada push.** Hay ~119 avisos `info` preexistentes
+  (`withOpacity`, `unnecessary_const`, llaves de `if`); lo que no puede haber es
+  `error` ni `warning` nuevos en los archivos tocados.
+- **El SDK es Flutter 3.44 (Dart 3.12), en `~/flutter`, y no está en el PATH**: hay
+  que llamarlo por ruta (`/c/Users/KuboC/flutter/bin/flutter`). Si al subir de versión
+  `flutter pub get` deja de resolver, **no compila nada y los errores mienten**: con
+  `pub get` caído, `package_config.json` queda a medio generar y aparecen cosas como
+  `Couldn't resolve the package 'print_bluetooth_thermal'`, `Type 'BluetoothInfo' not
+  found` y, por arrastre al inferir `Object?`, errores de `.name` y `.macAdress` en
+  `impresoras_config_screen.dart`. **Arregla primero `pub get`; esos errores se van
+  solos.** Pasó con `intl ^0.19.0` contra el `intl 0.20.2` que pinea
+  `flutter_localizations`.
+- Flutter 3.32 renombró `TabBarTheme`, `DialogTheme` y `CardTheme` a `...ThemeData`
+  cuando van dentro de `ThemeData` (`core/theme/app_theme.dart`).
+- Gradle 8.10.2, AGP 8.7.0 y Kotlin 2.0.0 están por debajo de lo que Flutter va a
+  exigir; hoy solo avisa, en la próxima subida frena el build.
 
 ## Convenciones
 
@@ -38,6 +51,32 @@ repo `BackendRestaurant`, que se despliega aparte.
   chips de la app fijan `fontWeight: w600` y color explícito.
 - Preferir `Wrap` sobre `Row` cuando hay varios elementos en línea: con el texto en
   "Muy grande" bajan de línea en vez de desbordarse.
+
+## El superadmin configura restaurantes que NO son su tenant
+
+`ConfiguracionScreen` recibe `overrideSucursalId` / `overrideRestaurantId` /
+`overrideTenantId` cuando se entra desde el panel de superadmin. **Cualquier pantalla
+hija tiene que recibir esos ids por parámetro**, nunca sacarlos del `AuthBloc`: el
+usuario logueado es el proveedor, no el restaurante que se está configurando.
+
+Ya costó un bug: el selector de tarifa de IVA en `menu_config_screen.dart` leía
+`context.read<AuthBloc>().state.user.tenantId` y pedía las tasas del tenant
+equivocado, así que **no mostraba ninguna opción** por más que estuvieran activas — y
+con un usuario sin `tenantId` el diálogo ni siquiera se abría. Se ve igual que "no
+hay datos", que es lo que lo hace difícil de encontrar.
+
+## IVA: el total en pantalla tiene que ser el del comprobante
+
+El resumen del cobro **no puede calcular `subtotal × una sola tasa`**. Cada línea
+lleva la tarifa de su plato (`ivaPorcentaje` del detalle de la orden; `null` = hereda
+la predeterminada del negocio), y el IVA se agrupa y redondea **por tarifa**, igual
+que `FacturaService`. Con la comida al 0% y las bebidas al 15%, calcularlo con una
+sola tasa le muestra al cajero un total sin el IVA de las bebidas mientras se cobra
+el correcto (el cobro está bien: registra `factura.total`, el del servidor).
+
+En Tasas de IVA, la **estrella** marca la predeterminada y es una decisión aparte del
+switch de activo: el negocio mixto necesita las dos tarifas activas y solo una
+predeterminada.
 
 ## Trampa que ya causó una pantalla roja
 
