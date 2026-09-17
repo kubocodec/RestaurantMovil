@@ -277,17 +277,19 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             setDialogState(() => propina = v);
           }
 
-          Widget botonMonto(int monto) => OutlinedButton(
-                onPressed: () => fijarPropina(monto.toDouble()),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  foregroundColor: AppColors.primary,
-                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
-                ),
-                child: Text('\$$monto',
-                    style: const TextStyle(
-                        fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700)),
-              );
+          Widget chipMonto(int monto) {
+            final activo = propina == monto.toDouble();
+            return ChoiceChip(
+              label: Text('\$$monto'),
+              selected: activo,
+              // Volver a tocarlo lo quita: no hace falta buscar otro botón.
+              onSelected: (_) => fijarPropina(activo ? 0 : monto.toDouble()),
+              selectedColor: AppColors.primary,
+              labelStyle: TextStyle(
+                fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13,
+                color: activo ? Colors.white : AppColors.textPrimary),
+            );
+          }
 
           return AlertDialog(
             title: const Text('Confirmar cobro'),
@@ -337,14 +339,12 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text('¿Hay propina?',
                       style: TextStyle(
-                        fontFamily: 'Poppins', fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary)),
+                        fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -354,39 +354,39 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                     ],
                     style: const TextStyle(
-                      fontFamily: 'Poppins', fontSize: 20, fontWeight: FontWeight.w700),
+                      fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700),
                     decoration: const InputDecoration(
                       prefixText: '\$ ',
                       prefixStyle: TextStyle(
-                        fontFamily: 'Poppins', fontSize: 20,
+                        fontFamily: 'Poppins', fontSize: 16,
                         fontWeight: FontWeight.w700, color: AppColors.textSecondary),
                       hintText: '0.00',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
                     onChanged: (v) => setDialogState(
                       () => propina = double.tryParse(v.replaceAll(',', '.')) ?? 0),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
+                  const SizedBox(height: 8),
+                  // Wrap y no Row: con el texto en "Muy grande" los montos
+                  // bajan a otra línea en vez de desbordarse.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
-                      Expanded(child: botonMonto(1)),
-                      const SizedBox(width: 8),
-                      Expanded(child: botonMonto(2)),
-                      const SizedBox(width: 8),
-                      Expanded(child: botonMonto(5)),
+                      chipMonto(1),
+                      chipMonto(2),
+                      chipMonto(5),
+                      if (propina > 0)
+                        ChoiceChip(
+                          label: const Text('Quitar'),
+                          selected: false,
+                          onSelected: (_) => fijarPropina(0),
+                          labelStyle: const TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+                            fontSize: 13, color: AppColors.textSecondary),
+                        ),
                     ],
                   ),
-                  if (propina > 0)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () => fijarPropina(0),
-                        icon: const Icon(Icons.close, size: 16),
-                        label: const Text('Quitar propina',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
-                      ),
-                    ),
                 ],
               ),
             ),
