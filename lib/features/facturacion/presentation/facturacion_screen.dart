@@ -45,6 +45,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   String? _selectedMetodoPagoId;
   final _cedulaCtrl = TextEditingController();
   final _refCtrl    = TextEditingController();
+  final _propinaCtrl = TextEditingController();
   ClienteModel? _clienteEncontrado;
 
   /// Cuentas divididas: cuántas unidades de cada ítem entran en ESTE cobro
@@ -71,6 +72,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   void dispose() {
     _cedulaCtrl.dispose();
     _refCtrl.dispose();
+    _propinaCtrl.dispose();
     super.dispose();
   }
 
@@ -258,18 +260,34 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     // Se conserva lo ya escrito si el cajero vuelve a abrir el diálogo
     // después de cambiar el método de pago.
     double propina = _propina;
-    final propinaCtrl = TextEditingController(
-      text: propina > 0 ? propina.toStringAsFixed(2) : '',
-    );
+    _propinaCtrl.text = propina > 0 ? propina.toStringAsFixed(2) : '';
 
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           void fijarPropina(double v) {
-            propinaCtrl.text = v > 0 ? v.toStringAsFixed(2) : '';
+            // Con el cursor al final: asignar .text a secas lo manda al inicio
+            // y el siguiente dígito quedaría escrito al revés.
+            final texto = v > 0 ? v.toStringAsFixed(2) : '';
+            _propinaCtrl.value = TextEditingValue(
+              text: texto,
+              selection: TextSelection.collapsed(offset: texto.length),
+            );
             setDialogState(() => propina = v);
           }
+
+          Widget botonMonto(int monto) => OutlinedButton(
+                onPressed: () => fijarPropina(monto.toDouble()),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
+                ),
+                child: Text('\$$monto',
+                    style: const TextStyle(
+                        fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700)),
+              );
 
           return AlertDialog(
             title: const Text('Confirmar cobro'),
@@ -319,47 +337,56 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text('¿Hay propina?',
                       style: TextStyle(
-                        fontFamily: 'Poppins', fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary)),
+                        fontFamily: 'Poppins', fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary)),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   TextField(
-                    controller: propinaCtrl,
+                    controller: _propinaCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                     ],
+                    style: const TextStyle(
+                      fontFamily: 'Poppins', fontSize: 20, fontWeight: FontWeight.w700),
                     decoration: const InputDecoration(
                       prefixText: '\$ ',
+                      prefixStyle: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 20,
+                        fontWeight: FontWeight.w700, color: AppColors.textSecondary),
                       hintText: '0.00',
-                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (v) => setDialogState(
                       () => propina = double.tryParse(v.replaceAll(',', '.')) ?? 0),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
+                  const SizedBox(height: 10),
+                  Row(
                     children: [
-                      for (final monto in [1.0, 2.0, 5.0])
-                        ActionChip(
-                          label: Text('\$${monto.toStringAsFixed(0)}'),
-                          onPressed: () => fijarPropina(monto),
-                        ),
-                      if (propina > 0)
-                        ActionChip(
-                          label: const Text('Sin propina'),
-                          onPressed: () => fijarPropina(0),
-                        ),
+                      Expanded(child: botonMonto(1)),
+                      const SizedBox(width: 8),
+                      Expanded(child: botonMonto(2)),
+                      const SizedBox(width: 8),
+                      Expanded(child: botonMonto(5)),
                     ],
                   ),
+                  if (propina > 0)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => fijarPropina(0),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Quitar propina',
+                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -405,7 +432,6 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       ),
     );
 
-    propinaCtrl.dispose();
     if (confirmado == true) _propina = propina > 0 ? propina : 0;
     return confirmado;
   }
