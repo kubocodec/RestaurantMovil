@@ -166,6 +166,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
               onTap: () => _goTo(MenuConfigScreen(
                 sucursalId:   _sucursalId,
                 restaurantId: _restaurantId,
+                tenantId:     _tenantId,
               )),
             ),
             _buildItem(

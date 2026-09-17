@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../inventario/data/inventario_repository.dart';
-import '../../auth/bloc/auth_bloc.dart';
-import '../../auth/bloc/auth_state.dart';
 import '../data/configuracion_repository.dart';
 
 class MenuConfigScreen extends StatefulWidget {
   final String sucursalId;
   final String restaurantId;
+  /// Tenant del restaurante que se está configurando. Viaja explícito porque
+  /// el superadmin configura restaurantes que NO son su propio tenant: sacarlo
+  /// del usuario logueado devolvía las tarifas equivocadas (o ninguna).
+  final String tenantId;
 
   const MenuConfigScreen({
     super.key,
     required this.sucursalId,
     required this.restaurantId,
+    required this.tenantId,
   });
 
   @override
@@ -90,6 +92,7 @@ class _MenuConfigScreenState extends State<MenuConfigScreen> with SingleTickerPr
             repo:         _repo,
             restaurantId: widget.restaurantId,
             sucursalId:   widget.sucursalId,
+            tenantId:     widget.tenantId,
             // Plato asignado en esta sucursal (precio incluido), por platoId
             asignados:    {for (final p in _platosSucursal) p.platoId: p},
             onChanged:    () { _loadCategorias(); _loadPlatosSucursal(); },
@@ -116,6 +119,7 @@ class _CategoriasTab extends StatefulWidget {
   final ConfiguracionRepository repo;
   final String restaurantId;
   final String sucursalId;
+  final String tenantId;
   final Map<String, PlatoModel> asignados;
   final VoidCallback onChanged;
 
@@ -125,6 +129,7 @@ class _CategoriasTab extends StatefulWidget {
     required this.repo,
     required this.restaurantId,
     required this.sucursalId,
+    required this.tenantId,
     required this.asignados,
     required this.onChanged,
   });
@@ -177,6 +182,7 @@ class _CategoriasTabState extends State<_CategoriasTab> {
                             categoria:  visibles[i],
                             repo:       repo,
                             sucursalId: widget.sucursalId,
+                            tenantId:   widget.tenantId,
                             asignados:  widget.asignados,
                             onChanged:  widget.onChanged,
                           ),
@@ -245,6 +251,7 @@ class _CategoriaExpansion extends StatefulWidget {
   final CategoriaModel categoria;
   final ConfiguracionRepository repo;
   final String sucursalId;
+  final String tenantId;
   final Map<String, PlatoModel> asignados;
   final VoidCallback onChanged;
 
@@ -252,6 +259,7 @@ class _CategoriaExpansion extends StatefulWidget {
     required this.categoria,
     required this.repo,
     required this.sucursalId,
+    required this.tenantId,
     required this.asignados,
     required this.onChanged,
   });
@@ -348,6 +356,7 @@ class _CategoriaExpansionState extends State<_CategoriaExpansion> {
         sub:        sub,
         repo:       widget.repo,
         sucursalId: widget.sucursalId,
+        tenantId:   widget.tenantId,
         asignados:  widget.asignados,
         onChanged:  () { _loadSubs(); widget.onChanged(); },
       )).toList(),
@@ -441,6 +450,7 @@ class _SubcategoriaRow extends StatefulWidget {
   final SubcategoriaModel sub;
   final ConfiguracionRepository repo;
   final String sucursalId;
+  final String tenantId;
   final Map<String, PlatoModel> asignados;
   final VoidCallback onChanged;
 
@@ -448,6 +458,7 @@ class _SubcategoriaRow extends StatefulWidget {
     required this.sub,
     required this.repo,
     required this.sucursalId,
+    required this.tenantId,
     required this.asignados,
     required this.onChanged,
   });
@@ -477,6 +488,7 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
     final sel = await elegirTasaIva(
       context,
       widget.repo,
+      tenantId: widget.tenantId,
       titulo: 'IVA de ${widget.sub.nombre}',
       ayuda: 'Se aplica a todos los platos de esta subcategoría. '
              'Después puedes cambiar los que sean excepción, uno por uno.',
@@ -506,6 +518,7 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
     final sel = await elegirTasaIva(
       context,
       widget.repo,
+      tenantId: widget.tenantId,
       titulo: 'IVA de ${plato.nombre}',
       ayuda: 'Tarifa de este plato en particular.',
       tasaActualId: plato.tasaIvaId,
@@ -1318,12 +1331,11 @@ class SeleccionTasaIva {
 Future<SeleccionTasaIva> elegirTasaIva(
   BuildContext context,
   ConfiguracionRepository repo, {
+  required String tenantId,
   required String titulo,
   required String ayuda,
   String? tasaActualId,
 }) async {
-  final estado = context.read<AuthBloc>().state;
-  final tenantId = estado is AuthAuthenticated ? estado.user.tenantId : '';
   if (tenantId.isEmpty) return const SeleccionTasaIva(false, null);
 
   List<TasaIvaModel> tasas;
@@ -1337,6 +1349,8 @@ Future<SeleccionTasaIva> elegirTasaIva(
     return const SeleccionTasaIva(false, null);
   }
   if (!context.mounted) return const SeleccionTasaIva(false, null);
+
+  final predeterminada = tasas.where((t) => t.predeterminada).firstOrNull;
 
   return await showDialog<SeleccionTasaIva>(
         context: context,
@@ -1364,8 +1378,15 @@ Future<SeleccionTasaIva> elegirTasaIva(
                       color: AppColors.primary, size: 20),
                   title: const Text('Hereda la del negocio',
                       style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
-                  subtitle: const Text('Usa la tarifa vigente, como hasta ahora',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11)),
+                  // Decir cuál es evita marcar un plato "por si acaso" sin
+                  // saber a qué tarifa iba a caer si lo dejabas heredando.
+                  subtitle: Text(
+                      predeterminada == null
+                          ? 'Ninguna tarifa está marcada como predeterminada'
+                          : 'Hoy es ${predeterminada.nombre} · '
+                            '${predeterminada.porcentaje.toStringAsFixed(
+                                predeterminada.porcentaje % 1 == 0 ? 0 : 2)}%',
+                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 11)),
                   onTap: () => Navigator.pop(ctx, const SeleccionTasaIva(true, null)),
                 ),
                 ...tasas.where((t) => t.activo).map((t) => ListTile(
