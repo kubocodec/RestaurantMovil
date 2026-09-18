@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/network/api_client.dart';
 import '../data/inventario_repository.dart';
+import 'compras_tab.dart';
+import 'insumos_tab.dart';
+import 'inventario_dialogos.dart';
+import 'receta_screen.dart';
 
-/// Inventario de la sucursal: lo que tiene control de stock, con lo agotado y
-/// lo que está por agotarse arriba de todo.
+/// Inventario de la sucursal, en dos niveles que conviven:
+/// - Insumos: lo que se descuenta por receta (gramos de carne, ml de aceite),
+///   con sus compras y proveedores.
+/// - Platos por unidades: cervezas, botellas, porciones armadas.
 ///
 /// Solo aparece si el restaurante tiene el control de inventario activado; los
 /// negocios que no llevan inventario nunca ven esta pantalla.
@@ -20,6 +25,57 @@ class InventarioScreen extends StatefulWidget {
 
 class _InventarioScreenState extends State<InventarioScreen> {
   final _repo = InventarioRepository();
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Inventario'),
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(text: 'Insumos'),
+              Tab(text: 'Platos'),
+              Tab(text: 'Compras'),
+              Tab(text: 'Proveedores'),
+            ],
+          ),
+        ),
+        body: SafeArea(
+          child: TabBarView(
+            children: [
+              InsumosTab(sucursalId: widget.sucursalId, repo: _repo),
+              _PlatosTab(sucursalId: widget.sucursalId, repo: _repo),
+              ComprasTab(sucursalId: widget.sucursalId, repo: _repo),
+              ProveedoresTab(sucursalId: widget.sucursalId, repo: _repo),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Platos con control: los que se cuentan por unidades (con ingreso y ajuste)
+/// y, aparte, los que descuentan insumos por receta.
+class _PlatosTab extends StatefulWidget {
+  final String sucursalId;
+  final InventarioRepository repo;
+  const _PlatosTab({required this.sucursalId, required this.repo});
+
+  @override
+  State<_PlatosTab> createState() => _PlatosTabState();
+}
+
+class _PlatosTabState extends State<_PlatosTab> with AutomaticKeepAliveClientMixin {
+  InventarioRepository get _repo => widget.repo;
+
+  @override
+  bool get wantKeepAlive => true;
 
   List<InventarioItemModel> _items = [];
   bool _loading = true;
@@ -43,25 +99,21 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  List<InventarioItemModel> get _agotados => _items.where((i) => i.agotado).toList();
-  List<InventarioItemModel> get _bajos => _items.where((i) => i.bajoMinimo).toList();
+  List<InventarioItemModel> get _porUnidades =>
+      _items.where((i) => i.modoInventario == 'UNIDADES').toList();
+  List<InventarioItemModel> get _conReceta =>
+      _items.where((i) => i.modoInventario == 'RECETA').toList();
+  List<InventarioItemModel> get _agotados => _porUnidades.where((i) => i.agotado).toList();
+  List<InventarioItemModel> get _bajos => _porUnidades.where((i) => i.bajoMinimo).toList();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Inventario'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
-      ),
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-            : _error != null
-                ? _buildError()
-                : _buildBody(),
-      ),
-    );
+    super.build(context);
+    return _loading
+        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+        : _error != null
+            ? _buildError()
+            : _buildBody();
   }
 
   Widget _buildBody() {
@@ -78,8 +130,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
               padding: EdgeInsets.symmetric(horizontal: 40),
               child: Text(
                 'Todavía no hay platos con control de stock.\n\n'
-                'Actívalo plato por plato desde Configuración → Menú, '
-                'en los que necesites contar (cervezas, botellas, porciones armadas).',
+                'Desde Configuración → Menú, en cada plato: cuéntalo por unidades '
+                '(cervezas, botellas, porciones armadas) o arma su receta para que '
+                'descuente insumos.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, height: 1.5),
               ),
@@ -98,7 +151,18 @@ class _InventarioScreenState extends State<InventarioScreen> {
             _buildResumen(),
             const SizedBox(height: 16),
           ],
-          ..._items.map(_buildItem),
+          ..._porUnidades.map(_buildItem),
+          if (_conReceta.isNotEmpty) ...[
+            if (_porUnidades.isNotEmpty) const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('Descuentan insumos por receta',
+                  style: TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                      fontSize: 13, color: AppColors.textSecondary)),
+            ),
+            ..._conReceta.map(_buildReceta),
+          ],
         ],
       ),
     );
@@ -227,6 +291,35 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
+  Widget _buildReceta(InventarioItemModel item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.menu_book_outlined, color: AppColors.earth2),
+        title: Text(item.nombrePlato,
+            style: const TextStyle(
+                fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(item.categoria,
+            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11.5)),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+        onTap: () async {
+          await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => RecetaScreen(
+              sucursalId: widget.sucursalId,
+              platoId: item.platoId,
+              nombrePlato: item.nombrePlato,
+            ),
+          ));
+          if (mounted) _load();
+        },
+      ),
+    );
+  }
+
   // ------------------------------------------------------------------
 
   Future<void> _dialogoIngreso(InventarioItemModel item) async {
@@ -343,7 +436,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
       backgroundColor: AppColors.background,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _HistorialSheet(item: item, repo: _repo),
+      builder: (_) => HistorialSheet(
+        titulo: item.nombrePlato,
+        cargar: () => _repo.getMovimientos(item.sucursalPlatoId),
+        formatear: (c) => c == c.roundToDouble() ? c.round().toString() : c.toStringAsFixed(3),
+      ),
     );
   }
 
@@ -377,156 +474,4 @@ class _NumeroYNota {
   final double valor;
   final String nota;
   const _NumeroYNota(this.valor, this.nota);
-}
-
-/// Historial de un plato: de dónde salió y a dónde fue cada unidad.
-class _HistorialSheet extends StatefulWidget {
-  final InventarioItemModel item;
-  final InventarioRepository repo;
-  const _HistorialSheet({required this.item, required this.repo});
-
-  @override
-  State<_HistorialSheet> createState() => _HistorialSheetState();
-}
-
-class _HistorialSheetState extends State<_HistorialSheet> {
-  List<MovimientoInventarioModel> _movs = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final movs = await widget.repo.getMovimientos(widget.item.sucursalPlatoId);
-      if (!mounted) return;
-      setState(() { _movs = movs; _loading = false; });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { _error = ApiClient.parseError(e); _loading = false; });
-    }
-  }
-
-  ({String etiqueta, Color color, IconData icono}) _estilo(String tipo) {
-    switch (tipo) {
-      case 'INGRESO':   return (etiqueta: 'Ingreso',   color: AppColors.success, icono: Icons.add);
-      case 'VENTA':     return (etiqueta: 'Venta',     color: AppColors.primary, icono: Icons.point_of_sale_outlined);
-      case 'ANULACION': return (etiqueta: 'Anulación', color: AppColors.info,    icono: Icons.undo);
-      default:          return (etiqueta: 'Ajuste',    color: AppColors.warning, icono: Icons.fact_check_outlined);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.75,
-      builder: (_, scrollController) => Column(
-        children: [
-          const SizedBox(height: 10),
-          Container(width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.divider, borderRadius: BorderRadius.circular(2))),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text('Historial · ${widget.item.nombrePlato}',
-                style: const TextStyle(
-                    fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                : _error != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(_error!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  fontFamily: 'Poppins', color: AppColors.textSecondary)),
-                        ),
-                      )
-                    : _movs.isEmpty
-                        ? const Center(
-                            child: Text('Todavía no hay movimientos',
-                                style: TextStyle(
-                                    fontFamily: 'Poppins', color: AppColors.textSecondary)))
-                        : ListView.builder(
-                            controller: scrollController,
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                            itemCount: _movs.length,
-                            itemBuilder: (_, i) {
-                              final m = _movs[i];
-                              final e = _estilo(m.tipo);
-                              final signo = m.cantidad > 0 ? '+' : '';
-                              final cant = m.cantidad == m.cantidad.roundToDouble()
-                                  ? m.cantidad.round().toString()
-                                  : m.cantidad.toStringAsFixed(3);
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: AppColors.cardBackground,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(e.icono, color: e.color, size: 20),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            m.numeroOrden != null
-                                                ? '${e.etiqueta} · orden #${m.numeroOrden}'
-                                                : e.etiqueta,
-                                            style: const TextStyle(
-                                                fontFamily: 'Poppins',
-                                                fontWeight: FontWeight.w600, fontSize: 13),
-                                          ),
-                                          Text(
-                                            '${DateFormat('d MMM · HH:mm', 'es').format(m.fecha.toLocal())}'
-                                            '${m.usuario != null ? ' · ${m.usuario}' : ''}',
-                                            style: const TextStyle(
-                                                fontFamily: 'Poppins', fontSize: 11,
-                                                color: AppColors.textSecondary),
-                                          ),
-                                          if (m.nota != null && m.nota!.isNotEmpty)
-                                            Text(m.nota!,
-                                                style: const TextStyle(
-                                                    fontFamily: 'Poppins', fontSize: 11,
-                                                    fontStyle: FontStyle.italic,
-                                                    color: AppColors.textSecondary)),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text('$signo$cant',
-                                            style: TextStyle(
-                                                fontFamily: 'Poppins',
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 15, color: e.color)),
-                                        Text('queda ${m.stockResultante == m.stockResultante.roundToDouble() ? m.stockResultante.round() : m.stockResultante}',
-                                            style: const TextStyle(
-                                                fontFamily: 'Poppins', fontSize: 10.5,
-                                                color: AppColors.textSecondary)),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-          ),
-        ],
-      ),
-    );
-  }
 }

@@ -100,9 +100,14 @@ absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepositor
 - `features/mesas/presentation/orden_screen.dart` — toma de pedidos y menú del mesero
   (etiquetas de stock: `AGOTADO`, `quedan 3`).
 - `features/facturacion/` — cobro, propina, comprobantes e impresión del ticket.
-- `features/inventario/` — stock, ingresos, ajustes e historial.
+- `features/inventario/` — inventario en pestañas: **Insumos** (stock, conteo, merma,
+  historial), **Platos** (por unidades, con ingreso y ajuste; y los que van por receta),
+  **Compras** y **Proveedores**. `receta_screen.dart` edita la receta de un plato y
+  muestra su costo y margen. `data/unidades.dart` convierte kg/lb/L a la unidad base
+  (g, ml, u): el backend solo acepta esas tres. Los diálogos de `inventario_dialogos.dart`
+  son widgets con estado propio por la trampa del `TextEditingController`.
 - `features/configuracion/presentation/menu_config_screen.dart` — catálogo: precios,
-  disponibilidad, control de stock por plato y **tarifa de IVA** (masiva por
+  disponibilidad, control de stock por plato (sin control / por unidades / por receta) y **tarifa de IVA** (masiva por
   subcategoría con el ícono `%`, o individual con el chip `IVA —` de cada plato).
 - `features/superadmin/` — panel del proveedor: interruptores por restaurante.
 - `core/printing/comanda_printer.dart` — comandas y tickets térmicos.

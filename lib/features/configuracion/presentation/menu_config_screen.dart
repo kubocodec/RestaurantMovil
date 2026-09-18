@@ -4,6 +4,7 @@ import '../../../core/models/config_models.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../inventario/data/inventario_repository.dart';
+import '../../inventario/presentation/receta_screen.dart';
 import '../data/configuracion_repository.dart';
 
 class MenuConfigScreen extends StatefulWidget {
@@ -1035,95 +1036,35 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
     super.dispose();
   }
 
-  /// Activa o desactiva el control de stock de un plato en esta sucursal.
+  /// Cómo se controla el stock de un plato en esta sucursal: sin control,
+  /// contando unidades o descontando los insumos de su receta.
   Future<void> _dialogoStock(BuildContext context, PlatoModel p) async {
-    bool controlar = p.controlaStock;
-    final stockCtrl = TextEditingController(
-        text: p.stock == null ? '' : p.unidadesDisponibles.toString());
-    final minimoCtrl = TextEditingController(
-        text: p.stockMinimo == null ? '' : p.stockMinimo!.round().toString());
-    final unidadCtrl = TextEditingController(text: p.unidad ?? '');
-
-    final guardar = await showDialog<bool>(
+    final r = await showDialog<_StockPlatoResultado>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Stock de ${p.nombrePlato}',
-              style: const TextStyle(
-                  fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: controlar,
-                  activeColor: AppColors.success,
-                  title: const Text('Controlar stock',
-                      style: TextStyle(
-                          fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
-                  subtitle: const Text(
-                      'Se descuenta al pedir y avisa cuando queda poco',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11.5)),
-                  onChanged: (v) => setDialogState(() => controlar = v),
-                ),
-                if (controlar) ...[
-                  const SizedBox(height: 6),
-                  if (!p.controlaStock)
-                    TextField(
-                      controller: stockCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                          labelText: 'Cuánto hay ahora', isDense: true),
-                    ),
-                  if (!p.controlaStock) const SizedBox(height: 10),
-                  TextField(
-                    controller: minimoCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText: 'Avisarme cuando queden', isDense: true),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: unidadCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Unidad (botellas, porciones…)', isDense: true),
-                  ),
-                  if (p.controlaStock) ...[
-                    const SizedBox(height: 10),
-                    const Text(
-                        'El stock se mueve desde Inventario, con ingresos y ajustes, '
-                        'para que el historial no tenga huecos.',
-                        style: TextStyle(
-                            fontFamily: 'Poppins', fontSize: 11.5,
-                            color: AppColors.textSecondary, height: 1.4)),
-                  ],
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancelar')),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Guardar')),
-          ],
-        ),
-      ),
+      builder: (_) => _StockPlatoDialog(plato: p),
     );
-    if (guardar != true) return;
+    if (r == null) return;
 
     try {
-      await _inventarioRepo.configurar(
-        p.sucursalPlatoId,
-        controlar: controlar,
-        stockInicial: double.tryParse(stockCtrl.text.replaceAll(',', '.')),
-        stockMinimo: double.tryParse(minimoCtrl.text.replaceAll(',', '.')),
-        unidad: unidadCtrl.text.trim(),
-      );
+      final actual = p.usaReceta ? 'RECETA' : p.controlaStock ? 'UNIDADES' : 'SIN_CONTROL';
+      if (r.modo != actual || r.modo == 'UNIDADES') {
+        await _inventarioRepo.configurar(
+          p.sucursalPlatoId,
+          modo: r.modo,
+          stockInicial: r.stockInicial,
+          stockMinimo: r.stockMinimo,
+          unidad: r.unidad,
+        );
+      }
+      if (r.modo == 'RECETA' && context.mounted) {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => RecetaScreen(
+            sucursalId: sucursalId,
+            platoId: p.platoId,
+            nombrePlato: p.nombrePlato,
+          ),
+        ));
+      }
       onChanged();
     } catch (e) {
       if (context.mounted) {
@@ -1253,6 +1194,14 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
                           Text('\$${p.precio.toStringAsFixed(2)}', style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w700)),
                           const SizedBox(width: 6),
                           const Icon(Icons.edit_outlined, size: 12, color: AppColors.textSecondary),
+                          if (p.usaReceta) ...[
+                            const SizedBox(width: 8),
+                            const Text('con receta',
+                                style: TextStyle(
+                                    fontFamily: 'Poppins', fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textSecondary)),
+                          ],
                           if (p.controlaStock) ...[
                             const SizedBox(width: 8),
                             Text(
@@ -1279,7 +1228,7 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
                     tooltip: 'Control de stock',
                     visualDensity: VisualDensity.compact,
                     icon: Icon(Icons.inventory_2_outlined, size: 20,
-                        color: p.controlaStock
+                        color: p.controlaStock || p.usaReceta
                             ? AppColors.earth2
                             : AppColors.textHint),
                     onPressed: () => _dialogoStock(context, p),
@@ -1413,4 +1362,166 @@ Future<SeleccionTasaIva> elegirTasaIva(
         ),
       ) ??
       const SeleccionTasaIva(false, null);
+}
+
+class _StockPlatoResultado {
+  final String modo;
+  final double? stockInicial;
+  final double? stockMinimo;
+  final String? unidad;
+  const _StockPlatoResultado(this.modo, this.stockInicial, this.stockMinimo, this.unidad);
+}
+
+/// Elige cómo se controla el plato. Con estado propio para que sus controllers
+/// se liberen después de la animación de cierre (ver CLAUDE.md).
+class _StockPlatoDialog extends StatefulWidget {
+  final PlatoModel plato;
+  const _StockPlatoDialog({required this.plato});
+
+  @override
+  State<_StockPlatoDialog> createState() => _StockPlatoDialogState();
+}
+
+class _StockPlatoDialogState extends State<_StockPlatoDialog> {
+  late String _modo;
+  late final TextEditingController _stock;
+  late final TextEditingController _minimo;
+  late final TextEditingController _unidad;
+
+  PlatoModel get p => widget.plato;
+
+  @override
+  void initState() {
+    super.initState();
+    _modo = p.usaReceta ? 'RECETA' : p.controlaStock ? 'UNIDADES' : 'SIN_CONTROL';
+    _stock = TextEditingController(text: p.stock == null ? '' : p.unidadesDisponibles.toString());
+    _minimo = TextEditingController(
+        text: p.stockMinimo == null ? '' : p.stockMinimo!.round().toString());
+    _unidad = TextEditingController(text: p.unidad ?? '');
+  }
+
+  @override
+  void dispose() {
+    _stock.dispose();
+    _minimo.dispose();
+    _unidad.dispose();
+    super.dispose();
+  }
+
+  Widget _opcion(String modo, String titulo, String detalle) {
+    final sel = _modo == modo;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => setState(() => _modo = modo),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: sel ? AppColors.primary : AppColors.divider, width: sel ? 2 : 1),
+        ),
+        child: Row(
+          children: [
+            Icon(sel ? Icons.radio_button_checked : Icons.radio_button_off,
+                color: sel ? AppColors.primary : AppColors.textHint, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(titulo,
+                      style: const TextStyle(
+                          fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text(detalle,
+                      style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 11.5,
+                          color: AppColors.textSecondary, height: 1.3)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final yaContaba = p.controlaStock;
+    return AlertDialog(
+      title: Text('Stock de ${p.nombrePlato}',
+          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _opcion('SIN_CONTROL', 'Sin control', 'Se vende sin contar nada.'),
+            _opcion('UNIDADES', 'Por unidades',
+                'Cervezas, botellas, porciones ya armadas. Se descuenta al pedir y '
+                'no deja vender si se acaba.'),
+            _opcion('RECETA', 'Por receta',
+                'Descuenta los insumos que lleva (gramos de carne, papas…). Nunca '
+                'bloquea la venta y calcula el costo real del plato.'),
+            if (_modo == 'UNIDADES') ...[
+              const SizedBox(height: 6),
+              if (!yaContaba)
+                TextField(
+                  controller: _stock,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Cuánto hay ahora', isDense: true),
+                ),
+              if (!yaContaba) const SizedBox(height: 10),
+              TextField(
+                controller: _minimo,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Avisarme cuando queden', isDense: true),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _unidad,
+                decoration: const InputDecoration(
+                    labelText: 'Unidad (botellas, porciones…)', isDense: true),
+              ),
+              if (yaContaba) ...[
+                const SizedBox(height: 10),
+                const Text(
+                    'El stock se mueve desde Inventario, con ingresos y ajustes, '
+                    'para que el historial no tenga huecos.',
+                    style: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 11.5,
+                        color: AppColors.textSecondary, height: 1.4)),
+              ],
+            ],
+            if (_modo == 'RECETA' && yaContaba)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                    'Al pasarlo a receta se deja de contar el plato: su stock por '
+                    'unidades se borra.',
+                    style: TextStyle(
+                        fontFamily: 'Poppins', fontSize: 11.5,
+                        color: AppColors.warning, height: 1.4)),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _StockPlatoResultado(
+              _modo,
+              double.tryParse(_stock.text.replaceAll(',', '.')),
+              double.tryParse(_minimo.text.replaceAll(',', '.')),
+              _unidad.text.trim(),
+            ),
+          ),
+          child: Text(_modo == 'RECETA' ? 'Ver receta' : 'Guardar'),
+        ),
+      ],
+    );
+  }
 }

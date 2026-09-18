@@ -254,9 +254,15 @@ class _AdminBodyState extends State<_AdminBody> {
     if (!_alertas.hayAlgoQueAvisar) return const SizedBox.shrink();
     final agotados = _alertas.totalAgotados;
     final bajos = _alertas.totalBajoMinimo;
-    final color = agotados > 0 ? AppColors.error : AppColors.warning;
-    final nombres = (agotados > 0 ? _alertas.agotados : _alertas.bajoMinimo)
-        .take(3).map((i) => i.nombrePlato).join(', ');
+    final insumos = _alertas.totalInsumosBajoMinimo;
+    final soloInsumos = agotados == 0 && bajos == 0;
+    final color = agotados > 0 || _alertas.insumosBajoMinimo.any((i) => i.negativo)
+        ? AppColors.error
+        : AppColors.warning;
+    final nombres = soloInsumos
+        ? _alertas.insumosBajoMinimo.take(3).map((i) => i.nombre).join(', ')
+        : (agotados > 0 ? _alertas.agotados : _alertas.bajoMinimo)
+            .take(3).map((i) => i.nombrePlato).join(', ');
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: InkWell(
@@ -281,15 +287,21 @@ class _AdminBodyState extends State<_AdminBody> {
                     Text(
                       agotados > 0
                           ? 'Sin stock: $agotados producto${agotados == 1 ? '' : 's'}'
-                          : 'Por agotarse: $bajos producto${bajos == 1 ? '' : 's'}',
+                          : bajos > 0
+                              ? 'Por agotarse: $bajos producto${bajos == 1 ? '' : 's'}'
+                              : 'Insumos por reponer: $insumos',
                       style: TextStyle(
                           fontFamily: 'Poppins', fontWeight: FontWeight.w700,
                           fontSize: 14, color: color),
                     ),
                     Text(
-                      agotados > 0 && bajos > 0
-                          ? '$nombres  ·  y $bajos por agotarse'
-                          : nombres,
+                      [
+                        agotados > 0 && bajos > 0
+                            ? '$nombres  ·  y $bajos por agotarse'
+                            : nombres,
+                        if (!soloInsumos && insumos > 0)
+                          '$insumos insumo${insumos == 1 ? '' : 's'} por reponer',
+                      ].join('  ·  '),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

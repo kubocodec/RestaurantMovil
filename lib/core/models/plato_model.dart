@@ -42,6 +42,9 @@ class PlatoModel {
   /// El plato lleva control de stock en esta sucursal.
   bool get controlaStock => modoInventario == 'UNIDADES';
 
+  /// Al venderlo descuenta los insumos de su receta. Nunca se agota ni bloquea.
+  bool get usaReceta => modoInventario == 'RECETA';
+
   /// Unidades disponibles como entero, para mostrar y para topar el carrito.
   int get unidadesDisponibles => (stock ?? 0) <= 0 ? 0 : (stock ?? 0).floor();
 
