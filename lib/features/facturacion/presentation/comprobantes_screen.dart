@@ -367,6 +367,20 @@ class _ComprobanteCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         _SriMiniChip(estado: f.sriEstado!),
                       ],
+                      if (f.cortesia) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text('CORTESÍA',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontSize: 9,
+                                fontWeight: FontWeight.w700, color: AppColors.success)),
+                        ),
+                      ],
                     ],
                   ),
                   Text(
@@ -422,8 +436,11 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
       TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35, fontWeight: FontWeight.w700);
 
   /// La factura solo se puede pedir sobre una nota de venta ya cobrada.
+  // Una nota de $0 (cortesía) no puede pasar a factura electrónica:
+  // Factuplan no acepta un comprobante sin pagos.
   bool get _puedeEmitirFactura =>
-      _factura.esNotaVenta && !_factura.isAnulada && _factura.estado == 'PAGADA';
+      _factura.esNotaVenta && !_factura.isAnulada && _factura.estado == 'PAGADA'
+      && !_factura.cortesia && _factura.total > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -489,10 +506,14 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                     if (f.cedulaRucCliente?.isNotEmpty ?? false)
                       Text('CI/RUC: ${f.cedulaRucCliente}', style: _ticketStyle),
                     const Divider(),
-                    ...f.items.map((it) => _filaTicket('${it.cantidad} x ${it.nombre}', it.subtotal)),
+                    ...f.items.map((it) => _filaTicket(
+                        '${it.cantidad} x ${it.nombre}${it.cortesia ? ' (cortesía)' : ''}', it.subtotal)),
                     const Divider(),
                     _filaTicket('Subtotal', f.subtotal),
-                    if (f.descuento > 0) _filaTicket('Descuento', -f.descuento),
+                    if (f.descuento > 0)
+                      _filaTicket(f.items.any((it) => it.cortesia) ? 'Cortesía' : 'Descuento', -f.descuento),
+                    if (f.cortesia && f.motivoCortesia != null)
+                      Text('CORTESÍA: ${f.motivoCortesia}', style: _ticketBold),
                     if (f.tieneTarifasMixtas) ...[
                       _filaTicket('Subtotal 0%', f.subtotalSinIva!),
                       _filaTicket('Subtotal ${f.ivaPorcentaje.toStringAsFixed(0)}%',
@@ -641,7 +662,8 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
         mac: elegida.mac,
         factura: f,
         items: f.items
-            .map((it) => ReciboItem(nombre: it.nombre, cantidad: it.cantidad, subtotal: it.subtotal))
+            .map((it) => ReciboItem(
+                nombre: it.nombre, cantidad: it.cantidad, subtotal: it.subtotal, cortesia: it.cortesia))
             .toList(),
         metodoPago: f.pagos.map((p) => p.nombreMetodoPago).join(', '),
         esFactura: f.esFactura,

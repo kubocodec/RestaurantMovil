@@ -11,6 +11,7 @@ import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../shared/widgets/cierre_detalle_sheet.dart';
 import '../data/reportes_repository.dart';
 import 'comparativo_sucursales_screen.dart';
+import 'cortesias_screen.dart';
 import 'ordenes_anuladas_screen.dart';
 import 'propinas_screen.dart';
 
@@ -112,6 +113,13 @@ class _ReportesScreenState extends State<ReportesScreen> {
             tooltip: 'Órdenes anuladas',
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => OrdenesAnuladasScreen(sucursalId: _sucursalId),
+            )),
+          ),
+          IconButton(
+            icon: const Icon(Icons.card_giftcard_outlined),
+            tooltip: 'Cortesías',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => CortesiasScreen(sucursalId: _sucursalId),
             )),
           ),
           IconButton(
@@ -280,6 +288,11 @@ class _ReportesScreenState extends State<ReportesScreen> {
           _FilaReporte(label: 'IVA cobrado', valor: r.totalIva, fmt: _fmt),
           _FilaReporte(label: 'Propinas', valor: r.totalPropinas, fmt: _fmt),
           _FilaReporte(label: 'Descuentos aplicados', valor: r.totalDescuentos, fmt: _fmt, negativo: true),
+          // Lo regalado no es venta: se informa aparte, a precio de carta.
+          if (r.unidadesCortesia > 0)
+            _FilaReporte(
+                label: 'Cortesías (${r.unidadesCortesia}) a precio de carta',
+                valor: r.valorCortesias, fmt: _fmt),
         ],
       ),
     );

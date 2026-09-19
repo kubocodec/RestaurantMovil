@@ -13,6 +13,9 @@ class ResumenDiarioModel {
   final double totalNeto;
   final double totalCosto;
   final double gananciaEstimada;
+  /// Lo regalado en el día a precio de carta (no está en las ventas).
+  final int unidadesCortesia;
+  final double valorCortesias;
 
   const ResumenDiarioModel({
     required this.nombreSucursal,
@@ -25,6 +28,8 @@ class ResumenDiarioModel {
     required this.totalNeto,
     required this.totalCosto,
     required this.gananciaEstimada,
+    this.unidadesCortesia = 0,
+    this.valorCortesias = 0,
   });
 
   factory ResumenDiarioModel.fromJson(Map<String, dynamic> j) => ResumenDiarioModel(
@@ -38,6 +43,8 @@ class ResumenDiarioModel {
     totalNeto:        _d(j['totalNeto']),
     totalCosto:       _d(j['totalCosto']),
     gananciaEstimada: _d(j['gananciaEstimada']),
+    unidadesCortesia: (j['unidadesCortesia'] as num?)?.toInt() ?? 0,
+    valorCortesias:   _d(j['valorCortesias']),
   );
 
   static double _d(dynamic v) => v == null ? 0.0 : (v as num).toDouble();
@@ -167,6 +174,64 @@ class ReporteOrdenesAnuladasModel {
       );
 }
 
+/// Una cortesía del período: qué se regaló, cuánto valía, por qué y quién.
+class CortesiaItemModel {
+  final DateTime fecha;
+  final int? numeroOrden;
+  final String lugar;
+  final String plato;
+  final int cantidad;
+  final double valor;
+  final String? motivo;
+  final String? autorizadaPor;
+  final bool cobrada;
+
+  const CortesiaItemModel({
+    required this.fecha,
+    this.numeroOrden,
+    required this.lugar,
+    required this.plato,
+    required this.cantidad,
+    required this.valor,
+    this.motivo,
+    this.autorizadaPor,
+    this.cobrada = false,
+  });
+
+  factory CortesiaItemModel.fromJson(Map<String, dynamic> j) => CortesiaItemModel(
+        fecha: DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
+        numeroOrden: (j['numeroOrden'] as num?)?.toInt(),
+        lugar: j['lugar']?.toString() ?? '',
+        plato: j['plato']?.toString() ?? '',
+        cantidad: (j['cantidad'] as num?)?.toInt() ?? 0,
+        valor: ReporteCajasDiaModel._d(j['valor']),
+        motivo: j['motivo']?.toString(),
+        autorizadaPor: j['autorizadaPor']?.toString(),
+        cobrada: j['cobrada'] == true,
+      );
+}
+
+class ReporteCortesiasModel {
+  final String nombreSucursal;
+  final int totalUnidades;
+  final double totalValor;
+  final List<CortesiaItemModel> items;
+
+  const ReporteCortesiasModel({
+    required this.nombreSucursal,
+    required this.totalUnidades,
+    required this.totalValor,
+    required this.items,
+  });
+
+  factory ReporteCortesiasModel.fromJson(Map<String, dynamic> j) => ReporteCortesiasModel(
+        nombreSucursal: j['nombreSucursal']?.toString() ?? '',
+        totalUnidades: (j['totalUnidades'] as num?)?.toInt() ?? 0,
+        totalValor: ReporteCajasDiaModel._d(j['totalValor']),
+        items: ((j['items'] as List?) ?? []).map((e) => CortesiaItemModel.fromJson(e)).toList(),
+      );
+}
+
 /// Lo recaudado en propinas por un mesero en el período.
 class PropinaMeseroModel {
   final String usuarioId;
@@ -237,6 +302,20 @@ class ReportesRepository {
       if (fecha != null) 'fecha': _fechaParam(fecha),
     });
     return ReporteCajasDiaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  // Cortesías de la sucursal en un período (solo admin)
+  Future<ReporteCortesiasModel> getCortesias(
+    String sucursalId, {
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    final r = await _dio.get('/api/cortesias/reporte', queryParameters: {
+      'sucursalId': sucursalId,
+      'desde': _fechaParam(desde),
+      'hasta': _fechaParam(hasta),
+    });
+    return ReporteCortesiasModel.fromJson(r.data['data'] ?? r.data);
   }
 
   // Órdenes anuladas de la sucursal en un período (solo admin)

@@ -1247,6 +1247,13 @@ class _OrdenScreenState extends State<OrdenScreen> {
                             children: [
                               Text(d.nombrePlato,
                                 style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                              // Solo se informa: dar o quitar cortesías se hace
+                              // en el cobro (cajero o administrador).
+                              if (d.cortesia)
+                                const Text('CORTESÍA',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins', fontSize: 10.5,
+                                    fontWeight: FontWeight.w700, color: AppColors.success)),
                               if (d.observaciones != null && d.observaciones!.isNotEmpty)
                                 Text('Nota: ${d.observaciones}',
                                   style: const TextStyle(

@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/caja_model.dart';
 import '../../../core/models/factura_model.dart';
 import '../../../core/models/orden_model.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
@@ -16,6 +17,7 @@ import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../shared/widgets/cliente_busqueda.dart';
 import '../../../shared/widgets/cliente_form_dialog.dart';
+import '../../../shared/widgets/cortesia_dialog.dart';
 import '../../../shared/widgets/sri_estado_panel.dart';
 import '../data/facturacion_repository.dart';
 
@@ -79,6 +81,12 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   String get _sucursalId {
     final s = context.read<AuthBloc>().state;
     return s is AuthAuthenticated ? s.user.sucursalId : '';
+  }
+
+  bool get _esAdmin {
+    final s = context.read<AuthBloc>().state;
+    if (s is! AuthAuthenticated) return false;
+    return s.user.rol == UserRole.admin || s.user.rol == UserRole.superadmin;
   }
 
   Future<void> _loadData() async {
@@ -171,6 +179,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     for (final d in orden.detallesNoFacturados) {
       final cantidad = _cantidadDe(d.ordenDetalleId);
       if (cantidad <= 0) continue;
+      // Cortesía: se descuenta completa en el backend, no suma base ni IVA.
+      if (d.cortesia) continue;
       final tarifa = d.ivaPorcentaje ?? _ivaPorcentaje;
       final clave = (tarifa * 100).round();
       final baseCentavos = (d.precioUnitario * 100).round() * cantidad;
@@ -217,8 +227,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     // Confirmación explícita del método de pago: evita cobros registrados
     // como efectivo cuando fueron transferencia (y viceversa), que luego
     // descuadran el arqueo del cierre de caja.
-    final confirmado = await _confirmarMetodoPago();
+    // Todo lo elegido es cortesía: no hay método de pago que confirmar.
+    final sinCobro = _desglose.total == 0;
+    final confirmado = sinCobro ? await _confirmarSinCobro() : await _confirmarMetodoPago();
     if (confirmado != true || !mounted) return;
+    if (sinCobro) _propina = 0;
 
     setState(() => _emitiendo = true);
     try {
@@ -239,6 +252,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                 nombre: d.nombrePlato,
                 cantidad: _cantidadDe(d.ordenDetalleId),
                 subtotal: d.precioUnitario * _cantidadDe(d.ordenDetalleId),
+                cortesia: d.cortesia,
               ))
           .toList();
 
@@ -251,12 +265,16 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         propina: _propina,
       );
 
-      final facturaPagada = await _factRepo.registrarPago(
-        facturaVentaId: factura.facturaVentaId,
-        metodoPagoId: metodoPagoId,
-        monto: factura.total,
-        referencia: _refCtrl.text.trim().isNotEmpty ? _refCtrl.text.trim() : null,
-      );
+      // Una cuenta en $0 (solo cortesías) el backend la deja pagada al
+      // emitirla: no hay pago que registrar (y un pago de $0 sería rechazado).
+      final facturaPagada = factura.estado == 'PAGADA'
+          ? factura
+          : await _factRepo.registrarPago(
+              facturaVentaId: factura.facturaVentaId,
+              metodoPagoId: metodoPagoId,
+              monto: factura.total,
+              referencia: _refCtrl.text.trim().isNotEmpty ? _refCtrl.text.trim() : null,
+            );
 
       if (mounted) {
         await _mostrarComprobante(facturaPagada, itemsRecibo);
@@ -467,6 +485,118 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     return confirmado;
   }
 
+  Future<bool?> _confirmarSinCobro() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cuenta en \$0',
+            style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+        content: const Text(
+            'Todo lo que se cobra en esta cuenta es cortesía. Se emite una nota de venta '
+            'de \$0 sin registrar pago.',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 13, height: 1.4)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Revisar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
+        ],
+      ),
+    );
+  }
+
+  /// Dar o quitar la cortesía de una línea. Después se recarga la orden,
+  /// porque la línea puede haberse partido (1 de 3 cervezas).
+  Future<void> _accionCortesia(DetalleOrdenModel d) async {
+    try {
+      if (d.cortesia) {
+        if (!d.cortesiaEditable) return;
+        final quitar = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Quitar cortesía',
+                style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+            content: Text(
+                '${d.nombrePlato} vuelve a cobrarse (\$${_fmt.format(d.precioUnitario * d.cantidad)}).'
+                '${d.motivoCortesia != null ? '\n\nMotivo de la cortesía: ${d.motivoCortesia}' : ''}',
+                style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, height: 1.4)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quitar')),
+            ],
+          ),
+        );
+        if (quitar != true) return;
+        await _factRepo.quitarCortesia(d.ordenDetalleId);
+      } else {
+        final r = await showDialog<CortesiaElegida>(
+          context: context,
+          builder: (_) => CortesiaDialog(
+            titulo: 'Cortesía: ${d.nombrePlato}',
+            detalle: 'El plato queda en la cuenta en \$0. Se descuenta del inventario igual, '
+                'porque sí se consume.',
+            maxUnidades: d.cantidadPendiente,
+          ),
+        );
+        if (r == null) return;
+        await _factRepo.darCortesia(d.ordenDetalleId, cantidad: r.cantidad, motivo: r.motivo);
+      }
+      if (mounted) await _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  /// Mesa completa gratis: solo el administrador. Nota de venta de $0, sin
+  /// pago ni SRI; la mesa queda libre.
+  Future<void> _regalarMesa() async {
+    final orden = _orden;
+    final apertura = _aperturaCierreCajaId;
+    if (orden == null || apertura == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No hay caja abierta. Abre la caja antes de cerrar la mesa.'),
+          backgroundColor: AppColors.warning));
+      return;
+    }
+    final r = await showDialog<CortesiaElegida>(
+      context: context,
+      builder: (_) => const CortesiaDialog(
+        titulo: 'Regalar toda la mesa',
+        detalle: 'Todo lo pendiente pasa a cortesía y se emite una nota de venta de \$0. '
+            'No se registra pago ni se envía al SRI, y la mesa queda libre.',
+        mesaCompleta: true,
+      ),
+    );
+    if (r == null || !mounted) return;
+    setState(() => _emitiendo = true);
+    try {
+      final items = orden.detallesNoFacturados
+          .map((d) => ReciboItem(
+                nombre: d.nombrePlato,
+                cantidad: d.cantidadPendiente,
+                subtotal: d.precioUnitario * d.cantidadPendiente,
+                cortesia: true,
+              ))
+          .toList();
+      final factura = await _factRepo.cortesiaMesa(
+          ordenId: orden.ordenId, aperturaCierreCajaId: apertura, motivo: r.motivo);
+      if (mounted) {
+        await _mostrarComprobante(factura, items);
+        if (mounted) Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _emitiendo = false);
+    }
+  }
+
   Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {
     final metodoPago = _metodoPagoSeleccionado?.nombre ?? '';
     await showDialog(
@@ -475,8 +605,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       builder: (ctx) => _ComprobanteDialog(
         factura: factura,
         items: items,
-        metodoPago: metodoPago,
-        esFactura: _esFactura,
+        metodoPago: factura.total == 0 ? 'Cortesía (sin cobro)' : metodoPago,
+        // El comprobante real manda: una cuenta en $0 siempre sale como nota.
+        esFactura: factura.tipoComprobante == 'FACTURA',
         sucursalId: _sucursalId,
       ),
     );
@@ -634,11 +765,26 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                         children: [
                           Text(d.nombrePlato,
                             style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600)),
+                          if (d.cortesia) const _EtiquetaCortesia(),
                           Text(
-                            '\$${_fmt.format(d.precioUnitario)} c/u · $pendiente pendiente${d.cantidadFacturada > 0 ? ' (${d.cantidadFacturada} ya cobradas)' : ''}',
+                            d.cortesia
+                                ? '${d.motivoCortesia ?? ''}${d.cortesiaPor != null ? ' · ${d.cortesiaPor}' : ''}'
+                                : '\$${_fmt.format(d.precioUnitario)} c/u · $pendiente pendiente${d.cantidadFacturada > 0 ? ' (${d.cantidadFacturada} ya cobradas)' : ''}',
                             style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
                         ],
                       ),
+                    ),
+                    // Regalar / quitar la cortesía de la línea
+                    IconButton(
+                      tooltip: d.cortesia ? 'Quitar cortesía' : 'Dar cortesía',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _emitiendo || (d.cortesia && !d.cortesiaEditable)
+                          ? null
+                          : () => _accionCortesia(d),
+                      icon: Icon(
+                        d.cortesia ? Icons.card_giftcard_rounded : Icons.card_giftcard_outlined,
+                        size: 20,
+                        color: d.cortesia ? AppColors.success : AppColors.textHint),
                     ),
                     // Stepper: cuántas unidades entran en este cobro
                     _QtyBtn(
@@ -662,7 +808,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     const SizedBox(width: 8),
                     SizedBox(
                       width: 62,
-                      child: Text('\$${_fmt.format(d.precioUnitario * elegida)}',
+                      child: Text('\$${_fmt.format(d.cortesia ? 0 : d.precioUnitario * elegida)}',
                         textAlign: TextAlign.right,
                         style: const TextStyle(
                           fontFamily: 'Poppins', fontWeight: FontWeight.w700,
@@ -918,6 +1064,26 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   Widget _buildEmitirBtn() {
+    return Column(
+      children: [
+        _botonCobrar(),
+        if (_esAdmin && (_orden?.detallesNoFacturados.isNotEmpty ?? false)) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.success),
+              onPressed: _emitiendo ? null : _regalarMesa,
+              icon: const Icon(Icons.card_giftcard_rounded),
+              label: const Text('Regalar toda la mesa'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _botonCobrar() {
     return SizedBox(
       width: double.infinity,
       height: 52,
@@ -928,7 +1094,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             : const Icon(Icons.point_of_sale_rounded),
         label: Text(_emitiendo
             ? 'Cobrando...'
-            : _esFactura ? 'Cobrar y emitir factura' : 'Cobrar (nota de venta)'),
+            : _haySeleccion && _desglose.total == 0
+                ? 'Registrar cortesía (\$0)'
+                : _esFactura ? 'Cobrar y emitir factura' : 'Cobrar (nota de venta)'),
       ),
     );
   }
@@ -1030,10 +1198,12 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 if (f.cedulaRucCliente?.isNotEmpty ?? false)
                   Text('CI/RUC: ${f.cedulaRucCliente}', style: _ticketStyle),
                 const Divider(),
-                ...widget.items.map((it) => _filaTicket('${it.cantidad} x ${it.nombre}', it.subtotal)),
+                ...widget.items.map((it) => _filaTicket(
+                    '${it.cantidad} x ${it.nombre}${it.cortesia ? ' (cortesía)' : ''}', it.subtotal)),
                 const Divider(),
                 _filaTicket('Subtotal', f.subtotal),
-                if (f.descuento > 0) _filaTicket('Descuento', -f.descuento),
+                if (f.descuento > 0)
+                  _filaTicket(widget.items.any((it) => it.cortesia) ? 'Cortesía' : 'Descuento', -f.descuento),
                 if (f.tieneTarifasMixtas) ...[
                   _filaTicket('Subtotal 0%', f.subtotalSinIva!),
                   _filaTicket('Subtotal ${f.ivaPorcentaje.toStringAsFixed(0)}%',
@@ -1043,6 +1213,8 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 if (f.propina > 0) _filaTicket('Propina', f.propina),
                 _filaTicket('TOTAL', f.total, bold: true),
                 Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
+                if (f.cortesia && f.motivoCortesia != null)
+                  Text('CORTESÍA: ${f.motivoCortesia}', style: _ticketBold),
                 // Solo la factura viaja al SRI: en la nota de venta no hay
                 // nada que consultar.
                 if (widget.esFactura)
@@ -1149,6 +1321,27 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
 }
 
 /// Botón compacto de +/- para elegir cantidades en cuentas divididas.
+class _EtiquetaCortesia extends StatelessWidget {
+  const _EtiquetaCortesia();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 2, bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+      ),
+      child: const Text('CORTESÍA',
+          style: TextStyle(
+              fontFamily: 'Poppins', fontSize: 10.5, fontWeight: FontWeight.w700,
+              color: AppColors.success)),
+    );
+  }
+}
+
 class _QtyBtn extends StatelessWidget {
   final IconData icon;
   final bool enabled;

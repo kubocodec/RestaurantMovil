@@ -57,14 +57,18 @@ class ClienteModel {
 class ItemVendidoModel {
   final String nombre;
   final int cantidad;
+  /// Precio de carta de la línea (en una cortesía, lo que se regaló).
   final double subtotal;
+  final bool cortesia;
 
-  const ItemVendidoModel({required this.nombre, required this.cantidad, required this.subtotal});
+  const ItemVendidoModel({required this.nombre, required this.cantidad, required this.subtotal,
+      this.cortesia = false});
 
   factory ItemVendidoModel.fromJson(Map<String, dynamic> j) => ItemVendidoModel(
     nombre:   j['nombre']?.toString() ?? '',
     cantidad: (j['cantidad'] as num?)?.toInt() ?? 0,
     subtotal: FacturaModel._toDouble(j['subtotal']),
+    cortesia: j['cortesia'] == true,
   );
 }
 
@@ -121,6 +125,9 @@ class FacturaModel {
   final String? sriAutorizacion;
   final String? sriSecuencial;
   final String? sriMensaje;
+  /// Mesa completa regalada: nota de venta de $0, sin pago y sin SRI.
+  final bool cortesia;
+  final String? motivoCortesia;
 
   const FacturaModel({
     required this.facturaVentaId,
@@ -155,6 +162,8 @@ class FacturaModel {
     this.sriAutorizacion,
     this.sriSecuencial,
     this.sriMensaje,
+    this.cortesia = false,
+    this.motivoCortesia,
   });
 
   /// El comprobante mezcla productos gravados y con tarifa 0%: solo entonces
@@ -180,6 +189,8 @@ class FacturaModel {
     iva:            _toDouble(j['iva']),
     propina:        _toDouble(j['propina']),
     total:          _toDouble(j['total']),
+    cortesia:       j['cortesia'] == true,
+    motivoCortesia: j['motivoCortesia']?.toString(),
     nombreCliente:  j['nombreCliente']?.toString(),
     cedulaRucCliente: j['cedulaRucCliente']?.toString(),
     cajero:         j['cajero']?.toString(),

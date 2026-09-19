@@ -16,6 +16,10 @@ class DetalleOrdenModel {
   final String? impresoraIp;
   final int? impresoraPuerto;
   final String? impresoraMac;
+  /// Plato regalado: se cobra en $0 (el backend lo descuenta completo).
+  final bool cortesia;
+  final String? motivoCortesia;
+  final String? cortesiaPor;
 
   const DetalleOrdenModel({
     required this.ordenDetalleId,
@@ -34,6 +38,9 @@ class DetalleOrdenModel {
     this.impresoraIp,
     this.impresoraPuerto,
     this.impresoraMac,
+    this.cortesia = false,
+    this.motivoCortesia,
+    this.cortesiaPor,
   });
 
   factory DetalleOrdenModel.fromJson(Map<String, dynamic> j) => DetalleOrdenModel(
@@ -53,13 +60,19 @@ class DetalleOrdenModel {
     impresoraIp:     j['impresoraIp']?.toString(),
     impresoraPuerto: (j['impresoraPuerto'] as num?)?.toInt(),
     impresoraMac:    j['impresoraMac']?.toString(),
+    cortesia:        j['cortesia'] == true,
+    motivoCortesia:  j['motivoCortesia']?.toString(),
+    cortesiaPor:     j['cortesiaPor']?.toString(),
   );
 
   /// Unidades que faltan por cobrar (cuentas divididas).
   int get cantidadPendiente => facturado ? 0 : cantidad - cantidadFacturada;
 
-  /// Monto pendiente de cobro de esta línea.
-  double get subtotalPendiente => precioUnitario * cantidadPendiente;
+  /// Monto pendiente de cobro de esta línea (una cortesía no se cobra).
+  double get subtotalPendiente => cortesia ? 0 : precioUnitario * cantidadPendiente;
+
+  /// La cortesía todavía se puede quitar: ninguna unidad se cobró.
+  bool get cortesiaEditable => cortesia && cantidadFacturada == 0;
 
   bool get isPendiente     => estado == 'PENDIENTE' || estado == 'ENVIADO';
   bool get isEnPreparacion => estado == 'EN_PREPARACION';

@@ -289,6 +289,14 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
             'Aquí solo se cuenta el EFECTIVO del cajón. La tarjeta y la transferencia no están físicamente en la caja.',
             style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
           const SizedBox(height: 6),
+          if (c.unidadesCortesia > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                'Cortesías del turno: ${c.unidadesCortesia} (\$${_fmt.format(c.valorCortesias)} a precio de carta). '
+                'No son venta ni entran a caja.',
+                style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.success)),
+            ),
           _Fila('Fondo inicial (apertura)', c.montoInicial, fmt: _fmt),
           _Fila('Ventas en efectivo', c.totalVentasEfectivo, fmt: _fmt, signo: '+'),
           _Fila('Otros ingresos a caja', c.totalIngresos, fmt: _fmt, signo: '+'),

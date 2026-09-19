@@ -170,4 +170,36 @@ class FacturacionRepository {
     });
     return FacturaModel.fromJson(r.data['data'] ?? r.data);
   }
+
+  // ------------------------------------------------------------------
+  // Cortesías
+  // ------------------------------------------------------------------
+
+  /// Regala un plato: [cantidad] null = todo lo pendiente de esa línea.
+  /// El cajero no puede dejar la cuenta en $0 (el backend responde con el
+  /// mensaje para pedir un administrador).
+  Future<void> darCortesia(String ordenDetalleId, {int? cantidad, required String motivo}) async {
+    await _dio.post('/api/cortesias/detalles/$ordenDetalleId', data: {
+      'motivo': motivo,
+      if (cantidad != null) 'cantidad': cantidad,
+    });
+  }
+
+  Future<void> quitarCortesia(String ordenDetalleId) async {
+    await _dio.delete('/api/cortesias/detalles/$ordenDetalleId');
+  }
+
+  /// Mesa completa gratis (solo administrador): nota de venta de $0.
+  Future<FacturaModel> cortesiaMesa({
+    required String ordenId,
+    required String aperturaCierreCajaId,
+    required String motivo,
+  }) async {
+    final r = await _dio.post('/api/cortesias/mesa', data: {
+      'ordenId': ordenId,
+      'aperturaCierreCajaId': aperturaCierreCajaId,
+      'motivo': motivo,
+    });
+    return FacturaModel.fromJson(r.data['data'] ?? r.data);
+  }
 }

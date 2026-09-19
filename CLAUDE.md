@@ -100,6 +100,10 @@ absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepositor
 - `features/mesas/presentation/orden_screen.dart` — toma de pedidos y menú del mesero
   (etiquetas de stock: `AGOTADO`, `quedan 3`).
 - `features/facturacion/` — cobro, propina, comprobantes e impresión del ticket.
+  **Cortesías** se dan y quitan en el cobro (ícono de regalo por línea; "Regalar toda la
+  mesa" solo para admin). Una cuenta en $0 vuelve ya PAGADA del backend: no se llama a
+  `registrarPago` (un pago de $0 lo rechaza). El resumen del cobro no suma base ni IVA
+  de las líneas en cortesía.
 - `features/inventario/` — inventario en pestañas: **Insumos** (stock, conteo, merma,
   historial), **Platos** (por unidades, con ingreso y ajuste; y los que van por receta),
   **Compras** y **Proveedores**. `receta_screen.dart` edita la receta de un plato y

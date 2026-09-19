@@ -23,8 +23,11 @@ class ResultadoImpresion {
 class ReciboItem {
   final String nombre;
   final int cantidad;
+  /// Precio de carta de la línea; en una cortesía se descuenta abajo.
   final double subtotal;
-  const ReciboItem({required this.nombre, required this.cantidad, required this.subtotal});
+  final bool cortesia;
+  const ReciboItem({required this.nombre, required this.cantidad, required this.subtotal,
+      this.cortesia = false});
 }
 
 /// Imprime en impresoras térmicas ESC/POS. Primero intenta por red (TCP,
@@ -403,11 +406,17 @@ class ComandaPrinter {
       // ── Detalle ──
       bytes.addAll(_texto('${'-' * _cols}\n'));
       for (final it in items) {
-        bytes.addAll(_texto(_lineaMonto('${it.cantidad} x ${it.nombre}', it.subtotal)));
+        bytes.addAll(_texto(_lineaMonto(
+            '${it.cantidad} x ${it.nombre}${it.cortesia ? ' (cortesia)' : ''}', it.subtotal)));
       }
       bytes.addAll(_texto('${'-' * _cols}\n'));
       bytes.addAll(_texto(_lineaMonto('Subtotal', f.subtotal)));
-      if (f.descuento > 0) bytes.addAll(_texto(_lineaMonto('Descuento', -f.descuento)));
+      // Hoy el único descuento que existe es la cortesía: se nombra así para
+      // que el cliente vea por qué baja la cuenta.
+      if (f.descuento > 0) {
+        bytes.addAll(_texto(_lineaMonto(
+            items.any((it) => it.cortesia) ? 'Cortesia' : 'Descuento', -f.descuento)));
+      }
       // Con productos gravados y de tarifa 0% en la misma venta, el
       // comprobante debe mostrar las dos bases por separado.
       if (f.tieneTarifasMixtas) {
@@ -422,7 +431,10 @@ class ComandaPrinter {
       bytes.addAll(_boldOff);
       bytes.addAll(_texto('Son: ${_totalEnLetras(f.total)}\n'));
       bytes.addAll(_texto(_tituloSeparador('Forma de pago')));
-      if (f.pagos.isNotEmpty) {
+      if (f.total == 0) {
+        bytes.addAll(_texto('Cortesia: sin cobro\n'));
+        if (f.motivoCortesia != null) bytes.addAll(_texto('Motivo: ${f.motivoCortesia}\n'));
+      } else if (f.pagos.isNotEmpty) {
         for (final p in f.pagos) {
           bytes.addAll(_texto(_lineaMonto(p.nombreMetodoPago, p.monto)));
         }

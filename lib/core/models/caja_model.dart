@@ -209,6 +209,9 @@ class CierreDetalladoModel {
   final List<VentaPlatoModel> ventasPorPlato;
   final List<VentaMetodoModel> ventasPorMetodo;
   final List<PagoDetalleModel> pagos;
+  /// Cortesías del turno: no son venta ni entran a caja.
+  final int unidadesCortesia;
+  final double valorCortesias;
 
   const CierreDetalladoModel({
     required this.aperturaCierreCajaId,
@@ -233,6 +236,8 @@ class CierreDetalladoModel {
     required this.ventasPorPlato,
     required this.ventasPorMetodo,
     this.pagos = const [],
+    this.unidadesCortesia = 0,
+    this.valorCortesias = 0,
   });
 
   bool get isCerrada => estado == 'CERRADA';
@@ -275,6 +280,8 @@ class CierreDetalladoModel {
     ventasPorMetodo: ((j['ventasPorMetodo'] as List?) ?? [])
         .map((v) => VentaMetodoModel.fromJson(v))
         .toList(),
+    unidadesCortesia: (j['unidadesCortesia'] as num?)?.toInt() ?? 0,
+    valorCortesias:   AperturaCajaModel._toDouble(j['valorCortesias']),
     pagos: ((j['pagos'] as List?) ?? [])
         .map((p) => PagoDetalleModel.fromJson(p))
         .toList(),
