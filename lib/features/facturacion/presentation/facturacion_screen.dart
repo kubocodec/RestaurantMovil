@@ -150,9 +150,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
   bool get _haySeleccion => _cantidadesElegidas.values.any((c) => c > 0);
 
-  /// Desglose de lo seleccionado, agrupado por tarifa **igual que el backend**:
+  /// Desglose de lo seleccionado **igual que el backend y que Factuplan**:
   /// cada línea lleva la tarifa de su plato (o la predeterminada del negocio si
-  /// no tiene propia) y el IVA se redondea por grupo, no línea por línea.
+  /// no tiene propia), las bases se agrupan por tarifa y el IVA se redondea
+  /// línea por línea.
   ///
   /// Antes esto era `subtotal * (una sola tasa)`, y en un negocio con la comida
   /// al 0% y las bebidas embotelladas al 15% el cajero veía —y le decía al
@@ -162,26 +163,30 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     final orden = _orden;
     if (orden == null) return const _DesgloseCobro(0, 0, {});
 
-    // Clave en centésimas de punto para no comparar doubles entre sí.
-    final basePorTarifa = <int, double>{};
+    // Todo en centavos enteros: con doubles, 0,2625 puede quedar en
+    // 0,26249999 y redondear para el lado equivocado. La tarifa va en
+    // centésimas de punto (15% = 1500).
+    final basePorTarifa = <int, int>{};
+    int ivaCentavos = 0;
     for (final d in orden.detallesNoFacturados) {
       final cantidad = _cantidadDe(d.ordenDetalleId);
       if (cantidad <= 0) continue;
       final tarifa = d.ivaPorcentaje ?? _ivaPorcentaje;
       final clave = (tarifa * 100).round();
-      basePorTarifa[clave] = (basePorTarifa[clave] ?? 0) + d.precioUnitario * cantidad;
+      final baseCentavos = (d.precioUnitario * 100).round() * cantidad;
+      basePorTarifa[clave] = (basePorTarifa[clave] ?? 0) + baseCentavos;
+      // IVA redondeado por línea (mitad hacia arriba), igual que el backend y
+      // que Factuplan: agrupado por tarifa daba a veces un centavo más.
+      if (clave > 0) ivaCentavos += (baseCentavos * clave + 5000) ~/ 10000;
     }
 
     double subtotal = 0;
-    double iva = 0;
     final bases = <double, double>{};
     basePorTarifa.forEach((clave, base) {
-      final tarifa = clave / 100;
-      subtotal += base;
-      bases[tarifa] = base;
-      if (tarifa > 0) iva += ((base * tarifa / 100) * 100).round() / 100;
+      subtotal += base / 100;
+      bases[clave / 100] = base / 100;
     });
-    return _DesgloseCobro(subtotal, iva, bases);
+    return _DesgloseCobro(subtotal, ivaCentavos / 100, bases);
   }
 
   bool get _puedeEmitir =>
