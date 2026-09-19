@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/user_model.dart';
+import '../../core/settings/ajustes_cobro.dart';
 import '../../core/settings/ajustes_texto.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/bloc/auth_event.dart';
@@ -25,6 +26,7 @@ class AppDrawer extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_cobra) _buildCalcularVuelto(),
                 _buildTamanoTexto(context),
                 _buildLogout(context),
               ],
@@ -101,6 +103,36 @@ class AppDrawer extends StatelessWidget {
           context.go(item.route);
         },
       )).toList(),
+    );
+  }
+
+  bool get _cobra =>
+      user.rol == UserRole.cajero || user.rol == UserRole.admin || user.rol == UserRole.superadmin;
+
+  /// Preferencia de cada cajero: al cobrar en efectivo, pedir lo recibido y
+  /// mostrar el vuelto. Apagada, el cobro es igual que siempre.
+  Widget _buildCalcularVuelto() {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.divider)),
+      ),
+      child: ValueListenableBuilder<int>(
+        valueListenable: AjustesCobro.instancia.cambios,
+        builder: (_, __, ___) => SwitchListTile(
+          secondary: const Icon(Icons.payments_outlined, color: AppColors.textSecondary),
+          title: const Text(
+            'Calcular vuelto en efectivo',
+            style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w500, fontSize: 14),
+          ),
+          subtitle: const Text(
+            'Al cobrar, ingresa lo que te entregan',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11.5, color: AppColors.textSecondary),
+          ),
+          value: AjustesCobro.instancia.calcularVuelto(user.id),
+          activeColor: AppColors.success,
+          onChanged: (v) => AjustesCobro.instancia.cambiarCalcularVuelto(user.id, v),
+        ),
+      ),
     );
   }
 

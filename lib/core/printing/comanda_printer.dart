@@ -340,6 +340,9 @@ class ComandaPrinter {
     required List<ReciboItem> items,
     required String metodoPago,
     required bool esFactura,
+    /// Efectivo entregado por el cliente (calculadora de vuelto). Solo se
+    /// imprime; el pago registrado es el total.
+    double? recibido,
   }) async {
     {
       final f = factura;
@@ -440,6 +443,14 @@ class ComandaPrinter {
         }
       } else {
         bytes.addAll(_texto(_lineaMonto(metodoPago, f.total)));
+      }
+      if (recibido != null && f.total > 0) {
+        // En centavos enteros para que el vuelto no salga 6,4899999.
+        final vuelto = ((recibido * 100).round() - (f.total * 100).round()) / 100;
+        bytes.addAll(_texto(_lineaMonto('Recibido', recibido)));
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto(_lineaMonto('Vuelto', vuelto)));
+        bytes.addAll(_boldOff);
       }
       bytes.addAll(_texto('${'=' * _cols}\n'));
 

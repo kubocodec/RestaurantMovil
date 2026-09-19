@@ -12,6 +12,7 @@ import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/printing/comanda_printer.dart';
+import '../../../core/settings/ajustes_cobro.dart';
 import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
@@ -48,6 +49,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   final _cedulaCtrl = TextEditingController();
   final _refCtrl    = TextEditingController();
   final _propinaCtrl = TextEditingController();
+  final _recibidoCtrl = TextEditingController();
   ClienteModel? _clienteEncontrado;
 
   /// Cuentas divididas: cuántas unidades de cada ítem entran en ESTE cobro
@@ -64,6 +66,17 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// total sin cobrarle IVA.
   double _propina = 0;
 
+  /// Efectivo que entregó el cliente en ESTE cobro, si el cajero usa la
+  /// calculadora de vuelto. Solo es para mostrar e imprimir: el pago se
+  /// registra por el total de la cuenta, o el arqueo del cajón se inflaría
+  /// con el vuelto.
+  double? _recibido;
+
+  String get _usuarioId {
+    final s = context.read<AuthBloc>().state;
+    return s is AuthAuthenticated ? s.user.id : '';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +88,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     _cedulaCtrl.dispose();
     _refCtrl.dispose();
     _propinaCtrl.dispose();
+    _recibidoCtrl.dispose();
     super.dispose();
   }
 
@@ -311,6 +325,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     double propina = _propina;
     _propinaCtrl.text = propina > 0 ? propina.toStringAsFixed(2) : '';
 
+    // Calculadora de vuelto: preferencia de cada cajero, solo en efectivo.
+    final pedirRecibido = esEfectivo && AjustesCobro.instancia.calcularVuelto(_usuarioId);
+    double? recibido;
+    _recibidoCtrl.clear();
+
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -325,6 +344,28 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             );
             setDialogState(() => propina = v);
           }
+
+          // En centavos enteros: con doubles, 20 - 13,51 puede dar 6,4899999.
+          final totalCentavos = ((consumo + propina) * 100).round();
+          final recibidoCentavos = recibido == null ? null : (recibido! * 100).round();
+          final vueltoCentavos =
+              recibidoCentavos == null ? null : recibidoCentavos - totalCentavos;
+          final alcanza = !pedirRecibido || (vueltoCentavos != null && vueltoCentavos >= 0);
+
+          void fijarRecibido(double? v) {
+            final texto = v == null ? '' : v.toStringAsFixed(2);
+            _recibidoCtrl.value = TextEditingValue(
+              text: texto,
+              selection: TextSelection.collapsed(offset: texto.length),
+            );
+            setDialogState(() => recibido = v);
+          }
+
+          // Billetes que tiene sentido ofrecer: los que cubren el total.
+          final billetes = [5, 10, 20, 50, 100]
+              .where((b) => b * 100 >= totalCentavos)
+              .take(3)
+              .toList();
 
           Widget chipMonto(int monto) {
             final activo = propina == monto.toDouble();
@@ -436,6 +477,90 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                         ),
                     ],
                   ),
+                  if (pedirRecibido) ...[
+                    const SizedBox(height: 18),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('¿Con cuánto paga?',
+                        style: TextStyle(
+                          fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _recibidoCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                      ],
+                      style: const TextStyle(
+                        fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700),
+                      decoration: const InputDecoration(
+                        prefixText: '\$ ',
+                        prefixStyle: TextStyle(
+                          fontFamily: 'Poppins', fontSize: 16,
+                          fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                        hintText: 'Efectivo recibido',
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setDialogState(
+                        () => recibido = v.trim().isEmpty
+                            ? null
+                            : double.tryParse(v.replaceAll(',', '.'))),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Exacto'),
+                          selected: vueltoCentavos == 0,
+                          onSelected: (_) => fijarRecibido(totalCentavos / 100),
+                          selectedColor: AppColors.success,
+                          labelStyle: TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13,
+                            color: vueltoCentavos == 0 ? Colors.white : AppColors.textPrimary),
+                        ),
+                        ...billetes.map((b) {
+                          final activo = recibidoCentavos == b * 100;
+                          return ChoiceChip(
+                            label: Text('\$$b'),
+                            selected: activo,
+                            onSelected: (_) => fijarRecibido(b.toDouble()),
+                            selectedColor: AppColors.success,
+                            labelStyle: TextStyle(
+                              fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13,
+                              color: activo ? Colors.white : AppColors.textPrimary),
+                          );
+                        }),
+                      ],
+                    ),
+                    if (vueltoCentavos != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: (alcanza ? AppColors.success : AppColors.error).withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: (alcanza ? AppColors.success : AppColors.error).withValues(alpha: 0.5)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(alcanza ? 'VUELTO' : 'FALTAN',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13,
+                                color: alcanza ? AppColors.success : AppColors.error)),
+                            Text('\$${_fmt.format(vueltoCentavos.abs() / 100)}',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 28,
+                                color: alcanza ? AppColors.success : AppColors.error)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -445,7 +570,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                 child: const Text('Cambiar método'),
               ),
               ElevatedButton(
-                onPressed: () async {
+                // Con la calculadora activa no se cobra si lo recibido no
+                // cubre el total (se registra el cobro completo).
+                onPressed: !alcanza ? null : () async {
                   // Atajo al dedazo: $100 en vez de $10 en una mesa de $25.
                   if (propina > consumo) {
                     final seguro = await showDialog<bool>(
@@ -481,7 +608,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       ),
     );
 
-    if (confirmado == true) _propina = propina > 0 ? propina : 0;
+    if (confirmado == true) {
+      _propina = propina > 0 ? propina : 0;
+      _recibido = pedirRecibido ? recibido : null;
+    }
     return confirmado;
   }
 
@@ -609,6 +739,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         // El comprobante real manda: una cuenta en $0 siempre sale como nota.
         esFactura: factura.tipoComprobante == 'FACTURA',
         sucursalId: _sucursalId,
+        recibido: factura.total > 0 ? _recibido : null,
       ),
     );
   }
@@ -1126,6 +1257,8 @@ class _ComprobanteDialog extends StatefulWidget {
   final String metodoPago;
   final bool esFactura;
   final String sucursalId;
+  /// Efectivo que entregó el cliente (calculadora de vuelto); null si no se usó.
+  final double? recibido;
 
   const _ComprobanteDialog({
     required this.factura,
@@ -1133,6 +1266,7 @@ class _ComprobanteDialog extends StatefulWidget {
     required this.metodoPago,
     required this.esFactura,
     required this.sucursalId,
+    this.recibido,
   });
 
   @override
@@ -1213,6 +1347,12 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 if (f.propina > 0) _filaTicket('Propina', f.propina),
                 _filaTicket('TOTAL', f.total, bold: true),
                 Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
+                if (widget.recibido != null) ...[
+                  _filaTicket('Recibido', widget.recibido!),
+                  _filaTicket('Vuelto',
+                      ((widget.recibido! * 100).round() - (f.total * 100).round()) / 100,
+                      bold: true),
+                ],
                 if (f.cortesia && f.motivoCortesia != null)
                   Text('CORTESÍA: ${f.motivoCortesia}', style: _ticketBold),
                 // Solo la factura viaja al SRI: en la nota de venta no hay
@@ -1301,6 +1441,7 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         items: widget.items,
         metodoPago: widget.metodoPago,
         esFactura: widget.esFactura,
+        recibido: widget.recibido,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

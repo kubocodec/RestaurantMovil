@@ -104,6 +104,11 @@ absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepositor
   mesa" solo para admin). Una cuenta en $0 vuelve ya PAGADA del backend: no se llama a
   `registrarPago` (un pago de $0 lo rechaza). El resumen del cobro no suma base ni IVA
   de las líneas en cortesía.
+  **Calculadora de vuelto** (`core/settings/ajustes_cobro.dart`): preferencia por cajero,
+  guardada en el equipo con clave por usuario y apagada por defecto; se activa en el menú
+  lateral. Solo en efectivo. El pago se sigue registrando por el TOTAL (no por lo
+  recibido), o el arqueo del cajón se inflaría con el vuelto; lo recibido solo se muestra
+  e imprime. No deja cobrar si lo recibido no alcanza.
 - `features/inventario/` — inventario en pestañas: **Insumos** (stock, conteo, merma,
   historial), **Platos** (por unidades, con ingreso y ajuste; y los que van por receta),
   **Compras** y **Proveedores**. `receta_screen.dart` edita la receta de un plato y
