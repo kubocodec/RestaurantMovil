@@ -109,6 +109,10 @@ absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepositor
   lateral. Solo en efectivo. El pago se sigue registrando por el TOTAL (no por lo
   recibido), o el arqueo del cajón se inflaría con el vuelto; lo recibido solo se muestra
   e imprime. No deja cobrar si lo recibido no alcanza.
+  **Pregunta de propina**: misma preferencia por cajero (`pedirPropina`), pero ACTIVADA por
+  defecto; la apaga el cajero de un local sin propinas.
+  Con el teclado abierto el diálogo de cobro se compacta y el vuelto se repite en el
+  título (que no se desplaza): en pantallas chicas era imposible verlo al escribir.
 - `features/inventario/` — inventario en pestañas: **Insumos** (stock, conteo, merma,
   historial), **Platos** (por unidades, con ingreso y ajuste; y los que van por receta),
   **Compras** y **Proveedores**. `receta_screen.dart` edita la receta de un plato y

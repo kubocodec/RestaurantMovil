@@ -322,7 +322,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
     // Se conserva lo ya escrito si el cajero vuelve a abrir el diálogo
     // después de cambiar el método de pago.
-    double propina = _propina;
+    // Pregunta de propina: preferencia de cada cajero (activada por defecto).
+    final pedirPropina = AjustesCobro.instancia.pedirPropina(_usuarioId);
+    double propina = pedirPropina ? _propina : 0;
     _propinaCtrl.text = propina > 0 ? propina.toStringAsFixed(2) : '';
 
     // Calculadora de vuelto: preferencia de cada cajero, solo en efectivo.
@@ -381,21 +383,51 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             );
           }
 
+          // Con el teclado abierto el diálogo queda con muy poco alto: se
+          // compacta y el vuelto se repite junto al título, que no se desplaza,
+          // para verlo mientras se escribe en cualquier tamaño de pantalla.
+          final teclado = MediaQuery.viewInsetsOf(ctx).bottom > 0;
+          final colorVuelto = alcanza ? AppColors.success : AppColors.error;
+
           return AlertDialog(
-            title: const Text('Confirmar cobro'),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            title: Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('Confirmar cobro'),
+                if (pedirRecibido && vueltoCentavos != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: colorVuelto.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: colorVuelto.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      '${alcanza ? 'Vuelto' : 'Faltan'} \$${_fmt.format(vueltoCentavos.abs() / 100)}',
+                      style: TextStyle(
+                        fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                        fontSize: 14, color: colorVuelto)),
+                  ),
+              ],
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    '¿Estás seguro del método de pago seleccionado?',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
+                  if (!teclado) ...[
+                    const Text(
+                      '¿Estás seguro del método de pago seleccionado?',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    padding: EdgeInsets.symmetric(vertical: teclado ? 8 : 14, horizontal: 16),
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(14),
@@ -403,8 +435,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     ),
                     child: Column(
                       children: [
-                        Icon(icono, color: color, size: 32),
-                        const SizedBox(height: 6),
+                        if (!teclado) ...[
+                          Icon(icono, color: color, size: 32),
+                          const SizedBox(height: 6),
+                        ],
                         Text(nombreMetodo.toUpperCase(),
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -429,6 +463,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                       ],
                     ),
                   ),
+                  if (pedirPropina) ...[
                   const SizedBox(height: 16),
                   const Align(
                     alignment: Alignment.centerLeft,
@@ -439,6 +474,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _propinaCtrl,
+                    // Que al enfocarlo se vean también los montos rápidos.
+                    scrollPadding: const EdgeInsets.only(bottom: 90),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
@@ -477,6 +514,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                         ),
                     ],
                   ),
+                  ],
                   if (pedirRecibido) ...[
                     const SizedBox(height: 18),
                     const Align(
@@ -488,6 +526,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _recibidoCtrl,
+                      // Al enfocarlo el diálogo se desplaza hasta dejar
+                      // visible el cuadro del vuelto, que va justo debajo.
+                      scrollPadding: const EdgeInsets.only(bottom: 130),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
@@ -507,6 +548,31 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                             ? null
                             : double.tryParse(v.replaceAll(',', '.'))),
                     ),
+                    if (vueltoCentavos != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: (alcanza ? AppColors.success : AppColors.error).withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: (alcanza ? AppColors.success : AppColors.error).withValues(alpha: 0.5)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(alcanza ? 'VUELTO' : 'FALTAN',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13,
+                                color: alcanza ? AppColors.success : AppColors.error)),
+                            Text('\$${_fmt.format(vueltoCentavos.abs() / 100)}',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 28,
+                                color: alcanza ? AppColors.success : AppColors.error)),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -535,31 +601,6 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                         }),
                       ],
                     ),
-                    if (vueltoCentavos != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: (alcanza ? AppColors.success : AppColors.error).withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: (alcanza ? AppColors.success : AppColors.error).withValues(alpha: 0.5)),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(alcanza ? 'VUELTO' : 'FALTAN',
-                              style: TextStyle(
-                                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13,
-                                color: alcanza ? AppColors.success : AppColors.error)),
-                            Text('\$${_fmt.format(vueltoCentavos.abs() / 100)}',
-                              style: TextStyle(
-                                fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 28,
-                                color: alcanza ? AppColors.success : AppColors.error)),
-                          ],
-                        ),
-                      ),
-                    ],
                   ],
                 ],
               ),
