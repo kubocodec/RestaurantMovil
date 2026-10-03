@@ -343,6 +343,9 @@ class ComandaPrinter {
     /// Efectivo entregado por el cliente (calculadora de vuelto). Solo se
     /// imprime; el pago registrado es el total.
     double? recibido,
+    /// Parte en efectivo de un pago dividido: el vuelto sale de ella y no del
+    /// total. null = un solo método.
+    double? montoEfectivo,
   }) async {
     {
       final f = factura;
@@ -446,7 +449,8 @@ class ComandaPrinter {
       }
       if (recibido != null && f.total > 0) {
         // En centavos enteros para que el vuelto no salga 6,4899999.
-        final vuelto = ((recibido * 100).round() - (f.total * 100).round()) / 100;
+        final vuelto =
+            ((recibido * 100).round() - ((montoEfectivo ?? f.total) * 100).round()) / 100;
         bytes.addAll(_texto(_lineaMonto('Recibido', recibido)));
         bytes.addAll(_boldOn);
         bytes.addAll(_texto(_lineaMonto('Vuelto', vuelto)));

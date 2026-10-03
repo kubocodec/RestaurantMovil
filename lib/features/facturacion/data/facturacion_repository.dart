@@ -171,6 +171,25 @@ class FacturacionRepository {
     return FacturaModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Pago dividido: varios métodos que saldan la factura de una vez. El
+  /// backend registra todos o ninguno y exige que sumen exactamente el total.
+  Future<FacturaModel> registrarPagos({
+    required String facturaVentaId,
+    required List<({String metodoPagoId, double monto, String? referencia})> pagos,
+  }) async {
+    final r = await _dio.post('/api/facturas/$facturaVentaId/pagos/lote', data: {
+      'pagos': [
+        for (final p in pagos)
+          {
+            'metodoPagoId': p.metodoPagoId,
+            'monto': p.monto,
+            if (p.referencia != null && p.referencia!.isNotEmpty) 'referencia': p.referencia,
+          },
+      ],
+    });
+    return FacturaModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   // ------------------------------------------------------------------
   // Cortesías
   // ------------------------------------------------------------------

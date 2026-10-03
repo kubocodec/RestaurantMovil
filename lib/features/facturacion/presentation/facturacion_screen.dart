@@ -72,6 +72,18 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// con el vuelto.
   double? _recibido;
 
+  /// Pago dividido de ESTE cobro (ej. $15 efectivo + $11.50 transferencia);
+  /// null = un solo método, el camino de siempre. La última fila no lleva
+  /// monto: es lo que falta para el total que devuelve el servidor, así la
+  /// suma cuadra al centavo aunque el redondeo local difiera.
+  List<({String metodoPagoId, int? centavos, String? referencia})>? _pagosDivididos;
+
+  /// Pago dividido: hasta 3 métodos. Los controllers viven en el State y no en
+  /// el diálogo (ver la trampa del TextEditingController en CLAUDE.md).
+  static const _maxFilasDivision = 3;
+  final _montoDivCtrls = List.generate(_maxFilasDivision, (_) => TextEditingController());
+  final _refDivCtrls = List.generate(_maxFilasDivision, (_) => TextEditingController());
+
   String get _usuarioId {
     final s = context.read<AuthBloc>().state;
     return s is AuthAuthenticated ? s.user.id : '';
@@ -89,6 +101,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     _refCtrl.dispose();
     _propinaCtrl.dispose();
     _recibidoCtrl.dispose();
+    for (final c in [..._montoDivCtrls, ..._refDivCtrls]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -245,7 +260,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     final sinCobro = _desglose.total == 0;
     final confirmado = sinCobro ? await _confirmarSinCobro() : await _confirmarMetodoPago();
     if (confirmado != true || !mounted) return;
-    if (sinCobro) _propina = 0;
+    if (sinCobro) {
+      _propina = 0;
+      _pagosDivididos = null;
+    }
 
     setState(() => _emitiendo = true);
     try {
@@ -281,14 +299,20 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
       // Una cuenta en $0 (solo cortesías) el backend la deja pagada al
       // emitirla: no hay pago que registrar (y un pago de $0 sería rechazado).
+      final divididos = _pagosDivididos;
       final facturaPagada = factura.estado == 'PAGADA'
           ? factura
-          : await _factRepo.registrarPago(
-              facturaVentaId: factura.facturaVentaId,
-              metodoPagoId: metodoPagoId,
-              monto: factura.total,
-              referencia: _refCtrl.text.trim().isNotEmpty ? _refCtrl.text.trim() : null,
-            );
+          : divididos != null
+              ? await _factRepo.registrarPagos(
+                  facturaVentaId: factura.facturaVentaId,
+                  pagos: _armarPagosDivididos(divididos, factura.total),
+                )
+              : await _factRepo.registrarPago(
+                  facturaVentaId: factura.facturaVentaId,
+                  metodoPagoId: metodoPagoId,
+                  monto: factura.total,
+                  referencia: _refCtrl.text.trim().isNotEmpty ? _refCtrl.text.trim() : null,
+                );
 
       if (mounted) {
         await _mostrarComprobante(facturaPagada, itemsRecibo);
@@ -303,6 +327,20 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     } finally {
       if (mounted) setState(() => _emitiendo = false);
     }
+  }
+
+  /// Montos del pago dividido contra el total del servidor: la última fila
+  /// se lleva lo que falta, en centavos enteros para que sumen exacto.
+  List<({String metodoPagoId, double monto, String? referencia})> _armarPagosDivididos(
+      List<({String metodoPagoId, int? centavos, String? referencia})> filas, double total) {
+    var restante = (total * 100).round();
+    final pagos = <({String metodoPagoId, double monto, String? referencia})>[];
+    for (final f in filas) {
+      final centavos = f.centavos ?? restante;
+      restante -= centavos;
+      pagos.add((metodoPagoId: f.metodoPagoId, monto: centavos / 100, referencia: f.referencia));
+    }
+    return pagos;
   }
 
   /// Diálogo previo al cobro que muestra el método de pago y el total en
@@ -328,9 +366,24 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     _propinaCtrl.text = propina > 0 ? propina.toStringAsFixed(2) : '';
 
     // Calculadora de vuelto: preferencia de cada cajero, solo en efectivo.
-    final pedirRecibido = esEfectivo && AjustesCobro.instancia.calcularVuelto(_usuarioId);
+    // En un pago dividido aplica a la parte en efectivo, si la hay.
+    final calculadora = AjustesCobro.instancia.calcularVuelto(_usuarioId);
+    var pedirRecibido = esEfectivo && calculadora;
     double? recibido;
     _recibidoCtrl.clear();
+
+    // Pago dividido: arranca apagado cada vez; si el cajero no lo toca, el
+    // cobro sigue exactamente el camino de un solo método.
+    var dividir = false;
+    final filas = <String>[]; // metodoPagoId de cada fila
+    var centavosFilas = <int?>[];
+    for (final c in [..._montoDivCtrls, ..._refDivCtrls]) {
+      c.clear();
+    }
+    MetodoPagoModel? metodoDe(String id) =>
+        _metodosPago.where((m) => m.metodoPagoId == id).firstOrNull;
+    bool esEfectivoId(String id) =>
+        (metodoDe(id)?.nombre ?? '').toUpperCase().contains('EFECTIVO');
 
     final confirmado = await showDialog<bool>(
       context: context,
@@ -349,9 +402,39 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
           // En centavos enteros: con doubles, 20 - 13,51 puede dar 6,4899999.
           final totalCentavos = ((consumo + propina) * 100).round();
+
+          // Pago dividido: el cajero escribe los montos de todas las filas
+          // menos la última, que se lleva lo que falta. Así la suma cuadra
+          // siempre con el total y no hay "sobran" que corregir.
+          var montosOk = true;
+          var sumaFijas = 0;
+          centavosFilas = [];
+          for (var i = 0; i < filas.length - 1; i++) {
+            final v = double.tryParse(_montoDivCtrls[i].text.replaceAll(',', '.'));
+            final c = v == null ? null : (v * 100).round();
+            if (c == null || c <= 0) montosOk = false;
+            centavosFilas.add(c);
+            sumaFijas += c ?? 0;
+          }
+          final restoCentavos = totalCentavos - sumaFijas;
+          if (dividir) centavosFilas.add(restoCentavos);
+          final divisionOk = !dividir || (montosOk && restoCentavos > 0);
+
+          // Lo que el cliente paga en efectivo: contra eso se calcula el vuelto.
+          int? efectivoCentavos;
+          if (!dividir) {
+            efectivoCentavos = esEfectivo ? totalCentavos : null;
+          } else {
+            for (var i = 0; i < filas.length; i++) {
+              if (esEfectivoId(filas[i])) efectivoCentavos = centavosFilas[i] ?? 0;
+            }
+          }
+          pedirRecibido = calculadora && efectivoCentavos != null;
+          final aCubrirCentavos = efectivoCentavos ?? 0;
+
           final recibidoCentavos = recibido == null ? null : (recibido! * 100).round();
           final vueltoCentavos =
-              recibidoCentavos == null ? null : recibidoCentavos - totalCentavos;
+              recibidoCentavos == null ? null : recibidoCentavos - aCubrirCentavos;
           final alcanza = !pedirRecibido || (vueltoCentavos != null && vueltoCentavos >= 0);
 
           void fijarRecibido(double? v) {
@@ -365,7 +448,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
           // Billetes que tiene sentido ofrecer: los que cubren el total.
           final billetes = [5, 10, 20, 50, 100]
-              .where((b) => b * 100 >= totalCentavos)
+              .where((b) => b * 100 >= aCubrirCentavos)
               .take(3)
               .toList();
 
@@ -388,6 +471,104 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           // para verlo mientras se escribe en cualquier tamaño de pantalla.
           final teclado = MediaQuery.viewInsetsOf(ctx).bottom > 0;
           final colorVuelto = alcanza ? AppColors.success : AppColors.error;
+          final colorCaja = dividir ? AppColors.primary : color;
+
+          const estiloMonto = TextStyle(
+            fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700);
+
+          Widget filaDivision(int i) {
+            final ultima = i == filas.length - 1;
+            final usados = {for (var j = 0; j < filas.length; j++) if (j != i) filas[j]};
+            final opciones =
+                _metodosPago.where((m) => !usados.contains(m.metodoPagoId)).toList();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: DropdownButton<String>(
+                          value: filas[i],
+                          isExpanded: true,
+                          isDense: true,
+                          items: opciones
+                              .map((m) => DropdownMenuItem(
+                                    value: m.metodoPagoId,
+                                    child: Text(m.nombre,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontFamily: 'Poppins', fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) setDialogState(() => filas[i] = v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        // La última fila no se escribe: es lo que falta.
+                        child: ultima
+                            ? Text(
+                                restoCentavos > 0
+                                    ? '\$${_fmt.format(restoCentavos / 100)}'
+                                    : '—',
+                                textAlign: TextAlign.right,
+                                style: estiloMonto.copyWith(
+                                    color: restoCentavos > 0
+                                        ? AppColors.textPrimary
+                                        : AppColors.error))
+                            : TextField(
+                                controller: _montoDivCtrls[i],
+                                scrollPadding: const EdgeInsets.only(bottom: 120),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(decimal: true),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                                ],
+                                textAlign: TextAlign.right,
+                                style: estiloMonto,
+                                decoration: const InputDecoration(
+                                  prefixText: '\$ ',
+                                  hintText: '0.00',
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setDialogState(() {}),
+                              ),
+                      ),
+                      // Solo se quita la última fila agregada (la tercera):
+                      // las dos primeras son la división mínima.
+                      if (ultima && filas.length > 2)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Quitar',
+                          onPressed: () => setDialogState(() {
+                            _montoDivCtrls[i].clear();
+                            _refDivCtrls[i].clear();
+                            filas.removeLast();
+                          }),
+                        ),
+                    ],
+                  ),
+                  if (metodoDe(filas[i])?.requiereReferencia == true)
+                    TextField(
+                      controller: _refDivCtrls[i],
+                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+                      decoration: const InputDecoration(
+                        hintText: 'Referencia (opcional)',
+                        isDense: true,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
 
           return AlertDialog(
             insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -418,10 +599,12 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (!teclado) ...[
-                    const Text(
-                      '¿Estás seguro del método de pago seleccionado?',
+                    Text(
+                      dividir
+                          ? '¿Estás seguro de cómo se divide el pago?'
+                          : '¿Estás seguro del método de pago seleccionado?',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -429,21 +612,21 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(vertical: teclado ? 8 : 14, horizontal: 16),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.08),
+                      color: colorCaja.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: color.withValues(alpha: 0.4)),
+                      border: Border.all(color: colorCaja.withValues(alpha: 0.4)),
                     ),
                     child: Column(
                       children: [
                         if (!teclado) ...[
-                          Icon(icono, color: color, size: 32),
+                          Icon(dividir ? Icons.call_split : icono, color: colorCaja, size: 32),
                           const SizedBox(height: 6),
                         ],
-                        Text(nombreMetodo.toUpperCase(),
+                        Text(dividir ? 'PAGO DIVIDIDO' : nombreMetodo.toUpperCase(),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'Poppins', fontWeight: FontWeight.w700,
-                            fontSize: 18, color: color)),
+                            fontSize: 18, color: colorCaja)),
                         const SizedBox(height: 2),
                         Text('\$${_fmt.format(consumo + propina)}',
                           style: const TextStyle(
@@ -515,12 +698,81 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     ],
                   ),
                   ],
+                  if (dividir) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('¿Cómo paga?',
+                            style: TextStyle(
+                              fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+                        ),
+                        TextButton(
+                          onPressed: () => setDialogState(() {
+                            dividir = false;
+                            filas.clear();
+                            for (final c in [..._montoDivCtrls, ..._refDivCtrls]) {
+                              c.clear();
+                            }
+                          }),
+                          child: const Text('No dividir'),
+                        ),
+                      ],
+                    ),
+                    if (!teclado)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'Escribe cuánto paga con cada método; el último se completa solo.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins', fontSize: 11,
+                            color: AppColors.textSecondary),
+                        ),
+                      ),
+                    for (var i = 0; i < filas.length; i++) filaDivision(i),
+                    if (montosOk && restoCentavos <= 0)
+                      Text(
+                        'Los montos superan el total de \$${_fmt.format(totalCentavos / 100)}',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 12, color: AppColors.error),
+                      ),
+                    if (filas.length < _maxFilasDivision && filas.length < _metodosPago.length)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Agregar otro método'),
+                          onPressed: () => setDialogState(() => filas.add(_metodosPago
+                              .firstWhere((m) => !filas.contains(m.metodoPagoId))
+                              .metodoPagoId)),
+                        ),
+                      ),
+                  ] else if (_metodosPago.length >= 2) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.call_split, size: 18),
+                        label: const Text('Dividir pago entre varios métodos'),
+                        onPressed: () => setDialogState(() {
+                          dividir = true;
+                          final primero = metodo?.metodoPagoId ?? _metodosPago.first.metodoPagoId;
+                          filas
+                            ..clear()
+                            ..add(primero)
+                            ..add(_metodosPago
+                                .firstWhere((m) => m.metodoPagoId != primero)
+                                .metodoPagoId);
+                        }),
+                      ),
+                    ),
+                  ],
                   if (pedirRecibido) ...[
                     const SizedBox(height: 18),
-                    const Align(
+                    Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('¿Con cuánto paga?',
-                        style: TextStyle(
+                      child: Text(dividir ? '¿Con cuánto paga el efectivo?' : '¿Con cuánto paga?',
+                        style: const TextStyle(
                           fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
                     ),
                     const SizedBox(height: 8),
@@ -581,7 +833,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                         ChoiceChip(
                           label: const Text('Exacto'),
                           selected: vueltoCentavos == 0,
-                          onSelected: (_) => fijarRecibido(totalCentavos / 100),
+                          onSelected: (_) => fijarRecibido(aCubrirCentavos / 100),
                           selectedColor: AppColors.success,
                           labelStyle: TextStyle(
                             fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13,
@@ -613,7 +865,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
               ElevatedButton(
                 // Con la calculadora activa no se cobra si lo recibido no
                 // cubre el total (se registra el cobro completo).
-                onPressed: !alcanza ? null : () async {
+                // En un pago dividido, tampoco mientras los montos no cuadren.
+                onPressed: !alcanza || !divisionOk ? null : () async {
                   // Atajo al dedazo: $100 en vez de $10 en una mesa de $25.
                   if (propina > consumo) {
                     final seguro = await showDialog<bool>(
@@ -652,6 +905,19 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     if (confirmado == true) {
       _propina = propina > 0 ? propina : 0;
       _recibido = pedirRecibido ? recibido : null;
+      _pagosDivididos = dividir
+          ? [
+              for (var i = 0; i < filas.length; i++)
+                (
+                  metodoPagoId: filas[i],
+                  centavos: i < filas.length - 1 ? centavosFilas[i] : null,
+                  referencia: metodoDe(filas[i])?.requiereReferencia == true &&
+                          _refDivCtrls[i].text.trim().isNotEmpty
+                      ? _refDivCtrls[i].text.trim()
+                      : null,
+                ),
+            ]
+          : null;
     }
     return confirmado;
   }
@@ -769,7 +1035,17 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {
-    final metodoPago = _metodoPagoSeleccionado?.nombre ?? '';
+    final dividido = factura.pagos.length > 1;
+    final metodoPago = dividido
+        ? factura.pagos.map((p) => p.nombreMetodoPago).join(' + ')
+        : _metodoPagoSeleccionado?.nombre ?? '';
+    // En un pago dividido el vuelto sale de la parte en efectivo, con el
+    // monto que registró el servidor (no el calculado en el diálogo).
+    final efectivo = dividido
+        ? factura.pagos
+            .where((p) => p.nombreMetodoPago.toUpperCase().contains('EFECTIVO'))
+            .fold<double>(0, (s, p) => s + p.monto)
+        : null;
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -781,6 +1057,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         esFactura: factura.tipoComprobante == 'FACTURA',
         sucursalId: _sucursalId,
         recibido: factura.total > 0 ? _recibido : null,
+        montoEfectivo: efectivo,
       ),
     );
   }
@@ -1300,6 +1577,9 @@ class _ComprobanteDialog extends StatefulWidget {
   final String sucursalId;
   /// Efectivo que entregó el cliente (calculadora de vuelto); null si no se usó.
   final double? recibido;
+  /// Parte en efectivo de un pago dividido: el vuelto se calcula sobre ella y
+  /// no sobre el total. null = un solo método.
+  final double? montoEfectivo;
 
   const _ComprobanteDialog({
     required this.factura,
@@ -1308,6 +1588,7 @@ class _ComprobanteDialog extends StatefulWidget {
     required this.esFactura,
     required this.sucursalId,
     this.recibido,
+    this.montoEfectivo,
   });
 
   @override
@@ -1387,11 +1668,16 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 _filaTicket('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva),
                 if (f.propina > 0) _filaTicket('Propina', f.propina),
                 _filaTicket('TOTAL', f.total, bold: true),
-                Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
+                if (f.pagos.length > 1)
+                  for (final p in f.pagos) _filaTicket(p.nombreMetodoPago, p.monto)
+                else
+                  Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
                 if (widget.recibido != null) ...[
                   _filaTicket('Recibido', widget.recibido!),
                   _filaTicket('Vuelto',
-                      ((widget.recibido! * 100).round() - (f.total * 100).round()) / 100,
+                      ((widget.recibido! * 100).round() -
+                              ((widget.montoEfectivo ?? f.total) * 100).round()) /
+                          100,
                       bold: true),
                 ],
                 if (f.cortesia && f.motivoCortesia != null)
@@ -1483,6 +1769,7 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         metodoPago: widget.metodoPago,
         esFactura: widget.esFactura,
         recibido: widget.recibido,
+        montoEfectivo: widget.montoEfectivo,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
