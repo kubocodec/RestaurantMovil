@@ -606,6 +606,13 @@ class ConfiguracionRepository {
     return RestaurantModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Activa/desactiva los adelantos de reservas del restaurante. Apagado, el
+  /// módulo no aparece en su app; lo ya registrado no se borra.
+  Future<RestaurantModel> setAdelantos(String restaurantId, bool activo) async {
+    final r = await _dio.patch('/api/restaurants/$restaurantId/adelantos?activo=$activo');
+    return RestaurantModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<List<SucursalModel>> getSucursalesByRestaurant(String restaurantId) async {
     final r = await _dio.get('/api/sucursales/restaurant/$restaurantId');
     final List data = r.data['data'] ?? [];

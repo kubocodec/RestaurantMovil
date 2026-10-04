@@ -173,7 +173,8 @@ class _CajaScreenState extends State<CajaScreen> {
               Text(
                 'Ventas del turno: \$${_fmt.format(resumen.totalVentas)} '
                 '(\$${_fmt.format(resumen.totalVentasEfectivo)} en efectivo, '
-                '\$${_fmt.format(resumen.totalVentas - resumen.totalVentasEfectivo)} en otros métodos)',
+                '\$${_fmt.format(resumen.ventasOtrosMetodos)} en otros métodos'
+                '${resumen.totalAdelantosAplicados > 0 ? ', \$${_fmt.format(resumen.totalAdelantosAplicados)} con adelantos' : ''})',
                 style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
@@ -420,6 +421,9 @@ class _CajaScreenState extends State<CajaScreen> {
                     _FilaCaja('Ventas en efectivo', _resumen!.totalVentasEfectivo, fmt: _fmt, signo: '+'),
                     if (_resumen!.ventasOtrosMetodos > 0.009)
                       _FilaCaja('Ventas con tarjeta / transferencia', _resumen!.ventasOtrosMetodos, fmt: _fmt, signo: '+'),
+                    if (_resumen!.totalAdelantosOtrosMetodos > 0)
+                      _FilaCaja('Adelantos recibidos (transf./tarjeta)',
+                          _resumen!.totalAdelantosOtrosMetodos, fmt: _fmt, signo: '+'),
                     _FilaCaja('Otros ingresos a caja', _resumen!.totalIngresos, fmt: _fmt, signo: '+'),
                     _FilaCaja('Egresos (gastos)', _resumen!.totalEgresos, fmt: _fmt, signo: '-'),
                     const SizedBox(height: 8),

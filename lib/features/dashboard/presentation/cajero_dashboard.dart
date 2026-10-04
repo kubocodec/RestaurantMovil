@@ -7,6 +7,8 @@ import '../../../core/settings/ajustes_texto.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
+import '../../../features/adelantos/data/adelantos_repository.dart';
+import '../../../features/adelantos/presentation/adelantos_screen.dart';
 import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
@@ -47,6 +49,9 @@ class _CajeroBodyState extends State<_CajeroBody> {
   final _cajaRepo = CajaRepository();
   final _reportesRepo = ReportesRepository();
   final _ordenesRepo = OrdenesRepository();
+  final _adelantosRepo = AdelantosRepository();
+  /// Solo los restaurantes con adelantos de reservas ven ese acceso.
+  bool _adelantosHabilitados = false;
   bool? _cajaAbierta; // null = cargando
   double _ventasHoy = 0;
   int _facturasHoy = 0;
@@ -106,6 +111,20 @@ class _CajeroBodyState extends State<_CajeroBody> {
     } catch (_) {
       if (mounted) setState(() => _cargandoStats = false);
     }
+    // Responde "no habilitado" si falla o el backend no lo tiene.
+    final adelantos = await _adelantosRepo.listar(sucursalId);
+    if (mounted && adelantos.habilitado != _adelantosHabilitados) {
+      setState(() => _adelantosHabilitados = adelantos.habilitado);
+    }
+  }
+
+  Future<void> _abrirAdelantos() async {
+    final sucursalId = widget.user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => AdelantosScreen(sucursalId: sucursalId),
+    ));
+    if (mounted) _checkCajaStatus();
   }
 
   @override
@@ -319,6 +338,16 @@ class _CajeroBodyState extends State<_CajeroBody> {
           color: AppColors.info,
           onTap: () => _irARuta('/cajero/comprobantes'),
         ),
+        if (_adelantosHabilitados) ...[
+          const SizedBox(height: 8),
+          _ActionTile(
+            icon: Icons.event_available_outlined,
+            label: 'Adelantos de reservas',
+            subtitle: 'Registrar y consultar adelantos',
+            color: AppColors.earth2,
+            onTap: _abrirAdelantos,
+          ),
+        ],
         const SizedBox(height: 8),
         _ActionTile(
           icon: Icons.table_restaurant_outlined,

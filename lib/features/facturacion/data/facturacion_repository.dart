@@ -1,6 +1,10 @@
 import '../../../core/models/factura_model.dart';
 import '../../../core/network/api_client.dart';
 
+/// Un pago del cobro por /pagos/lote. Con [adelantoId] sale de un adelanto
+/// de reserva (va con el método con que se pagó el adelanto).
+typedef PagoLote = ({String metodoPagoId, double monto, String? referencia, String? adelantoId});
+
 class FacturacionRepository {
   final _dio = ApiClient.instance.dio;
 
@@ -175,7 +179,7 @@ class FacturacionRepository {
   /// backend registra todos o ninguno y exige que sumen exactamente el total.
   Future<FacturaModel> registrarPagos({
     required String facturaVentaId,
-    required List<({String metodoPagoId, double monto, String? referencia})> pagos,
+    required List<PagoLote> pagos,
   }) async {
     final r = await _dio.post('/api/facturas/$facturaVentaId/pagos/lote', data: {
       'pagos': [
@@ -184,6 +188,7 @@ class FacturacionRepository {
             'metodoPagoId': p.metodoPagoId,
             'monto': p.monto,
             if (p.referencia != null && p.referencia!.isNotEmpty) 'referencia': p.referencia,
+            if (p.adelantoId != null) 'adelantoId': p.adelantoId,
           },
       ],
     });

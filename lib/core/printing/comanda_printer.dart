@@ -346,6 +346,8 @@ class ComandaPrinter {
     /// Parte en efectivo de un pago dividido: el vuelto sale de ella y no del
     /// total. null = un solo método.
     double? montoEfectivo,
+    /// Lo que sobró del adelanto de reserva y se devolvió al cliente.
+    double? devueltoAdelanto,
   }) async {
     {
       final f = factura;
@@ -442,7 +444,12 @@ class ComandaPrinter {
         if (f.motivoCortesia != null) bytes.addAll(_texto('Motivo: ${f.motivoCortesia}\n'));
       } else if (f.pagos.isNotEmpty) {
         for (final p in f.pagos) {
-          bytes.addAll(_texto(_lineaMonto(p.nombreMetodoPago, p.monto)));
+          bytes.addAll(_texto(_lineaMonto(p.etiqueta, p.monto)));
+        }
+        if (devueltoAdelanto != null) {
+          bytes.addAll(_boldOn);
+          bytes.addAll(_texto(_lineaMonto('Devuelto del adelanto', devueltoAdelanto)));
+          bytes.addAll(_boldOff);
         }
       } else {
         bytes.addAll(_texto(_lineaMonto(metodoPago, f.total)));
@@ -566,11 +573,14 @@ class ComandaPrinter {
         // ── Total de caja del turno: todo el dinero, con su desglose ──
         ..._boldOn, ..._texto('TOTAL DE CAJA DEL TURNO\n'), ..._boldOff,
         ..._texto(_lineaMonto('Fondo inicial', c.montoInicial)),
-        if (c.ventasPorMetodo.isEmpty && c.totalVentas > 0.009)
-          ..._texto(_lineaMonto('+ Ventas', c.totalVentas))
+        // Lo pagado con adelantos no se suma: ese dinero entró otro día.
+        if (c.ventasPorMetodo.isEmpty && c.totalVentas - c.totalAdelantosAplicados > 0.009)
+          ..._texto(_lineaMonto('+ Ventas', c.totalVentas - c.totalAdelantosAplicados))
         else
           for (final m in c.ventasPorMetodo)
             ..._texto(_lineaMonto('+ Ventas ${m.metodo}', m.total)),
+        if (c.totalAdelantosOtrosMetodos > 0)
+          ..._texto(_lineaMonto('+ Adelantos transf/tarj', c.totalAdelantosOtrosMetodos)),
         ..._texto(_lineaMonto('+ Otros ingresos', c.totalIngresos)),
         ..._texto(_lineaMonto('- Egresos', -c.totalEgresos)),
         ..._center, ..._doubleSize, ..._boldOn,
@@ -609,12 +619,37 @@ class ComandaPrinter {
         for (final m in c.ventasPorMetodo) {
           bytes.addAll(_texto(_lineaMonto('${m.metodo} (${m.numPagos})', m.total)));
         }
+        if (c.totalAdelantosAplicados > 0) {
+          bytes.addAll(_texto(_lineaMonto('Con adelantos', c.totalAdelantosAplicados)));
+        }
         bytes.addAll(_boldOn);
         bytes.addAll(_texto(_lineaMonto(
             'TOTAL (${c.totalFacturas} fact.)', c.totalVentas)));
         bytes.addAll(_boldOff);
       }
       bytes.addAll(_texto('${'-' * _cols}\n'));
+
+      // ── Adelantos de reservas (solo si el negocio los usa) ──
+      if (c.adelantosRecibidos.isNotEmpty || c.adelantosAplicados.isNotEmpty) {
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto('ADELANTOS DE RESERVAS\n'));
+        bytes.addAll(_boldOff);
+        if (c.adelantosRecibidos.isNotEmpty) {
+          bytes.addAll(_texto('Recibidos (no son venta):\n'));
+          for (final a in c.adelantosRecibidos) {
+            bytes.addAll(_texto(_lineaMonto('${a.cliente} ${a.metodo}', a.monto)));
+          }
+          bytes.addAll(_texto(_lineaMonto('Total recibido', c.totalAdelantosRecibidos)));
+        }
+        if (c.adelantosAplicados.isNotEmpty) {
+          bytes.addAll(_texto('Usados como pago hoy:\n'));
+          for (final a in c.adelantosAplicados) {
+            bytes.addAll(_texto(_lineaMonto(a.cliente, a.monto)));
+          }
+          bytes.addAll(_texto(_lineaMonto('Total usado', c.totalAdelantosAplicados)));
+        }
+        bytes.addAll(_texto('${'-' * _cols}\n'));
+      }
 
       // ── Ingresos extra ──
       bytes.addAll(_boldOn);
@@ -670,6 +705,57 @@ class ComandaPrinter {
 
       return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
     }
+  }
+
+  /// Recibo de un adelanto de reserva. Dice en grande que NO es factura: el
+  /// comprobante se emite el día del consumo, con el adelanto descontado.
+  static Future<String> imprimirReciboAdelanto({
+    String? ip,
+    int puerto = 9100,
+    String? mac,
+    required String nombreSucursal,
+    required String cliente,
+    String? cedula,
+    required double monto,
+    required String metodoPago,
+    String? referencia,
+    DateTime? fechaPrevista,
+    String? nota,
+    required DateTime fecha,
+    required String atendidoPor,
+  }) async {
+    String fechaCorta(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    final bytes = <int>[
+      ..._init, ..._codePage,
+      ..._center, ..._doubleSize, ..._boldOn,
+      ..._texto('$nombreSucursal\n'),
+      ..._normalSize,
+      ..._texto('RECIBO DE ADELANTO\n'),
+      ..._boldOff,
+      ..._texto('(no es factura)\n'),
+      ..._left,
+      ..._texto('${'-' * _cols}\n'),
+      ..._texto('Fecha: ${_fechaHora(fecha.toLocal())}\n'),
+      ..._texto('Cliente: $cliente\n'),
+      if (cedula != null && cedula.isNotEmpty) ..._texto('C.I./RUC: $cedula\n'),
+      if (fechaPrevista != null) ..._texto('Reserva para: ${fechaCorta(fechaPrevista)}\n'),
+      if (nota != null && nota.isNotEmpty) ..._texto('Nota: $nota\n'),
+      ..._texto('${'-' * _cols}\n'),
+      ..._boldOn,
+      ..._texto(_lineaMonto('ADELANTO', monto)),
+      ..._boldOff,
+      ..._texto('Pago: $metodoPago\n'),
+      if (referencia != null && referencia.isNotEmpty) ..._texto('Ref: $referencia\n'),
+      ..._texto('${'-' * _cols}\n'),
+      // Líneas de hasta 32 columnas (ancho del rollo de 58 mm).
+      ..._texto('Se descuenta del consumo el dia\n'),
+      ..._texto('de la reserva. Si cancela, queda\n'),
+      ..._texto('a su favor para otra fecha.\n'),
+      ..._texto('Atendido por: $atendidoPor\n'),
+      ..._feed, ..._cut,
+    ];
+    return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
   }
 
   /// Concepto a la izquierda y monto alineado a la derecha (32 columnas).

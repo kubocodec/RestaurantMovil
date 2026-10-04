@@ -91,6 +91,11 @@ class ResumenCajaModel {
   final double montoEsperado;
   final List<MovimientoItemModel> movimientos;
   final List<VentaPlatoModel> ventasPorPlato;
+  /// Adelantos de reservas recibidos por transferencia, tarjeta, etc. (los
+  /// de efectivo ya vienen en totalIngresos). 0 si el negocio no los usa.
+  final double totalAdelantosOtrosMetodos;
+  /// Parte de totalVentas pagada con adelantos: ese dinero entró otro día.
+  final double totalAdelantosAplicados;
 
   const ResumenCajaModel({
     required this.montoInicial,
@@ -101,15 +106,22 @@ class ResumenCajaModel {
     required this.montoEsperado,
     required this.movimientos,
     required this.ventasPorPlato,
+    this.totalAdelantosOtrosMetodos = 0,
+    this.totalAdelantosAplicados = 0,
   });
 
-  /// Ventas cobradas por métodos distintos del efectivo (tarjeta, transferencia...).
-  double get ventasOtrosMetodos => totalVentas - totalVentasEfectivo;
+  /// Ventas cobradas hoy por métodos distintos del efectivo (tarjeta,
+  /// transferencia...). Lo pagado con adelantos no entra: se cobró otro día.
+  double get ventasOtrosMetodos =>
+      totalVentas - totalVentasEfectivo - totalAdelantosAplicados;
 
   /// TOTAL DE CAJA del turno contando absolutamente todo el dinero:
   /// fondo inicial + todas las ventas (efectivo y otros métodos)
   /// + otros ingresos - egresos. Es la misma fórmula en toda la app.
-  double get totalCaja => montoInicial + totalVentas + totalIngresos - totalEgresos;
+  /// Con adelantos: se suma lo recibido hoy y se resta lo que se cobró
+  /// con adelantos de otros días; sin adelantos ambos son 0.
+  double get totalCaja => montoInicial + totalVentas - totalAdelantosAplicados
+      + totalAdelantosOtrosMetodos + totalIngresos - totalEgresos;
 
   factory ResumenCajaModel.fromJson(Map<String, dynamic> j) => ResumenCajaModel(
     montoInicial:  AperturaCajaModel._toDouble(j['montoInicial']),
@@ -124,6 +136,8 @@ class ResumenCajaModel {
     ventasPorPlato: ((j['ventasPorPlato'] as List?) ?? [])
         .map((v) => VentaPlatoModel.fromJson(v))
         .toList(),
+    totalAdelantosOtrosMetodos: AperturaCajaModel._toDouble(j['totalAdelantosOtrosMetodos']),
+    totalAdelantosAplicados:    AperturaCajaModel._toDouble(j['totalAdelantosAplicados']),
   );
 }
 
@@ -184,6 +198,32 @@ class PagoDetalleModel {
   );
 }
 
+/// Un adelanto de reserva en el cierre: recibido en el turno (no es venta)
+/// o usado como pago de un cobro del turno.
+class AdelantoCajaModel {
+  final String cliente;
+  final String metodo;
+  final double monto;
+  final DateTime fecha;
+  final String? numeroFactura;
+
+  const AdelantoCajaModel({
+    required this.cliente,
+    required this.metodo,
+    required this.monto,
+    required this.fecha,
+    this.numeroFactura,
+  });
+
+  factory AdelantoCajaModel.fromJson(Map<String, dynamic> j) => AdelantoCajaModel(
+    cliente:       j['cliente']?.toString() ?? '',
+    metodo:        j['metodo']?.toString() ?? '',
+    monto:         AperturaCajaModel._toDouble(j['monto']),
+    fecha:         DateTime.tryParse(j['fecha']?.toString() ?? '') ?? DateTime.now(),
+    numeroFactura: j['numeroFactura']?.toString(),
+  );
+}
+
 /// Detalle completo de una apertura/cierre de caja: arqueo, cada ingreso
 /// y egreso, ventas por plato y desglose por método de pago.
 class CierreDetalladoModel {
@@ -212,6 +252,13 @@ class CierreDetalladoModel {
   /// Cortesías del turno: no son venta ni entran a caja.
   final int unidadesCortesia;
   final double valorCortesias;
+  /// Adelantos de reservas: recibidos en el turno (no son venta; los de
+  /// efectivo también están en ingresos) y usados como pago en el turno.
+  final List<AdelantoCajaModel> adelantosRecibidos;
+  final double totalAdelantosRecibidos;
+  final double totalAdelantosOtrosMetodos;
+  final List<AdelantoCajaModel> adelantosAplicados;
+  final double totalAdelantosAplicados;
 
   const CierreDetalladoModel({
     required this.aperturaCierreCajaId,
@@ -238,17 +285,27 @@ class CierreDetalladoModel {
     this.pagos = const [],
     this.unidadesCortesia = 0,
     this.valorCortesias = 0,
+    this.adelantosRecibidos = const [],
+    this.totalAdelantosRecibidos = 0,
+    this.totalAdelantosOtrosMetodos = 0,
+    this.adelantosAplicados = const [],
+    this.totalAdelantosAplicados = 0,
   });
 
   bool get isCerrada => estado == 'CERRADA';
 
-  /// Ventas cobradas por métodos distintos del efectivo (tarjeta, transferencia...).
-  double get ventasOtrosMetodos => totalVentas - totalVentasEfectivo;
+  /// Ventas cobradas hoy por métodos distintos del efectivo (tarjeta,
+  /// transferencia...). Lo pagado con adelantos no entra: se cobró otro día.
+  double get ventasOtrosMetodos =>
+      totalVentas - totalVentasEfectivo - totalAdelantosAplicados;
 
   /// TOTAL DE CAJA del turno contando absolutamente todo el dinero:
   /// fondo inicial + todas las ventas (efectivo y otros métodos)
   /// + otros ingresos - egresos. Es la misma fórmula en toda la app.
-  double get totalCaja => montoInicial + totalVentas + totalIngresos - totalEgresos;
+  /// Con adelantos: se suma lo recibido hoy y se resta lo que se cobró
+  /// con adelantos de otros días; sin adelantos ambos son 0.
+  double get totalCaja => montoInicial + totalVentas - totalAdelantosAplicados
+      + totalAdelantosOtrosMetodos + totalIngresos - totalEgresos;
 
   factory CierreDetalladoModel.fromJson(Map<String, dynamic> j) => CierreDetalladoModel(
     aperturaCierreCajaId: j['aperturaCierreCajaId']?.toString() ?? '',
@@ -285,6 +342,15 @@ class CierreDetalladoModel {
     pagos: ((j['pagos'] as List?) ?? [])
         .map((p) => PagoDetalleModel.fromJson(p))
         .toList(),
+    adelantosRecibidos: ((j['adelantosRecibidos'] as List?) ?? [])
+        .map((a) => AdelantoCajaModel.fromJson(a))
+        .toList(),
+    totalAdelantosRecibidos:    AperturaCajaModel._toDouble(j['totalAdelantosRecibidos']),
+    totalAdelantosOtrosMetodos: AperturaCajaModel._toDouble(j['totalAdelantosOtrosMetodos']),
+    adelantosAplicados: ((j['adelantosAplicados'] as List?) ?? [])
+        .map((a) => AdelantoCajaModel.fromJson(a))
+        .toList(),
+    totalAdelantosAplicados:    AperturaCajaModel._toDouble(j['totalAdelantosAplicados']),
   );
 }
 

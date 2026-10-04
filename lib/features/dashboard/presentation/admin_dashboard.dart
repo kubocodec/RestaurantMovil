@@ -7,6 +7,8 @@ import '../../../core/settings/ajustes_texto.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
+import '../../../features/adelantos/data/adelantos_repository.dart';
+import '../../../features/adelantos/presentation/adelantos_screen.dart';
 import '../../../features/inventario/data/inventario_repository.dart';
 import '../../../features/inventario/presentation/inventario_screen.dart';
 import '../../../features/mesas/data/mesas_repository.dart';
@@ -66,6 +68,9 @@ class _AdminBodyState extends State<_AdminBody> {
   /// Aviso de stock. Llega vacío si el restaurante no lleva inventario, y
   /// entonces no se muestra nada.
   AlertasInventarioModel _alertas = const AlertasInventarioModel();
+  final _adelantosRepo = AdelantosRepository();
+  /// Solo los restaurantes con adelantos de reservas ven ese módulo.
+  bool _adelantosHabilitados = false;
 
   @override
   void initState() {
@@ -101,14 +106,17 @@ class _AdminBodyState extends State<_AdminBody> {
         _mesasRepo.getMesasBySucursal(sucursalId),
         _ordenesRepo.getOrdenesActivas(sucursalId),
         _inventarioRepo.getAlertas(sucursalId),
+        _adelantosRepo.listar(sucursalId),
       ]);
       if (!mounted) return;
       final resumen = results[0] as ResumenDiarioModel;
       final mesas = results[1] as List;
       final ordenes = results[2] as List;
       final alertas = results[3] as AlertasInventarioModel;
+      final adelantos = results[4] as ListaAdelantos;
       setState(() {
         _alertas = alertas;
+        _adelantosHabilitados = adelantos.habilitado;
         _ventasHoy = resumen.totalVentas;
         _facturasHoy = resumen.totalFacturas;
         _mesasOcupadas = mesas.where((m) => m.estado == 'OCUPADA').length;
@@ -239,6 +247,15 @@ class _AdminBodyState extends State<_AdminBody> {
     );
   }
 
+  Future<void> _abrirAdelantos() async {
+    final sucursalId = user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => AdelantosScreen(sucursalId: sucursalId),
+    ));
+    if (mounted) _loadStats();
+  }
+
   Future<void> _abrirInventario() async {
     final sucursalId = user?.sucursalId ?? '';
     if (sucursalId.isEmpty) return;
@@ -332,6 +349,9 @@ class _AdminBodyState extends State<_AdminBody> {
       if (_alertas.habilitado)
         _Module(Icons.inventory_2_outlined, 'Inventario', 'Stock y reposición',
             AppColors.earth2, _abrirInventario),
+      if (_adelantosHabilitados)
+        _Module(Icons.event_available_outlined, 'Adelantos', 'Reservas pagadas por adelantado',
+            AppColors.cajeroColor, _abrirAdelantos),
     ];
 
     return Column(

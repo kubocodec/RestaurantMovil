@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,6 +14,7 @@ import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../core/settings/ajustes_cobro.dart';
+import '../../../features/adelantos/data/adelantos_repository.dart';
 import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
@@ -78,6 +80,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// suma cuadra al centavo aunque el redondeo local difiera.
   List<({String metodoPagoId, int? centavos, String? referencia})>? _pagosDivididos;
 
+  /// Adelantos de reservas: solo en los restaurantes que los usan.
+  bool _adelantosHabilitados = false;
+  /// Adelanto que se descuenta en ESTE cobro (null = ninguno).
+  AdelantoModel? _adelantoAplicado;
+
   /// Pago dividido: hasta 3 métodos. Los controllers viven en el State y no en
   /// el diálogo (ver la trampa del TextEditingController en CLAUDE.md).
   static const _maxFilasDivision = 3;
@@ -125,6 +132,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       final metodos  = await _factRepo.getMetodosPago(_sucursalId);
       final iva      = await _factRepo.getIvaVigente(_sucursalId);
       final cajas    = await _cajaRepo.getCajasBySucursal(_sucursalId);
+      // Responde "no habilitado" si falla: el cobro nunca depende de esto.
+      final adelantos = await AdelantosRepository().listar(_sucursalId);
       AperturaCajaModel? apertura;
       if (cajas.isNotEmpty) {
         apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
@@ -135,6 +144,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         _orden = orden;
         _metodosPago = metodos;
         if (iva != null) _ivaPorcentaje = iva;
+        _adelantosHabilitados = adelantos.habilitado;
         _aperturaCierreCajaId = apertura?.aperturaCierreCajaId;
         if (metodos.isNotEmpty) _selectedMetodoPagoId = metodos.first.metodoPagoId;
         // Por defecto se cobra todo lo pendiente; el cajero baja cantidades
@@ -263,6 +273,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     if (sinCobro) {
       _propina = 0;
       _pagosDivididos = null;
+      _adelantoAplicado = null;
     }
 
     setState(() => _emitiendo = true);
@@ -300,12 +311,13 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       // Una cuenta en $0 (solo cortesías) el backend la deja pagada al
       // emitirla: no hay pago que registrar (y un pago de $0 sería rechazado).
       final divididos = _pagosDivididos;
+      final adelanto = _adelantoAplicado;
       final facturaPagada = factura.estado == 'PAGADA'
           ? factura
-          : divididos != null
+          : divididos != null || adelanto != null
               ? await _factRepo.registrarPagos(
                   facturaVentaId: factura.facturaVentaId,
-                  pagos: _armarPagosDivididos(divididos, factura.total),
+                  pagos: _armarPagos(divididos, adelanto, metodoPagoId, factura.total),
                 )
               : await _factRepo.registrarPago(
                   facturaVentaId: factura.facturaVentaId,
@@ -329,16 +341,47 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     }
   }
 
-  /// Montos del pago dividido contra el total del servidor: la última fila
-  /// se lleva lo que falta, en centavos enteros para que sumen exacto.
-  List<({String metodoPagoId, double monto, String? referencia})> _armarPagosDivididos(
-      List<({String metodoPagoId, int? centavos, String? referencia})> filas, double total) {
+  /// Pagos del cobro contra el total del servidor, en centavos enteros para
+  /// que sumen exacto. Primero el adelanto (hasta el total: si sobra, el
+  /// backend registra la devolución); el resto, dividido o con el método
+  /// elegido. En la división, la última fila se lleva lo que falta.
+  List<PagoLote> _armarPagos(
+    List<({String metodoPagoId, int? centavos, String? referencia})>? filas,
+    AdelantoModel? adelanto,
+    String metodoPagoId,
+    double total,
+  ) {
     var restante = (total * 100).round();
-    final pagos = <({String metodoPagoId, double monto, String? referencia})>[];
+    final pagos = <PagoLote>[];
+    if (adelanto != null) {
+      final aplicado = min((adelanto.disponible * 100).round(), restante);
+      pagos.add((
+        metodoPagoId: adelanto.metodoPagoId,
+        monto: aplicado / 100,
+        referencia: null,
+        adelantoId: adelanto.adelantoId,
+      ));
+      restante -= aplicado;
+    }
+    if (restante <= 0) return pagos;
+    if (filas == null) {
+      pagos.add((
+        metodoPagoId: metodoPagoId,
+        monto: restante / 100,
+        referencia: _refCtrl.text.trim().isNotEmpty ? _refCtrl.text.trim() : null,
+        adelantoId: null,
+      ));
+      return pagos;
+    }
     for (final f in filas) {
       final centavos = f.centavos ?? restante;
       restante -= centavos;
-      pagos.add((metodoPagoId: f.metodoPagoId, monto: centavos / 100, referencia: f.referencia));
+      pagos.add((
+        metodoPagoId: f.metodoPagoId,
+        monto: centavos / 100,
+        referencia: f.referencia,
+        adelantoId: null,
+      ));
     }
     return pagos;
   }
@@ -385,6 +428,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     bool esEfectivoId(String id) =>
         (metodoDe(id)?.nombre ?? '').toUpperCase().contains('EFECTIVO');
 
+    // Adelanto de reserva: también arranca sin aplicar cada vez.
+    AdelantoModel? adelanto;
+    var cubierto = false;
+
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -403,6 +450,15 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           // En centavos enteros: con doubles, 20 - 13,51 puede dar 6,4899999.
           final totalCentavos = ((consumo + propina) * 100).round();
 
+          // Adelanto: cubre hasta el total; si sobra, se devuelve al cliente.
+          final ad = adelanto;
+          final disponibleCentavos = ad == null ? 0 : (ad.disponible * 100).round();
+          final aplicadoCentavos = min(disponibleCentavos, totalCentavos);
+          final devolverCentavos = disponibleCentavos - aplicadoCentavos;
+          // Lo que se cobra hoy, con uno o varios métodos.
+          final aCobrarCentavos = totalCentavos - aplicadoCentavos;
+          cubierto = ad != null && aCobrarCentavos == 0;
+
           // Pago dividido: el cajero escribe los montos de todas las filas
           // menos la última, que se lleva lo que falta. Así la suma cuadra
           // siempre con el total y no hay "sobran" que corregir.
@@ -416,14 +472,16 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             centavosFilas.add(c);
             sumaFijas += c ?? 0;
           }
-          final restoCentavos = totalCentavos - sumaFijas;
+          final restoCentavos = aCobrarCentavos - sumaFijas;
           if (dividir) centavosFilas.add(restoCentavos);
-          final divisionOk = !dividir || (montosOk && restoCentavos > 0);
+          final divisionOk = cubierto || !dividir || (montosOk && restoCentavos > 0);
 
           // Lo que el cliente paga en efectivo: contra eso se calcula el vuelto.
           int? efectivoCentavos;
-          if (!dividir) {
-            efectivoCentavos = esEfectivo ? totalCentavos : null;
+          if (cubierto) {
+            efectivoCentavos = null; // el adelanto paga todo: no hay vuelto
+          } else if (!dividir) {
+            efectivoCentavos = esEfectivo ? aCobrarCentavos : null;
           } else {
             for (var i = 0; i < filas.length; i++) {
               if (esEfectivoId(filas[i])) efectivoCentavos = centavosFilas[i] ?? 0;
@@ -471,7 +529,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           // para verlo mientras se escribe en cualquier tamaño de pantalla.
           final teclado = MediaQuery.viewInsetsOf(ctx).bottom > 0;
           final colorVuelto = alcanza ? AppColors.success : AppColors.error;
-          final colorCaja = dividir ? AppColors.primary : color;
+          final colorCaja = cubierto || dividir ? AppColors.primary : color;
+          final enDivision = dividir && !cubierto;
 
           const estiloMonto = TextStyle(
             fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700);
@@ -600,7 +659,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                 children: [
                   if (!teclado) ...[
                     Text(
-                      dividir
+                      enDivision
                           ? '¿Estás seguro de cómo se divide el pago?'
                           : '¿Estás seguro del método de pago seleccionado?',
                       textAlign: TextAlign.center,
@@ -619,10 +678,17 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     child: Column(
                       children: [
                         if (!teclado) ...[
-                          Icon(dividir ? Icons.call_split : icono, color: colorCaja, size: 32),
+                          Icon(
+                            cubierto
+                                ? Icons.event_available_outlined
+                                : enDivision ? Icons.call_split : icono,
+                            color: colorCaja, size: 32),
                           const SizedBox(height: 6),
                         ],
-                        Text(dividir ? 'PAGO DIVIDIDO' : nombreMetodo.toUpperCase(),
+                        Text(
+                          cubierto
+                              ? 'CUBIERTO CON ADELANTO'
+                              : enDivision ? 'PAGO DIVIDIDO' : nombreMetodo.toUpperCase(),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'Poppins', fontWeight: FontWeight.w700,
@@ -641,6 +707,17 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                             style: const TextStyle(
                               fontFamily: 'Poppins', fontSize: 11,
                               color: AppColors.textSecondary),
+                          ),
+                        ],
+                        if (ad != null && !cubierto) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Adelanto −\$${_fmt.format(aplicadoCentavos / 100)}  ·  '
+                            'resta \$${_fmt.format(aCobrarCentavos / 100)}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w700,
+                              color: AppColors.primary),
                           ),
                         ],
                       ],
@@ -698,13 +775,98 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     ],
                   ),
                   ],
-                  if (dividir) ...[
+                  if (_adelantosHabilitados) ...[
+                    const SizedBox(height: 12),
+                    if (ad == null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.event_available_outlined, size: 18),
+                          label: const Text('Aplicar adelanto de reserva'),
+                          onPressed: () async {
+                            final elegido = await showDialog<AdelantoModel>(
+                              context: ctx,
+                              builder: (_) => _ElegirAdelantoDialog(sucursalId: _sucursalId),
+                            );
+                            if (elegido != null) setDialogState(() => adelanto = elegido);
+                          },
+                        ),
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Adelanto de ${ad.nombreCliente}',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13)),
+                                  Text(
+                                    '\$${_fmt.format(ad.disponible)} en ${ad.nombreMetodoPago}'
+                                    ' · se descuentan \$${_fmt.format(aplicadoCentavos / 100)}',
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins', fontSize: 11,
+                                      color: AppColors.textSecondary)),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => setDialogState(() => adelanto = null),
+                              child: const Text('Quitar'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // El cliente consumió menos que el adelanto: la diferencia
+                    // sale del cajón. Grande para que el cajero no la pase por alto.
+                    if (devolverCentavos > 0) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.warning.withValues(alpha: 0.6)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('DEVOLVER AL CLIENTE',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                                fontSize: 13, color: AppColors.warning)),
+                            Text('\$${_fmt.format(devolverCentavos / 100)}',
+                              style: const TextStyle(
+                                fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                                fontSize: 26, color: AppColors.warning)),
+                            const Text('en efectivo, del cajón',
+                              style: TextStyle(
+                                fontFamily: 'Poppins', fontSize: 11,
+                                color: AppColors.textSecondary)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (cubierto) ...[
+                    // El adelanto paga todo: no hay método ni división que elegir.
+                  ] else if (dividir) ...[
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const Expanded(
-                          child: Text('¿Cómo paga?',
-                            style: TextStyle(
+                        Expanded(
+                          child: Text(ad != null ? '¿Cómo paga el resto?' : '¿Cómo paga?',
+                            style: const TextStyle(
                               fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
                         ),
                         TextButton(
@@ -732,7 +894,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     for (var i = 0; i < filas.length; i++) filaDivision(i),
                     if (montosOk && restoCentavos <= 0)
                       Text(
-                        'Los montos superan el total de \$${_fmt.format(totalCentavos / 100)}',
+                        'Los montos superan lo que hay que cobrar: \$${_fmt.format(aCobrarCentavos / 100)}',
                         style: const TextStyle(
                           fontFamily: 'Poppins', fontSize: 12, color: AppColors.error),
                       ),
@@ -905,7 +1067,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     if (confirmado == true) {
       _propina = propina > 0 ? propina : 0;
       _recibido = pedirRecibido ? recibido : null;
-      _pagosDivididos = dividir
+      // Si el adelanto cubre todo, no hay nada más que cobrar ni dividir.
+      _adelantoAplicado = adelanto;
+      _pagosDivididos = dividir && !cubierto
           ? [
               for (var i = 0; i < filas.length; i++)
                 (
@@ -1035,16 +1199,22 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {
-    final dividido = factura.pagos.length > 1;
+    final pagoAdelanto = factura.pagos.where((p) => p.esAdelanto).firstOrNull;
+    final dividido = factura.pagos.length > 1 || pagoAdelanto != null;
     final metodoPago = dividido
-        ? factura.pagos.map((p) => p.nombreMetodoPago).join(' + ')
+        ? factura.pagos.map((p) => p.etiqueta).join(' + ')
         : _metodoPagoSeleccionado?.nombre ?? '';
-    // En un pago dividido el vuelto sale de la parte en efectivo, con el
-    // monto que registró el servidor (no el calculado en el diálogo).
+    // En un pago dividido el vuelto sale de la parte en efectivo de HOY, con
+    // el monto que registró el servidor (no el calculado en el diálogo).
     final efectivo = dividido
         ? factura.pagos
-            .where((p) => p.nombreMetodoPago.toUpperCase().contains('EFECTIVO'))
+            .where((p) => !p.esAdelanto && p.nombreMetodoPago.toUpperCase().contains('EFECTIVO'))
             .fold<double>(0, (s, p) => s + p.monto)
+        : null;
+    // Lo que sobró del adelanto y se le devolvió al cliente.
+    final adelanto = _adelantoAplicado;
+    final devuelto = pagoAdelanto != null && adelanto != null
+        ? max(0, (adelanto.disponible * 100).round() - (pagoAdelanto.monto * 100).round()) / 100
         : null;
     await showDialog(
       context: context,
@@ -1058,6 +1228,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         sucursalId: _sucursalId,
         recibido: factura.total > 0 ? _recibido : null,
         montoEfectivo: efectivo,
+        devueltoAdelanto: devuelto != null && devuelto > 0 ? devuelto : null,
       ),
     );
   }
@@ -1580,6 +1751,8 @@ class _ComprobanteDialog extends StatefulWidget {
   /// Parte en efectivo de un pago dividido: el vuelto se calcula sobre ella y
   /// no sobre el total. null = un solo método.
   final double? montoEfectivo;
+  /// Lo que sobró del adelanto de reserva y se devolvió al cliente.
+  final double? devueltoAdelanto;
 
   const _ComprobanteDialog({
     required this.factura,
@@ -1589,6 +1762,7 @@ class _ComprobanteDialog extends StatefulWidget {
     required this.sucursalId,
     this.recibido,
     this.montoEfectivo,
+    this.devueltoAdelanto,
   });
 
   @override
@@ -1668,8 +1842,8 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                 _filaTicket('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva),
                 if (f.propina > 0) _filaTicket('Propina', f.propina),
                 _filaTicket('TOTAL', f.total, bold: true),
-                if (f.pagos.length > 1)
-                  for (final p in f.pagos) _filaTicket(p.nombreMetodoPago, p.monto)
+                if (f.pagos.length > 1 || f.pagos.any((p) => p.esAdelanto))
+                  for (final p in f.pagos) _filaTicket(p.etiqueta, p.monto)
                 else
                   Text('Pago: ${widget.metodoPago}', style: _ticketStyle),
                 if (widget.recibido != null) ...[
@@ -1680,6 +1854,8 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
                           100,
                       bold: true),
                 ],
+                if (widget.devueltoAdelanto != null)
+                  _filaTicket('Devuelto del adelanto', widget.devueltoAdelanto!, bold: true),
                 if (f.cortesia && f.motivoCortesia != null)
                   Text('CORTESÍA: ${f.motivoCortesia}', style: _ticketBold),
                 // Solo la factura viaja al SRI: en la nota de venta no hay
@@ -1770,6 +1946,7 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         esFactura: widget.esFactura,
         recibido: widget.recibido,
         montoEfectivo: widget.montoEfectivo,
+        devueltoAdelanto: widget.devueltoAdelanto,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1874,4 +2051,121 @@ class _DesgloseCobro {
   const _DesgloseCobro(this.subtotal, this.iva, this.basePorTarifa);
 
   double get total => subtotal + iva;
+}
+
+/// Elige el adelanto pendiente que se descuenta en el cobro. Se busca por el
+/// cliente que lo pagó, no por el de la factura: en un restaurante quien
+/// reserva y quien paga suelen ser personas distintas.
+class _ElegirAdelantoDialog extends StatefulWidget {
+  final String sucursalId;
+  const _ElegirAdelantoDialog({required this.sucursalId});
+
+  @override
+  State<_ElegirAdelantoDialog> createState() => _ElegirAdelantoDialogState();
+}
+
+class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
+  final _buscarCtrl = TextEditingController();
+  final _fmt = NumberFormat('#,##0.00', 'es');
+  List<AdelantoModel> _todos = [];
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  @override
+  void dispose() {
+    _buscarCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _cargar() async {
+    final lista = await AdelantosRepository().listar(widget.sucursalId);
+    if (!mounted) return;
+    // Primero los de hoy (los que vienen a consumir), luego por fecha.
+    final hoy = DateUtils.dateOnly(DateTime.now());
+    final adelantos = [...lista.adelantos]..sort((a, b) {
+        final ha = a.fechaPrevista == hoy ? 0 : 1;
+        final hb = b.fechaPrevista == hoy ? 0 : 1;
+        if (ha != hb) return ha - hb;
+        return (a.fechaPrevista ?? DateTime(2100)).compareTo(b.fechaPrevista ?? DateTime(2100));
+      });
+    setState(() { _todos = adelantos; _cargando = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _buscarCtrl.text.trim().toLowerCase();
+    final visibles = _todos.where((a) => q.isEmpty
+        || a.nombreCliente.toLowerCase().contains(q)
+        || (a.cedulaCliente ?? '').contains(q)).toList();
+    final hoy = DateUtils.dateOnly(DateTime.now());
+    final fmtFecha = DateFormat('dd/MM/yyyy', 'es');
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: const Text('Aplicar adelanto'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _buscarCtrl,
+              decoration: const InputDecoration(
+                hintText: 'Buscar por nombre o cédula',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: _cargando
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
+                  : visibles.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('No hay adelantos pendientes',
+                            style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)))
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: visibles.length,
+                          itemBuilder: (_, i) {
+                            final a = visibles[i];
+                            final esHoy = a.fechaPrevista == hoy;
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(a.nombreCliente,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
+                              subtitle: Text(
+                                [
+                                  if (a.fechaPrevista != null)
+                                    esHoy ? 'Reserva HOY' : 'Reserva ${fmtFecha.format(a.fechaPrevista!)}',
+                                  a.nombreMetodoPago,
+                                ].join(' · '),
+                                style: TextStyle(
+                                  fontFamily: 'Poppins', fontSize: 12,
+                                  fontWeight: esHoy ? FontWeight.w700 : FontWeight.w400,
+                                  color: esHoy ? AppColors.success : AppColors.textSecondary)),
+                              trailing: Text('\$${_fmt.format(a.disponible)}',
+                                style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+                              onTap: () => Navigator.pop(context, a),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+      ],
+    );
+  }
 }

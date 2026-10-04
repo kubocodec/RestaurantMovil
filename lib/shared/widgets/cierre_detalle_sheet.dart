@@ -162,6 +162,11 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
           _buildVentasPorMetodo(c),
           const SizedBox(height: 16),
         ],
+        // Solo en los negocios que reciben adelantos de reservas.
+        if (c.adelantosRecibidos.isNotEmpty || c.adelantosAplicados.isNotEmpty) ...[
+          _buildAdelantos(c),
+          const SizedBox(height: 16),
+        ],
         _buildMovimientos(
           titulo: 'Ingresos extra',
           items: c.ingresos,
@@ -264,12 +269,17 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
               fontSize: 12, color: Colors.white)),
           const SizedBox(height: 4),
           _FilaTotal('Fondo inicial (apertura)', c.montoInicial, fmt: _fmt, estilo: blanco),
-          if (c.ventasPorMetodo.isEmpty && c.totalVentas > 0.009)
-            _FilaTotal('Ventas del turno', c.totalVentas, fmt: _fmt, signo: '+', estilo: blanco)
+          // Lo pagado con adelantos no se suma: ese dinero entró otro día.
+          if (c.ventasPorMetodo.isEmpty && c.totalVentas - c.totalAdelantosAplicados > 0.009)
+            _FilaTotal('Ventas del turno', c.totalVentas - c.totalAdelantosAplicados,
+                fmt: _fmt, signo: '+', estilo: blanco)
           else
             ...c.ventasPorMetodo.map((m) =>
               _FilaTotal('Ventas en ${m.metodo.toLowerCase()}', m.total,
                 fmt: _fmt, signo: '+', estilo: blanco)),
+          if (c.totalAdelantosOtrosMetodos > 0)
+            _FilaTotal('Adelantos recibidos (transf./tarjeta)', c.totalAdelantosOtrosMetodos,
+                fmt: _fmt, signo: '+', estilo: blanco),
           _FilaTotal('Otros ingresos a caja', c.totalIngresos, fmt: _fmt, signo: '+', estilo: blanco),
           _FilaTotal('Egresos (gastos)', c.totalEgresos, fmt: _fmt, signo: '-', estilo: blanco),
         ],
@@ -332,6 +342,75 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
           ...c.ventasPorMetodo.map((m) => _buildMetodo(c, m)),
           const Divider(height: 16),
           _Fila('Total cobrado', c.ventasPorMetodo.fold(0.0, (s, m) => s + m.total), fmt: _fmt, bold: true),
+          if (c.totalAdelantosAplicados > 0) ...[
+            _Fila('Pagado con adelantos (cobrado otro día)', c.totalAdelantosAplicados,
+                fmt: _fmt, signo: '+'),
+            _Fila('Total vendido', c.totalVentas, fmt: _fmt, bold: true),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Adelantos de reservas del turno. Los recibidos no son venta (la venta
+  /// se registra el día del consumo); los aplicados son ventas de hoy cuyo
+  /// dinero entró el día del adelanto.
+  Widget _buildAdelantos(CierreDetalladoModel c) {
+    final hora = DateFormat('HH:mm', 'es');
+    Widget fila(AdelantoCajaModel a, {required bool aplicado}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(a.cliente,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(
+                  [
+                    a.metodo,
+                    hora.format(a.fecha.toLocal()),
+                    if (aplicado && a.numeroFactura != null) a.numeroFactura!,
+                  ].join(' · '),
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          Text('\$${_fmt.format(a.monto)}',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13)),
+        ],
+      ),
+    );
+    const nota = TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary);
+    return _Card(
+      titulo: 'Adelantos de reservas',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (c.adelantosRecibidos.isNotEmpty) ...[
+            const Text('Recibidos en este turno',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13)),
+            const Text(
+              'No son venta: se facturan el día que el cliente consume. '
+              'Los de efectivo también aparecen en "Ingresos extra".',
+              style: nota),
+            ...c.adelantosRecibidos.map((a) => fila(a, aplicado: false)),
+            _Fila('Total recibido', c.totalAdelantosRecibidos, fmt: _fmt, bold: true),
+          ],
+          if (c.adelantosRecibidos.isNotEmpty && c.adelantosAplicados.isNotEmpty)
+            const Divider(height: 20),
+          if (c.adelantosAplicados.isNotEmpty) ...[
+            const Text('Usados como pago en este turno',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13)),
+            const Text(
+              'Son parte de las ventas de hoy, pero ese dinero entró el día del adelanto: '
+              'no se cuenta otra vez en la caja.',
+              style: nota),
+            ...c.adelantosAplicados.map((a) => fila(a, aplicado: true)),
+            _Fila('Total usado', c.totalAdelantosAplicados, fmt: _fmt, bold: true),
+          ],
         ],
       ),
     );

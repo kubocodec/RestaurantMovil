@@ -188,6 +188,8 @@ class RestaurantModel {
   final bool facturacionElectronica;
   /// El restaurante lleva control de inventario (lo activa el proveedor).
   final bool controlInventario;
+  /// Adelantos de reservas activados (lo activa el proveedor).
+  final bool adelantos;
 
   const RestaurantModel({
     required this.restaurantId,
@@ -197,6 +199,7 @@ class RestaurantModel {
     this.proximoPago,
     this.facturacionElectronica = false,
     this.controlInventario = false,
+    this.adelantos = false,
   });
 
   factory RestaurantModel.fromJson(Map<String, dynamic> j) => RestaurantModel(
@@ -207,6 +210,7 @@ class RestaurantModel {
     proximoPago:  j['proximoPago'] != null ? DateTime.tryParse(j['proximoPago'].toString()) : null,
     facturacionElectronica: j['facturacionElectronica'] ?? false,
     controlInventario: j['controlInventario'] ?? false,
+    adelantos: j['adelantos'] ?? false,
   );
 }
 

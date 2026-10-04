@@ -76,12 +76,20 @@ class ItemVendidoModel {
 class PagoModel {
   final String nombreMetodoPago;
   final double monto;
+  /// No null si el pago salió de un adelanto de reserva.
+  final String? adelantoId;
 
-  const PagoModel({required this.nombreMetodoPago, required this.monto});
+  const PagoModel({required this.nombreMetodoPago, required this.monto, this.adelantoId});
+
+  bool get esAdelanto => adelantoId != null;
+
+  /// Cómo se muestra en el ticket: el adelanto se distingue del dinero de hoy.
+  String get etiqueta => esAdelanto ? 'Adelanto ($nombreMetodoPago)' : nombreMetodoPago;
 
   factory PagoModel.fromJson(Map<String, dynamic> j) => PagoModel(
     nombreMetodoPago: j['nombreMetodoPago']?.toString() ?? '',
     monto:            FacturaModel._toDouble(j['monto']),
+    adelantoId:       j['adelantoId']?.toString(),
   );
 }
 

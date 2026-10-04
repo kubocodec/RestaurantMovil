@@ -445,7 +445,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
   @override
   Widget build(BuildContext context) {
     final f = _factura;
-    final metodoPago = f.pagos.map((p) => p.nombreMetodoPago).join(', ');
+    final metodoPago = f.pagos.map((p) => p.etiqueta).join(', ');
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       maxChildSize: 0.92,
@@ -665,7 +665,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
             .map((it) => ReciboItem(
                 nombre: it.nombre, cantidad: it.cantidad, subtotal: it.subtotal, cortesia: it.cortesia))
             .toList(),
-        metodoPago: f.pagos.map((p) => p.nombreMetodoPago).join(', '),
+        metodoPago: f.pagos.map((p) => p.etiqueta).join(', '),
         esFactura: f.esFactura,
       );
       if (mounted) {

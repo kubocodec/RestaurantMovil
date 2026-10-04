@@ -832,6 +832,47 @@ class _RestaurantRowState extends State<_RestaurantRow> {
     }
   }
 
+  /// Activar/desactivar los adelantos de reservas: solo para los negocios
+  /// que cobran por adelantado al reservar.
+  Future<void> _toggleAdelantos() async {
+    final activar = !_r.adelantos;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(activar ? 'Activar adelantos de reservas' : 'Desactivar adelantos de reservas',
+            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Text(
+          activar
+              ? '"${_r.nombre}" podrá registrar adelantos de reservas y descontarlos '
+                'al cobrar. Sus cajeros necesitan la versión nueva de la app.'
+              : '"${_r.nombre}" dejará de ver los adelantos en su app y no podrá '
+                'descontarlos al cobrar. Lo registrado no se borra: al reactivarlo, '
+                'los pendientes siguen ahí. ¿Continuar?',
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(activar ? 'Activar' : 'Desactivar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.repo.setAdelantos(_r.restaurantId, activar);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(activar ? 'Adelantos activados' : 'Adelantos desactivados'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+      widget.onRestaurantUpdated();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -863,6 +904,7 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                       case 'quitar': _quitarControlPago();
                       case 'sri':    _toggleFacturacionElectronica();
                       case 'inventario': _toggleControlInventario();
+                      case 'adelantos': _toggleAdelantos();
                     }
                   },
                   itemBuilder: (_) => [
@@ -888,6 +930,12 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                             _r.controlInventario
                                 ? 'Desactivar control de inventario'
                                 : 'Activar control de inventario',
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
+                    PopupMenuItem(value: 'adelantos',
+                        child: Text(
+                            _r.adelantos
+                                ? 'Desactivar adelantos de reservas'
+                                : 'Activar adelantos de reservas',
                             style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
                   ],
                 ),
