@@ -6,6 +6,9 @@ class ResumenDiarioModel {
   final String nombreSucursal;
   final int totalOrdenes;
   final int totalFacturas;
+  /// Mesas (órdenes) cobradas en el día: una mesa que paga en varias partes
+  /// cuenta una vez. 0 si el backend aún no lo envía.
+  final int totalMesasCobradas;
   final double totalVentas;
   final double totalDescuentos;
   final double totalIva;
@@ -21,6 +24,7 @@ class ResumenDiarioModel {
     required this.nombreSucursal,
     required this.totalOrdenes,
     required this.totalFacturas,
+    this.totalMesasCobradas = 0,
     required this.totalVentas,
     required this.totalDescuentos,
     required this.totalIva,
@@ -36,6 +40,7 @@ class ResumenDiarioModel {
     nombreSucursal:   j['nombreSucursal']?.toString() ?? '',
     totalOrdenes:     (j['totalOrdenes'] as num?)?.toInt() ?? 0,
     totalFacturas:    (j['totalFacturas'] as num?)?.toInt() ?? 0,
+    totalMesasCobradas: (j['totalMesasCobradas'] as num?)?.toInt() ?? 0,
     totalVentas:      _d(j['totalVentas']),
     totalDescuentos:  _d(j['totalDescuentos']),
     totalIva:         _d(j['totalIva']),
@@ -48,6 +53,19 @@ class ResumenDiarioModel {
   );
 
   static double _d(dynamic v) => v == null ? 0.0 : (v as num).toDouble();
+
+  /// Lo vendido sin las propinas: la propina es del mesero, no es venta, y
+  /// subiría el promedio. Incluye el IVA, que es lo que paga el cliente.
+  double get _ventasSinPropina => totalVentas - totalPropinas;
+
+  /// Ticket promedio por comprobante cobrado (sin mesas regaladas ni
+  /// anulados). null si no hubo ventas.
+  double? get ticketPromedio => totalFacturas > 0 ? _ventasSinPropina / totalFacturas : null;
+
+  /// Ticket promedio por mesa: cuánto gasta cada mesa o grupo en una visita,
+  /// aunque haya pagado en varias partes. null si no hubo ventas.
+  double? get ticketPromedioMesa =>
+      totalMesasCobradas > 0 ? _ventasSinPropina / totalMesasCobradas : null;
 }
 
 /// Reporte de caja del día: agregados de todos los turnos de la sucursal

@@ -278,6 +278,26 @@ class _ReportesScreenState extends State<ReportesScreen> {
               _MiniStat(label: 'Facturas', value: '${r.totalFacturas}'),
             ],
           ),
+          // Ticket promedio: por comprobante y por mesa (una mesa que paga en
+          // partes cuenta una vez). Sin propinas, con IVA.
+          if (r.ticketPromedio != null) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white24, height: 1),
+            const SizedBox(height: 12),
+            // Wrap: con el texto en "Muy grande" baja de línea en vez de desbordarse.
+            Wrap(
+              spacing: 24,
+              runSpacing: 8,
+              children: [
+                _MiniStat(label: 'Ticket promedio', value: '\$${_fmt.format(r.ticketPromedio)}'),
+                if (r.ticketPromedioMesa != null)
+                  _MiniStat(label: 'Promedio por mesa', value: '\$${_fmt.format(r.ticketPromedioMesa)}'),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text('Sin propinas. Una mesa que paga en partes cuenta una sola vez.',
+                style: TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 10.5)),
+          ],
         ],
       ),
     );
