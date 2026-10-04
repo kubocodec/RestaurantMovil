@@ -28,6 +28,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
   ResumenDiarioModel? _resumen;
   ReporteCajasDiaModel? _cajas;
   DateTime _fecha = DateTime.now();
+  /// Cortesías del día elegido, incluidas las de mesas aún sin cobrar.
+  ReporteCortesiasModel? _cortesias;
   bool _loading = true;
   String? _error;
   // El admin puede consultar cualquier sucursal de su restaurant;
@@ -84,6 +86,13 @@ class _ReportesScreenState extends State<ReportesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = ApiClient.parseError(e); _loading = false; });
+    }
+    // Aparte: si las cortesías fallan, el resto del reporte se ve igual.
+    try {
+      final cortesias = await _repo.getCortesias(_sucursalId, desde: _fecha, hasta: _fecha);
+      if (mounted) setState(() => _cortesias = cortesias);
+    } catch (_) {
+      if (mounted) setState(() => _cortesias = null);
     }
   }
 
@@ -220,6 +229,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
           _buildVentasCard(r),
           const SizedBox(height: 16),
           _buildDetalleCard(r),
+          if ((_cortesias?.items ?? const []).isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildCortesiasCard(_cortesias!),
+          ],
           const SizedBox(height: 16),
           _buildGananciaCard(r),
           if (_cajas != null) ...[
@@ -293,6 +306,87 @@ class _ReportesScreenState extends State<ReportesScreen> {
             _FilaReporte(
                 label: 'Cortesías (${r.unidadesCortesia}) a precio de carta',
                 valor: r.valorCortesias, fmt: _fmt),
+        ],
+      ),
+    );
+  }
+
+  /// Cortesías del día a la vista, sin tener que buscar el ícono de la barra:
+  /// qué se regaló, por qué y quién lo autorizó. Lo regalado no es venta: el
+  /// valor es a precio de carta. Incluye las de mesas que aún no se cobran.
+  Widget _buildCortesiasCard(ReporteCortesiasModel c) {
+    final hora = DateFormat('HH:mm', 'es');
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.card_giftcard_outlined, color: AppColors.success, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Cortesías del día (${c.totalUnidades})',
+                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+              ),
+              Text('\$${_fmt.format(c.totalValor)}',
+                style: const TextStyle(
+                  fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                  fontSize: 15, color: AppColors.success)),
+            ],
+          ),
+          const Text('A precio de carta. No son venta ni entran a caja.',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+          const SizedBox(height: 8),
+          for (final i in c.items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${i.cantidad} x ${i.plato}',
+                          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text(
+                          [
+                            i.lugar,
+                            hora.format(i.fecha.toLocal()),
+                            if (i.autorizadaPor != null) i.autorizadaPor!,
+                          ].join(' · '),
+                          style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                        if (i.motivo != null && i.motivo!.isNotEmpty)
+                          Text('Motivo: ${i.motivo}',
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                        if (!i.cobrada)
+                          const Text('Mesa aún sin cobrar',
+                            style: TextStyle(
+                              fontFamily: 'Poppins', fontSize: 11,
+                              fontWeight: FontWeight.w600, color: AppColors.warning)),
+                      ],
+                    ),
+                  ),
+                  Text('\$${_fmt.format(i.valor)}',
+                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                ],
+              ),
+            ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => CortesiasScreen(sucursalId: _sucursalId),
+              )),
+              child: const Text('Ver por semana o mes'),
+            ),
+          ),
         ],
       ),
     );

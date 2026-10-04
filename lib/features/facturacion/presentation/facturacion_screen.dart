@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import '../../../core/cobro/desglose_cobro.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/caja_model.dart';
 import '../../../core/models/factura_model.dart';
@@ -21,6 +22,7 @@ import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../shared/widgets/cliente_busqueda.dart';
 import '../../../shared/widgets/cliente_form_dialog.dart';
 import '../../../shared/widgets/cortesia_dialog.dart';
+import '../../../shared/widgets/precuenta_screen.dart';
 import '../../../shared/widgets/sri_estado_panel.dart';
 import '../data/facturacion_repository.dart';
 
@@ -206,36 +208,12 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// al 0% y las bebidas embotelladas al 15% el cajero veía —y le decía al
   /// cliente— un total sin el IVA de las bebidas, mientras se cobraba el
   /// correcto. El número en pantalla tiene que ser el del comprobante.
-  _DesgloseCobro get _desglose {
+  /// Mismo cálculo que la precuenta (core/cobro/desglose_cobro.dart).
+  DesgloseCobro get _desglose {
     final orden = _orden;
-    if (orden == null) return const _DesgloseCobro(0, 0, {});
-
-    // Todo en centavos enteros: con doubles, 0,2625 puede quedar en
-    // 0,26249999 y redondear para el lado equivocado. La tarifa va en
-    // centésimas de punto (15% = 1500).
-    final basePorTarifa = <int, int>{};
-    int ivaCentavos = 0;
-    for (final d in orden.detallesNoFacturados) {
-      final cantidad = _cantidadDe(d.ordenDetalleId);
-      if (cantidad <= 0) continue;
-      // Cortesía: se descuenta completa en el backend, no suma base ni IVA.
-      if (d.cortesia) continue;
-      final tarifa = d.ivaPorcentaje ?? _ivaPorcentaje;
-      final clave = (tarifa * 100).round();
-      final baseCentavos = (d.precioUnitario * 100).round() * cantidad;
-      basePorTarifa[clave] = (basePorTarifa[clave] ?? 0) + baseCentavos;
-      // IVA redondeado por línea (mitad hacia arriba), igual que el backend y
-      // que Factuplan: agrupado por tarifa daba a veces un centavo más.
-      if (clave > 0) ivaCentavos += (baseCentavos * clave + 5000) ~/ 10000;
-    }
-
-    double subtotal = 0;
-    final bases = <double, double>{};
-    basePorTarifa.forEach((clave, base) {
-      subtotal += base / 100;
-      bases[clave / 100] = base / 100;
-    });
-    return _DesgloseCobro(subtotal, ivaCentavos / 100, bases);
+    if (orden == null) return DesgloseCobro.vacio;
+    return DesgloseCobro.calcular(
+        orden.detallesNoFacturados, (d) => _cantidadDe(d.ordenDetalleId), _ivaPorcentaje);
   }
 
   bool get _puedeEmitir =>
@@ -1237,7 +1215,20 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Facturación')),
+      appBar: AppBar(
+        title: const Text('Facturación'),
+        actions: [
+          // Cuánto lleva la cuenta, sin cobrar (no depende de lo elegido).
+          if (_orden != null)
+            IconButton(
+              tooltip: 'Precuenta',
+              icon: const Icon(Icons.request_quote_outlined),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => PrecuentaScreen(ordenId: widget.ordenId, sucursalId: _sucursalId),
+              )),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
@@ -2043,16 +2034,6 @@ class _ResumenRow extends StatelessWidget {
 ///
 /// [basePorTarifa] va de porcentaje a base imponible: `{0.0: 42.50, 15.0: 3.00}`
 /// es una mesa de almuerzos al 0% con una cerveza gravada.
-class _DesgloseCobro {
-  final double subtotal;
-  final double iva;
-  final Map<double, double> basePorTarifa;
-
-  const _DesgloseCobro(this.subtotal, this.iva, this.basePorTarifa);
-
-  double get total => subtotal + iva;
-}
-
 /// Elige el adelanto pendiente que se descuenta en el cobro. Se busca por el
 /// cliente que lo pagó, no por el de la factura: en un restaurante quien
 /// reserva y quien paga suelen ser personas distintas.

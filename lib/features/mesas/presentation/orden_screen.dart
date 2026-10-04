@@ -14,6 +14,7 @@ import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../data/mesas_repository.dart';
+import '../../../shared/widgets/precuenta_screen.dart';
 
 class _CartItem {
   final PlatoModel plato;
@@ -1205,15 +1206,36 @@ class _OrdenScreenState extends State<OrdenScreen> {
               decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)),
             ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Pedido · Orden #${o.numeroOrden}',
-                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                  Expanded(
+                    child: Text('Pedido · Orden #${o.numeroOrden}',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
+                  ),
                   Text('${o.detalles.length} items',
                     style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
                 ],
+              ),
+            ),
+            // El cliente quiere saber cuánto lleva antes de pedir más. La
+            // sacan mesero, cajero y admin; no cobra nada.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.request_quote_outlined, size: 20),
+                  label: const Text('Precuenta (cuánto lleva)'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => PrecuentaScreen(ordenId: o.ordenId, sucursalId: _sucursalId),
+                    ));
+                  },
+                ),
               ),
             ),
             const Divider(height: 1),

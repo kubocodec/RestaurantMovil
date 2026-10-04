@@ -629,6 +629,17 @@ class ComandaPrinter {
       }
       bytes.addAll(_texto('${'-' * _cols}\n'));
 
+      // ── Cortesías: no son venta ni entran a caja, se informan aparte ──
+      if (c.unidadesCortesia > 0) {
+        bytes.addAll(_boldOn);
+        bytes.addAll(_texto('CORTESIAS DEL TURNO\n'));
+        bytes.addAll(_boldOff);
+        bytes.addAll(_texto(_lineaMonto(
+            '${c.unidadesCortesia} a precio de carta', c.valorCortesias)));
+        bytes.addAll(_texto('(no son venta ni entran a caja)\n'));
+        bytes.addAll(_texto('${'-' * _cols}\n'));
+      }
+
       // ── Adelantos de reservas (solo si el negocio los usa) ──
       if (c.adelantosRecibidos.isNotEmpty || c.adelantosAplicados.isNotEmpty) {
         bytes.addAll(_boldOn);
@@ -705,6 +716,68 @@ class ComandaPrinter {
 
       return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
     }
+  }
+
+  /// Precuenta: lo que el cliente lleva consumido, para que sepa cuánto debe
+  /// antes de pedir más. No es comprobante: no se cobra ni se registra nada.
+  /// [lineas] son (cantidad, plato, subtotal, cortesía) de lo pendiente.
+  static Future<String> imprimirPrecuenta({
+    String? ip,
+    int puerto = 9100,
+    String? mac,
+    required String nombreSucursal,
+    required String lugar,
+    required int numeroOrden,
+    required List<({int cantidad, String plato, double subtotal, bool cortesia})> lineas,
+    required Map<double, double> basePorTarifa,
+    required double iva,
+    required double total,
+    required String atendidoPor,
+  }) async {
+    String pct(double v) =>
+        v == v.truncateToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+    final tarifas = basePorTarifa.keys.toList()..sort();
+    final bytes = <int>[
+      ..._init, ..._codePage,
+      ..._center, ..._boldOn,
+      ..._texto('$nombreSucursal\n'),
+      ..._doubleSize,
+      ..._texto('PRECUENTA\n'),
+      ..._normalSize,
+      ..._texto('NO ES COMPROBANTE DE VENTA\n'),
+      ..._boldOff, ..._left,
+      ..._texto('${'-' * _cols}\n'),
+      ..._texto('$lugar - Orden #$numeroOrden\n'),
+      ..._texto('Fecha: ${_fechaHora(DateTime.now())}\n'),
+      ..._texto('${'-' * _cols}\n'),
+      for (final l in lineas) ...[
+        ..._texto(_lineaMonto('${l.cantidad} x ${l.plato}', l.cortesia ? 0 : l.subtotal)),
+        if (l.cortesia) ..._texto('    CORTESIA\n'),
+      ],
+      ..._texto('${'-' * _cols}\n'),
+      // Con tarifas mixtas, cada base por separado (como en el comprobante).
+      if (tarifas.length > 1)
+        for (final t in tarifas) ..._texto(_lineaMonto('Subtotal ${pct(t)}%', basePorTarifa[t]!))
+      else
+        ..._texto(_lineaMonto('Subtotal', basePorTarifa.values.fold(0.0, (s, v) => s + v))),
+      if (iva > 0)
+        ..._texto(_lineaMonto(
+            'IVA ${pct(tarifas.where((t) => t > 0).fold(0.0, (m, t) => t > m ? t : m))}%', iva)),
+      // En doble tamaño caben 16 columnas: "TOTAL $1234.56" entra.
+      ..._center, ..._boldOn, ..._doubleSize,
+      ..._texto('TOTAL \$${total.toStringAsFixed(2)}\n'),
+      ..._normalSize, ..._boldOff, ..._left,
+      ..._texto('${'-' * _cols}\n'),
+      ..._center,
+      // Líneas de hasta 32 columnas (rollo de 58 mm).
+      ..._texto('Documento informativo, sin\n'),
+      ..._texto('validez tributaria. El\n'),
+      ..._texto('comprobante se entrega al pagar.\n'),
+      ..._texto('Atendido por: $atendidoPor\n'),
+      ..._left,
+      ..._feed, ..._cut,
+    ];
+    return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
   }
 
   /// Recibo de un adelanto de reserva. Dice en grande que NO es factura: el
