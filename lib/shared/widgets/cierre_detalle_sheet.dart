@@ -162,6 +162,10 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
           _buildVentasPorMetodo(c),
           const SizedBox(height: 16),
         ],
+        if (c.cortesias.isNotEmpty) ...[
+          _buildCortesias(c),
+          const SizedBox(height: 16),
+        ],
         // Solo en los negocios que reciben adelantos de reservas.
         if (c.adelantosRecibidos.isNotEmpty || c.adelantosAplicados.isNotEmpty) ...[
           _buildAdelantos(c),
@@ -347,6 +351,52 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
                 fmt: _fmt, signo: '+'),
             _Fila('Total vendido', c.totalVentas, fmt: _fmt, bold: true),
           ],
+          // Constancia: las propinas ya están dentro de lo cobrado.
+          if (c.totalPropinas > 0)
+            _Fila('Incluye propinas', c.totalPropinas, fmt: _fmt),
+        ],
+      ),
+    );
+  }
+
+  /// Cada plato regalado en el turno. No son venta ni entran a caja.
+  Widget _buildCortesias(CierreDetalladoModel c) {
+    return _Card(
+      titulo: 'Cortesías del turno (${c.unidadesCortesia})',
+      trailing: '\$${_fmt.format(c.valorCortesias)}',
+      trailingColor: AppColors.success,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('A precio de carta. No son venta ni entran a caja.',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+          for (final x in c.cortesias)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${x.cantidad} x ${x.plato}',
+                          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                        if ((x.motivo ?? '').isNotEmpty || (x.autorizadaPor ?? '').isNotEmpty)
+                          Text(
+                            [
+                              if ((x.motivo ?? '').isNotEmpty) x.motivo!,
+                              if ((x.autorizadaPor ?? '').isNotEmpty) x.autorizadaPor!,
+                            ].join(' · '),
+                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  Text('\$${_fmt.format(x.valor)}',
+                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                ],
+              ),
+            ),
         ],
       ),
     );

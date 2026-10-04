@@ -224,6 +224,31 @@ class AdelantoCajaModel {
   );
 }
 
+/// Un plato regalado en el turno, para el cierre.
+class CortesiaCajaModel {
+  final String plato;
+  final int cantidad;
+  final double valor;
+  final String? motivo;
+  final String? autorizadaPor;
+
+  const CortesiaCajaModel({
+    required this.plato,
+    required this.cantidad,
+    required this.valor,
+    this.motivo,
+    this.autorizadaPor,
+  });
+
+  factory CortesiaCajaModel.fromJson(Map<String, dynamic> j) => CortesiaCajaModel(
+    plato:         j['plato']?.toString() ?? '',
+    cantidad:      (j['cantidad'] as num?)?.toInt() ?? 0,
+    valor:         AperturaCajaModel._toDouble(j['valor']),
+    motivo:        j['motivo']?.toString(),
+    autorizadaPor: j['autorizadaPor']?.toString(),
+  );
+}
+
 /// Detalle completo de una apertura/cierre de caja: arqueo, cada ingreso
 /// y egreso, ventas por plato y desglose por método de pago.
 class CierreDetalladoModel {
@@ -259,6 +284,11 @@ class CierreDetalladoModel {
   final double totalAdelantosOtrosMetodos;
   final List<AdelantoCajaModel> adelantosAplicados;
   final double totalAdelantosAplicados;
+  /// Propinas del turno: ya están dentro de las ventas, se muestran como
+  /// constancia. 0 si no hubo (o si el backend aún no las envía).
+  final double totalPropinas;
+  /// Cada plato regalado en el turno.
+  final List<CortesiaCajaModel> cortesias;
 
   const CierreDetalladoModel({
     required this.aperturaCierreCajaId,
@@ -290,6 +320,8 @@ class CierreDetalladoModel {
     this.totalAdelantosOtrosMetodos = 0,
     this.adelantosAplicados = const [],
     this.totalAdelantosAplicados = 0,
+    this.totalPropinas = 0,
+    this.cortesias = const [],
   });
 
   bool get isCerrada => estado == 'CERRADA';
@@ -351,6 +383,10 @@ class CierreDetalladoModel {
         .map((a) => AdelantoCajaModel.fromJson(a))
         .toList(),
     totalAdelantosAplicados:    AperturaCajaModel._toDouble(j['totalAdelantosAplicados']),
+    totalPropinas:              AperturaCajaModel._toDouble(j['totalPropinas']),
+    cortesias: ((j['cortesias'] as List?) ?? [])
+        .map((c) => CortesiaCajaModel.fromJson(c))
+        .toList(),
   );
 }
 

@@ -626,6 +626,10 @@ class ComandaPrinter {
         bytes.addAll(_texto(_lineaMonto(
             'TOTAL (${c.totalFacturas} fact.)', c.totalVentas)));
         bytes.addAll(_boldOff);
+        // Constancia: las propinas ya están dentro de las ventas.
+        if (c.totalPropinas > 0) {
+          bytes.addAll(_texto(_lineaMonto('Incluye propinas', c.totalPropinas)));
+        }
       }
       bytes.addAll(_texto('${'-' * _cols}\n'));
 
@@ -634,8 +638,12 @@ class ComandaPrinter {
         bytes.addAll(_boldOn);
         bytes.addAll(_texto('CORTESIAS DEL TURNO\n'));
         bytes.addAll(_boldOff);
+        for (final x in c.cortesias) {
+          bytes.addAll(_texto(_lineaMonto('${x.cantidad} x ${x.plato}', x.valor)));
+          if ((x.motivo ?? '').isNotEmpty) bytes.addAll(_texto('  ${x.motivo}\n'));
+        }
         bytes.addAll(_texto(_lineaMonto(
-            '${c.unidadesCortesia} a precio de carta', c.valorCortesias)));
+            'Total ${c.unidadesCortesia} a precio carta', c.valorCortesias)));
         bytes.addAll(_texto('(no son venta ni entran a caja)\n'));
         bytes.addAll(_texto('${'-' * _cols}\n'));
       }
