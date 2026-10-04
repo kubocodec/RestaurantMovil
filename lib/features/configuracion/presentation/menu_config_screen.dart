@@ -6,6 +6,8 @@ import '../../../core/network/api_client.dart';
 import '../../inventario/data/inventario_repository.dart';
 import '../../inventario/presentation/receta_screen.dart';
 import '../data/configuracion_repository.dart';
+import '../../../shared/widgets/precio_dialog.dart';
+import '../../facturacion/data/facturacion_repository.dart';
 
 class MenuConfigScreen extends StatefulWidget {
   final String sucursalId;
@@ -714,6 +716,9 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
     final nombreCtrl = TextEditingController();
     final descCtrl   = TextEditingController();
     final precioCtrl = TextEditingController();
+    // El plato nuevo hereda la tarifa del negocio: con la casilla, el precio
+    // escrito es el del menú (con IVA) y se guarda ÷ (1 + IVA) con 6 decimales.
+    final incluyeIva = ValueNotifier<bool>(false);
 
     showDialog(
       context: context,
@@ -743,6 +748,17 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
                   prefixText: '\$  ',
                 ),
               ),
+              ValueListenableBuilder<bool>(
+                valueListenable: incluyeIva,
+                builder: (_, valor, __) => CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: valor,
+                  onChanged: (v) => incluyeIva.value = v ?? false,
+                  title: const Text('El precio incluye IVA',
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+                ),
+              ),
             ],
           ),
         ),
@@ -751,8 +767,8 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
           ElevatedButton(
             onPressed: () async {
               final nombre = nombreCtrl.text.trim();
-              final precio = double.tryParse(precioCtrl.text.trim());
-              if (nombre.isEmpty || precio == null) {
+              final escrito = double.tryParse(precioCtrl.text.trim().replaceAll(',', '.'));
+              if (nombre.isEmpty || escrito == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Nombre y precio son requeridos')),
                 );
@@ -760,6 +776,11 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
               }
               Navigator.pop(ctx);
               try {
+                var precio = escrito;
+                if (incluyeIva.value) {
+                  final tarifa = await FacturacionRepository().getIvaVigente(widget.sucursalId);
+                  precio = precioSinIva(escrito, tarifa ?? 0);
+                }
                 final plato = await widget.repo.crearPlato(
                   subcategoriaId: widget.sub.subcategoriaId,
                   nombre:         nombre,
@@ -848,90 +869,61 @@ class _SubcategoriaRowState extends State<_SubcategoriaRow> {
   }
 
   /// Cambia el precio de un plato ya asignado a la sucursal.
-  void _showEditarPrecioDialog(BuildContext context, PlatoMasterModel plato, PlatoModel asignado) {
-    final precioCtrl = TextEditingController(text: asignado.precio.toStringAsFixed(2));
-    showDialog(
+  Future<void> _showEditarPrecioDialog(BuildContext context, PlatoMasterModel plato, PlatoModel asignado) async {
+    final precio = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Editar precio: ${plato.nombre}',
-            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
-        content: TextField(
-          controller: precioCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Precio *', prefixText: '\$  '),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final precio = double.tryParse(precioCtrl.text.trim());
-              if (precio == null || precio <= 0) return;
-              Navigator.pop(ctx);
-              try {
-                await widget.repo.actualizarPrecioPlato(
-                  sucursalPlatoId: asignado.sucursalPlatoId,
-                  sucursalId:      widget.sucursalId,
-                  platoId:         asignado.platoId,
-                  precio:          precio,
-                );
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Precio actualizado'), backgroundColor: AppColors.success),
-                );
-                widget.onChanged();
-              } catch (e) {
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
-                );
-              }
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
+      builder: (_) => PrecioDialog(
+        titulo: 'Editar precio: ${plato.nombre}',
+        sucursalId: widget.sucursalId,
+        precioActual: asignado.precio,
+        tarifaPlato: plato.ivaPorcentaje,
       ),
     );
+    if (precio == null || !context.mounted) return;
+    try {
+      await widget.repo.actualizarPrecioPlato(
+        sucursalPlatoId: asignado.sucursalPlatoId,
+        sucursalId:      widget.sucursalId,
+        platoId:         asignado.platoId,
+        precio:          precio,
+      );
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Precio actualizado'), backgroundColor: AppColors.success),
+      );
+      widget.onChanged();
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+      );
+    }
   }
 
-  void _showAsignarPrecioDialog(BuildContext context, PlatoMasterModel plato) {
-    final precioCtrl = TextEditingController();
-    showDialog(
+  Future<void> _showAsignarPrecioDialog(BuildContext context, PlatoMasterModel plato) async {
+    final precio = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Precio: ${plato.nombre}', style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
-        content: TextField(
-          controller: precioCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Precio *', prefixText: '\$  '),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final precio = double.tryParse(precioCtrl.text.trim());
-              if (precio == null) return;
-              Navigator.pop(ctx);
-              try {
-                await widget.repo.asignarPlatoSucursal(
-                  sucursalId: widget.sucursalId,
-                  platoId:    plato.platoId,
-                  precio:     precio,
-                );
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Precio asignado'), backgroundColor: AppColors.success),
-                );
-                widget.onChanged();
-              } catch (e) {
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
-                );
-              }
-            },
-            child: const Text('Asignar'),
-          ),
-        ],
+      builder: (_) => PrecioDialog(
+        titulo: 'Precio: ${plato.nombre}',
+        sucursalId: widget.sucursalId,
+        tarifaPlato: plato.ivaPorcentaje,
+        textoBoton: 'Asignar',
       ),
     );
+    if (precio == null || !context.mounted) return;
+    try {
+      await widget.repo.asignarPlatoSucursal(
+        sucursalId: widget.sucursalId,
+        platoId:    plato.platoId,
+        precio:     precio,
+      );
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Precio asignado'), backgroundColor: AppColors.success),
+      );
+      widget.onChanged();
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+      );
+    }
   }
 }
 
@@ -1075,48 +1067,33 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
     }
   }
 
-  void _showEditarPrecioDialog(BuildContext context, PlatoModel p) {
-    final precioCtrl = TextEditingController(text: p.precio.toStringAsFixed(2));
-    showDialog(
+  Future<void> _showEditarPrecioDialog(BuildContext context, PlatoModel p) async {
+    final precio = await showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Editar precio: ${p.nombrePlato}',
-            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
-        content: TextField(
-          controller: precioCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Precio *', prefixText: '\$  '),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () async {
-              final precio = double.tryParse(precioCtrl.text.trim());
-              if (precio == null || precio <= 0) return;
-              Navigator.pop(ctx);
-              try {
-                await repo.actualizarPrecioPlato(
-                  sucursalPlatoId: p.sucursalPlatoId,
-                  sucursalId:      sucursalId,
-                  platoId:         p.platoId,
-                  precio:          precio,
-                );
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Precio actualizado'), backgroundColor: AppColors.success),
-                );
-                onChanged();
-              } catch (e) {
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
-                );
-              }
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
+      builder: (_) => PrecioDialog(
+        titulo: 'Editar precio: ${p.nombrePlato}',
+        sucursalId: sucursalId,
+        precioActual: p.precio,
+        tarifaPlato: p.ivaPorcentaje,
       ),
     );
+    if (precio == null || !context.mounted) return;
+    try {
+      await repo.actualizarPrecioPlato(
+        sucursalPlatoId: p.sucursalPlatoId,
+        sucursalId:      sucursalId,
+        platoId:         p.platoId,
+        precio:          precio,
+      );
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Precio actualizado'), backgroundColor: AppColors.success),
+      );
+      onChanged();
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+      );
+    }
   }
 
   @override

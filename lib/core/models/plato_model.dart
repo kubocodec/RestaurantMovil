@@ -7,6 +7,8 @@ class PlatoModel {
   final String categoria;
   final String subcategoria;
   final double precio;
+  /// Tarifa propia del plato; null = hereda la predeterminada del negocio.
+  final double? ivaPorcentaje;
   final bool disponible;
 
   // --- Inventario (solo llega con contenido si el restaurante lo tiene
@@ -30,6 +32,7 @@ class PlatoModel {
     this.categoria = '',
     this.subcategoria = '',
     required this.precio,
+    this.ivaPorcentaje,
     required this.disponible,
     this.modoInventario = 'SIN_CONTROL',
     this.stock,
@@ -57,6 +60,7 @@ class PlatoModel {
     categoria:       j['categoria']?.toString() ?? '',
     subcategoria:    j['subcategoria']?.toString() ?? '',
     precio:          _toDouble(j['precio']),
+    ivaPorcentaje:   j['ivaPorcentaje'] == null ? null : _toDouble(j['ivaPorcentaje']),
     disponible:      j['disponible'] ?? true,
     modoInventario:  j['modoInventario']?.toString() ?? 'SIN_CONTROL',
     stock:           j['stock'] == null ? null : _toDouble(j['stock']),

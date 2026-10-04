@@ -24,9 +24,10 @@ class DesgloseCobro {
     int Function(DetalleOrdenModel) cantidadDe,
     double ivaPredeterminado,
   ) {
-    // Todo en centavos enteros: con doubles, 0,2625 puede quedar en
-    // 0,26249999 y redondear para el lado equivocado. La tarifa va en
-    // centésimas de punto (15% = 1500).
+    // Todo en enteros: con doubles, 0,2625 puede quedar en 0,26249999 y
+    // redondear para el lado equivocado. El precio puede tener 6 decimales
+    // (precio de menú con IVA ÷ 1.15), así que la base va en millonésimas de
+    // dólar; la tarifa, en centésimas de punto (15% = 1500).
     final basePorTarifa = <int, int>{};
     int ivaCentavos = 0;
     for (final d in detalles) {
@@ -36,11 +37,14 @@ class DesgloseCobro {
       if (d.cortesia) continue;
       final tarifa = d.ivaPorcentaje ?? ivaPredeterminado;
       final clave = (tarifa * 100).round();
-      final baseCentavos = (d.precioUnitario * 100).round() * cantidad;
+      final baseMicro = (d.precioUnitario * 1000000).round() * cantidad;
+      // La base de la línea se redondea a centavos; el IVA se calcula sobre
+      // la base SIN redondear (mitad hacia arriba), línea por línea. Es lo
+      // que hacen el backend y Factuplan, y lo que hace cuadrar precio ×
+      // cantidad con el menú. Con precios de 2 decimales da lo mismo de siempre.
+      final baseCentavos = (baseMicro + 5000) ~/ 10000;
       basePorTarifa[clave] = (basePorTarifa[clave] ?? 0) + baseCentavos;
-      // IVA redondeado por línea (mitad hacia arriba), igual que el backend y
-      // que Factuplan: agrupado por tarifa daba a veces un centavo más.
-      if (clave > 0) ivaCentavos += (baseCentavos * clave + 5000) ~/ 10000;
+      if (clave > 0) ivaCentavos += (baseMicro * clave + 50000000) ~/ 100000000;
     }
 
     double subtotal = 0;
