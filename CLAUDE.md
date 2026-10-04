@@ -69,10 +69,15 @@ hay datos", que es lo que lo hace difícil de encontrar.
 
 El resumen del cobro **no puede calcular `subtotal × una sola tasa`**. Cada línea
 lleva la tarifa de su plato (`ivaPorcentaje` del detalle de la orden; `null` = hereda
-la predeterminada del negocio), y el IVA se agrupa y redondea **por tarifa**, igual
-que `FacturaService`. Con la comida al 0% y las bebidas al 15%, calcularlo con una
-sola tasa le muestra al cajero un total sin el IVA de las bebidas mientras se cobra
-el correcto (el cobro está bien: registra `factura.total`, el del servidor).
+la predeterminada del negocio), y el IVA se redondea **línea por línea**, igual que
+`FacturaService`. Con la comida al 0% y las bebidas al 15%, calcularlo con una sola tasa
+le muestra al cajero un total sin el IVA de las bebidas mientras se cobra el correcto
+(el cobro está bien: registra `factura.total`, el del servidor).
+
+El cálculo vive en **`core/cobro/desglose_cobro.dart`** y lo usan el cobro y la precuenta:
+no duplicarlo. Trabaja en enteros (millonésimas de dólar) porque el precio puede tener
+**6 decimales** (precio de menú con IVA ÷ 1.15): base de la línea redondeada a centavos e
+IVA sobre la base sin redondear, como el backend y Factuplan.
 
 En Tasas de IVA, la **estrella** marca la predeterminada y es una decisión aparte del
 switch de activo: el negocio mixto necesita las dos tarifas activas y solo una
@@ -88,12 +93,16 @@ frames después. Los controllers viven en el `State` y se liberan en `dispose()`
 ## Módulos que solo ven algunos restaurantes
 
 El backend enciende funciones por restaurante (facturación electrónica, control de
-inventario). La app debe **esconder por completo** lo que el negocio no tiene
+inventario, adelantos de reservas). La app debe **esconder por completo** lo que el negocio no tiene
 activado: nada de menús que fallen al tocarlos. El patrón usado es consultar el
 estado (por ejemplo `getAlertas(...).habilitado`) y construir la UI a partir de eso.
 
 Cuando un endpoint nuevo puede no estar desplegado todavía, el repositorio lo
-absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepository`).
+absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepository` y
+`AdelantosRepository.listar`, que responde "no habilitado" si algo falla).
+
+Campos nuevos del backend se leen con valor por defecto (`?? 0`, `?? const []`): un
+backend que aún no los envía no debe cambiar nada en pantalla.
 
 ## Dónde está cada cosa
 
@@ -113,6 +122,21 @@ absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepositor
   defecto; la apaga el cajero de un local sin propinas.
   Con el teclado abierto el diálogo de cobro se compacta y el vuelto se repite en el
   título (que no se desplaza): en pantallas chicas era imposible verlo al escribir.
+  **Pago dividido**: botón en el diálogo de cobro, hasta 3 filas; la última se completa
+  sola con lo que falta (contra el total del servidor) y "Sí, cobrar" no se activa hasta
+  que cuadre. El vuelto se calcula solo sobre la parte en efectivo. Va por `/pagos/lote`.
+  **Adelantos**: "Aplicar adelanto de reserva" en el mismo diálogo; se descuenta hasta el
+  total y, si sobra, muestra en grande "DEVOLVER AL CLIENTE". El cálculo de los pagos está
+  en `_armarPagos`. **Precuenta**: ícono en la barra; la pantalla es
+  `shared/widgets/precuenta_screen.dart` (solo informa, no cobra).
+- `features/adelantos/` — lista de adelantos (pendientes, usados, anulados), nuevo adelanto
+  con recibo impreso, cambiar fecha, anular (solo admin). Se entra desde el panel del
+  cajero o del admin, solo si el restaurante los tiene activados.
+- `features/reportes/` — tarjeta de ventas con **ticket promedio** y **promedio por mesa**
+  (sin propinas), y la tarjeta **Cortesías del día**. El detalle del cierre
+  (`shared/widgets/cierre_detalle_sheet.dart`) muestra "Incluye propinas", las cortesías
+  del turno y los adelantos; `totalCaja` resta lo pagado con adelantos y suma los recibidos
+  por transferencia o tarjeta (con 0 en ambos, la fórmula es la de siempre).
 - `features/inventario/` — inventario en pestañas: **Insumos** (stock, conteo, merma,
   historial), **Platos** (por unidades, con ingreso y ajuste; y los que van por receta),
   **Compras** y **Proveedores**. `receta_screen.dart` edita la receta de un plato y
@@ -122,6 +146,10 @@ absorbe y devuelve vacío en vez de romper la pantalla (ver `InventarioRepositor
 - `features/configuracion/presentation/menu_config_screen.dart` — catálogo: precios,
   disponibilidad, control de stock por plato (sin control / por unidades / por receta) y **tarifa de IVA** (masiva por
   subcategoría con el ícono `%`, o individual con el chip `IVA —` de cada plato).
+  Los precios se escriben en `shared/widgets/precio_dialog.dart`: la casilla **"El precio
+  incluye IVA"** guarda precio ÷ (1 + tarifa del plato o la vigente) con 6 decimales. Un
+  precio ya guardado así se abre con la casilla marcada mostrando el precio con IVA: si se
+  mostrara con 2 decimales y se guardara, volvería el descuadre de centavos.
 - `features/superadmin/` — panel del proveedor: interruptores por restaurante.
 - `core/printing/comanda_printer.dart` — comandas y tickets térmicos.
 
