@@ -228,6 +228,11 @@ class SucursalModel {
   final String? razonSocial;
   final String? codigoEstablecimiento;
   final bool activo;
+  /// Interruptores de la sucursal (los enciende el superadmin). Un backend
+  /// viejo no los envía: quedan apagados y la app se ve como siempre.
+  final bool adelantos;
+  /// Pedir el número de personas al abrir una mesa (promedio por persona).
+  final bool pedirPersonas;
 
   const SucursalModel({
     required this.sucursalId,
@@ -241,6 +246,8 @@ class SucursalModel {
     this.razonSocial,
     this.codigoEstablecimiento,
     required this.activo,
+    this.adelantos = false,
+    this.pedirPersonas = false,
   });
 
   factory SucursalModel.fromJson(Map<String, dynamic> j) => SucursalModel(
@@ -255,6 +262,8 @@ class SucursalModel {
     razonSocial:  j['razonSocial']?.toString(),
     codigoEstablecimiento: j['codigoEstablecimiento']?.toString(),
     activo:       j['activo'] ?? true,
+    adelantos:    j['adelantos'] == true,
+    pedirPersonas: j['pedirPersonas'] == true,
   );
 }
 

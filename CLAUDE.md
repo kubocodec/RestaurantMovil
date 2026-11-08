@@ -93,7 +93,8 @@ frames después. Los controllers viven en el `State` y se liberan en `dispose()`
 ## Módulos que solo ven algunos restaurantes
 
 El backend enciende funciones por restaurante (facturación electrónica, control de
-inventario, adelantos de reservas). La app debe **esconder por completo** lo que el negocio no tiene
+inventario) o por **sucursal** (adelantos de reservas, pedir número de personas; desde
+2026-11-08, porque no todos los locales de un negocio trabajan igual). La app debe **esconder por completo** lo que el negocio no tiene
 activado: nada de menús que fallen al tocarlos. El patrón usado es consultar el
 estado (por ejemplo `getAlertas(...).habilitado`) y construir la UI a partir de eso.
 
@@ -150,7 +151,13 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   incluye IVA"** guarda precio ÷ (1 + tarifa del plato o la vigente) con 6 decimales. Un
   precio ya guardado así se abre con la casilla marcada mostrando el precio con IVA: si se
   mostrara con 2 decimales y se guardara, volvería el descuadre de centavos.
-- `features/superadmin/` — panel del proveedor: interruptores por restaurante.
+- `features/superadmin/` — panel del proveedor: interruptores por restaurante (menú ⋮ del
+  restaurante) y por sucursal (ícono de ajustes de cada sucursal, con su estado a la vista).
+- **Personas por mesa** (`orden_screen.dart`, solo si la sucursal tiene `pedirPersonas`): el
+  diálogo "Confirmar orden" de una mesa nueva pide "¿Cuántas personas son?" vacío, y "Enviar a
+  cocina" no se habilita sin el número. Después se corrige tocando 👥 en la franja de la orden
+  (ámbar con "¿?" si no tiene dato). Para llevar nunca lo pide. Reportes muestra "Por
+  persona" y "Personas" solo si hubo mesas con el dato.
 - `core/printing/comanda_printer.dart` — comandas y tickets térmicos.
 
 ## Qué probar antes de sacar un APK

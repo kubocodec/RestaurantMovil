@@ -37,6 +37,8 @@ class OrdenesRepository {
     required String tipoOrden,     // EN_MESA | PARA_LLEVAR
     String tipoOrigen = 'MESERO',
     String? observaciones,
+    // Personas en la mesa: solo en sucursales que lo piden (pedirPersonas).
+    int? numComensales,
     List<Map<String, dynamic>>? items,
     // Id de intento: si el mismo llega dos veces (timeout + reintento) el
     // backend devuelve la orden ya creada en vez de duplicarla.
@@ -48,6 +50,7 @@ class OrdenesRepository {
       'tipoOrden':    tipoOrden,
       'tipoOrigen':   tipoOrigen,
       if (observaciones != null) 'observaciones': observaciones,
+      if (numComensales != null) 'numComensales': numComensales,
       if (items != null && items.isNotEmpty) 'items': items,
       if (clientRequestId != null) 'clientRequestId': clientRequestId,
     });
@@ -102,6 +105,26 @@ class OrdenesRepository {
           .map((e) => {'detalleId': e.key, 'cantidad': e.value})
           .toList(),
     });
+    return OrdenModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  /// Si la sucursal pide el número de personas al abrir una mesa. Ante
+  /// cualquier falla (backend sin el campo, sin red) responde false: la
+  /// orden se toma como siempre en vez de bloquear al mesero.
+  Future<bool> pidePersonas(String sucursalId) async {
+    try {
+      final r = await _dio.get('/api/sucursales/$sucursalId');
+      final d = r.data['data'] ?? r.data;
+      return d is Map && d['pedirPersonas'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Corregir las personas de una orden abierta ("llegaron 2 más")
+  Future<OrdenModel> cambiarPersonas(String ordenId, int personas) async {
+    final r = await _dio.patch('/api/ordenes/$ordenId/personas',
+        queryParameters: {'personas': personas});
     return OrdenModel.fromJson(r.data['data'] ?? r.data);
   }
 

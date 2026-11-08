@@ -292,11 +292,23 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 _MiniStat(label: 'Ticket promedio', value: '\$${_fmt.format(r.ticketPromedio)}'),
                 if (r.ticketPromedioMesa != null)
                   _MiniStat(label: 'Promedio por mesa', value: '\$${_fmt.format(r.ticketPromedioMesa)}'),
+                // Solo en sucursales que piden el número de personas.
+                if (r.promedioPorPersona != null) ...[
+                  _MiniStat(label: 'Por persona', value: '\$${_fmt.format(r.promedioPorPersona)}'),
+                  _MiniStat(label: 'Personas', value: '${r.totalPersonas}'),
+                ],
               ],
             ),
             const SizedBox(height: 4),
             const Text('Sin propinas. Una mesa que paga en partes cuenta una sola vez.',
                 style: TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 10.5)),
+            // Si alguna mesa se cobró sin el dato (APK viejo, ítems movidos a
+            // otra mesa), el promedio por persona sale solo de las que lo
+            // tienen: se avisa para que no se lea como el total del día.
+            if (r.promedioPorPersona != null && r.mesasConPersonas < r.mesasCobradasEnSala)
+              Text('Por persona: según ${r.mesasConPersonas} de ${r.mesasCobradasEnSala} mesas '
+                  '(las demás no tienen el número de personas).',
+                  style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 10.5)),
           ],
         ],
       ),

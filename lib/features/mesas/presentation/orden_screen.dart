@@ -96,6 +96,11 @@ class _OrdenScreenState extends State<OrdenScreen> {
   bool _categoriasExpandidas = true;
   final _busquedaCtrl = TextEditingController();
   String _busqueda = '';
+  // Sucursales con "pedir número de personas": el mesero lo escribe al abrir
+  // la mesa (promedio por persona en Reportes). El controller vive aquí y no
+  // en el diálogo por la trampa del TextEditingController destruido.
+  bool _pidePersonas = false;
+  final _personasCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -106,6 +111,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
   @override
   void dispose() {
     _busquedaCtrl.dispose();
+    _personasCtrl.dispose();
     super.dispose();
   }
 
@@ -132,9 +138,12 @@ class _OrdenScreenState extends State<OrdenScreen> {
       final resultados = await Future.wait([
         _repo.getPlatosBySucursal(_sucursalId),
         _repo.getOrdenesActivas(_sucursalId),
+        // Para llevar no lleva personas: ni se consulta.
+        widget.esParaLlevar ? Future.value(false) : _repo.pidePersonas(_sucursalId),
       ]);
       final platos  = resultados[0] as List<PlatoModel>;
       final activas = resultados[1] as List<OrdenModel>;
+      final pidePersonas = resultados[2] as bool;
       OrdenModel? existente;
       if (widget.ordenId != null) {
         // Orden para llevar existente: se abre directo por su id
@@ -169,6 +178,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
       setState(() {
         _platos = platos;
         _ordenExistente = existente;
+        _pidePersonas = pidePersonas;
         _loading = false;
       });
     } catch (e) {
@@ -245,6 +255,16 @@ class _OrdenScreenState extends State<OrdenScreen> {
           .where((d) => d.estado == 'PENDIENTE')
           .length;
 
+  /// El campo de personas solo aparece al ABRIR la mesa: después se corrige
+  /// desde la franja de la orden.
+  bool get _pedirPersonasAlEnviar =>
+      _pidePersonas && !widget.esParaLlevar && _ordenExistente == null;
+
+  int? get _personasEscritas {
+    final n = int.tryParse(_personasCtrl.text.trim());
+    return (n != null && n >= 1 && n <= 999) ? n : null;
+  }
+
   Future<void> _confirmarOrden() async {
     // El candado se activa ANTES de abrir el diálogo: sin él, un doble tap
     // abría DOS diálogos apilados y al terminar el envío el pop cerraba el
@@ -272,11 +292,31 @@ class _OrdenScreenState extends State<OrdenScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirmar orden'),
+        // Con el teclado abierto (campo de personas) y varios platos, el
+        // contenido debe poder desplazarse en vez de desbordarse.
+        scrollable: true,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.esParaLlevar ? 'Pedido para llevar' : 'Mesa: ${widget.mesaNombre}'),
+            if (_pedirPersonasAlEnviar) ...[
+              const SizedBox(height: 10),
+              // Vacío a propósito (no la capacidad de la mesa): así el dato
+              // es el real y no el que quedó por no cambiarlo.
+              TextField(
+                controller: _personasCtrl,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                maxLength: 3,
+                decoration: const InputDecoration(
+                  labelText: '¿Cuántas personas son? *',
+                  prefixIcon: Icon(Icons.groups_outlined),
+                  counterText: '',
+                  isDense: true,
+                ),
+              ),
+            ],
             const Divider(),
             ..._carrito.map((i) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
@@ -304,7 +344,16 @@ class _OrdenScreenState extends State<OrdenScreen> {
         ),
         actions: [
           TextButton(onPressed: () => responder(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => responder(ctx, true), child: const Text('Enviar a cocina')),
+          // Sin el número de personas no se habilita el envío.
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _personasCtrl,
+            builder: (_, __, ___) => ElevatedButton(
+              onPressed: !_pedirPersonasAlEnviar || _personasEscritas != null
+                  ? () => responder(ctx, true)
+                  : null,
+              child: const Text('Enviar a cocina'),
+            ),
+          ),
         ],
       ),
     );
@@ -359,6 +408,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
           sucursalId: widget.esParaLlevar ? _sucursalId : null,
           tipoOrden: widget.esParaLlevar ? 'PARA_LLEVAR' : _tipoOrden,
           tipoOrigen: 'MESERO',
+          numComensales: _pedirPersonasAlEnviar ? _personasEscritas : null,
           clientRequestId: _envioRequestId,
           items: [
             for (final item in _carrito)
@@ -1167,6 +1217,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
                     fontWeight: FontWeight.w600, color: AppColors.mesaOcupada),
                 ),
               ),
+              if (_pidePersonas && !o.esParaLlevar) ...[
+                const SizedBox(width: 6),
+                _buildPersonasChip(o),
+              ],
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -1184,6 +1238,60 @@ class _OrdenScreenState extends State<OrdenScreen> {
         ),
       ),
     );
+  }
+
+  /// Personas de la mesa, tocable para corregir. Sin dato (orden creada al
+  /// mover ítems, o desde un APK viejo) se marca en ámbar para que lo llenen.
+  Widget _buildPersonasChip(OrdenModel o) {
+    final n = o.numComensales;
+    final color = n == null ? AppColors.warning : AppColors.mesaOcupada;
+    return Tooltip(
+      message: 'Número de personas',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: _enviando ? null : () => _cambiarPersonas(o),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.groups_outlined, size: 16, color: color),
+              const SizedBox(width: 4),
+              Text(n == null ? '¿?' : '$n',
+                style: TextStyle(
+                  fontFamily: 'Poppins', fontSize: 12,
+                  fontWeight: FontWeight.w700, color: color)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cambiarPersonas(OrdenModel o) async {
+    final personas = await showDialog<int>(
+      context: context,
+      builder: (_) => _PersonasDialog(actual: o.numComensales),
+    );
+    if (personas == null || personas == o.numComensales || !mounted) return;
+    try {
+      await _repo.cambiarPersonas(o.ordenId, personas);
+      final actualizada = await _repo.getOrden(o.ordenId);
+      if (!mounted) return;
+      setState(() => _ordenExistente = actualizada);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Mesa con $personas ${personas == 1 ? 'persona' : 'personas'}'),
+        backgroundColor: AppColors.success,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error));
+    }
   }
 
   void _mostrarPedidoActual(OrdenModel o) {
@@ -2213,6 +2321,58 @@ class _EtiquetaStock extends StatelessWidget {
         style: TextStyle(
           fontFamily: 'Poppins', fontSize: 10.5,
           fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+}
+
+/// Corregir el número de personas de una mesa abierta. Widget con estado
+/// propio: el controller no puede vivir y morir dentro del builder del
+/// diálogo (la animación de cierre lo vuelve a dibujar ya destruido).
+class _PersonasDialog extends StatefulWidget {
+  final int? actual;
+  const _PersonasDialog({this.actual});
+
+  @override
+  State<_PersonasDialog> createState() => _PersonasDialogState();
+}
+
+class _PersonasDialogState extends State<_PersonasDialog> {
+  late final _ctrl = TextEditingController(text: widget.actual?.toString() ?? '');
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  int? get _valor {
+    final n = int.tryParse(_ctrl.text.trim());
+    return (n != null && n >= 1 && n <= 999) ? n : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Número de personas'),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        maxLength: 3,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(
+          labelText: '¿Cuántas personas son?',
+          prefixIcon: Icon(Icons.groups_outlined),
+          counterText: '',
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: _valor == null ? null : () => Navigator.pop(context, _valor),
+          child: const Text('Guardar'),
+        ),
+      ],
     );
   }
 }

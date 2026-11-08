@@ -103,6 +103,8 @@ class OrdenModel {
   // Auditoría de anulación: motivo obligatorio y quién anuló
   final String? motivoCancelacion;
   final String? canceladaPor;
+  /// Personas en la mesa; null si la sucursal no lo pide (o es para llevar).
+  final int? numComensales;
   final List<DetalleOrdenModel> detalles;
 
   const OrdenModel({
@@ -120,6 +122,7 @@ class OrdenModel {
     this.nombreUsuario = '',
     this.motivoCancelacion,
     this.canceladaPor,
+    this.numComensales,
     required this.detalles,
   });
 
@@ -140,6 +143,7 @@ class OrdenModel {
       nombreUsuario: j['nombreUsuario']?.toString() ?? '',
       motivoCancelacion: j['motivoCancelacion']?.toString(),
       canceladaPor:  j['canceladaPor']?.toString(),
+      numComensales: (j['numComensales'] as num?)?.toInt(),
       detalles:      detallesRaw.map((d) => DetalleOrdenModel.fromJson(d)).toList(),
     );
   }

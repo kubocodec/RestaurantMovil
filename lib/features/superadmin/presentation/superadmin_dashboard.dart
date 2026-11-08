@@ -832,47 +832,6 @@ class _RestaurantRowState extends State<_RestaurantRow> {
     }
   }
 
-  /// Activar/desactivar los adelantos de reservas: solo para los negocios
-  /// que cobran por adelantado al reservar.
-  Future<void> _toggleAdelantos() async {
-    final activar = !_r.adelantos;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(activar ? 'Activar adelantos de reservas' : 'Desactivar adelantos de reservas',
-            style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
-        content: Text(
-          activar
-              ? '"${_r.nombre}" podrá registrar adelantos de reservas y descontarlos '
-                'al cobrar. Sus cajeros necesitan la versión nueva de la app.'
-              : '"${_r.nombre}" dejará de ver los adelantos en su app y no podrá '
-                'descontarlos al cobrar. Lo registrado no se borra: al reactivarlo, '
-                'los pendientes siguen ahí. ¿Continuar?',
-          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(activar ? 'Activar' : 'Desactivar')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await widget.repo.setAdelantos(_r.restaurantId, activar);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(activar ? 'Adelantos activados' : 'Adelantos desactivados'),
-          backgroundColor: AppColors.success,
-        ));
-      }
-      widget.onRestaurantUpdated();
-    } catch (e) {
-      _showError(e);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -904,7 +863,6 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                       case 'quitar': _quitarControlPago();
                       case 'sri':    _toggleFacturacionElectronica();
                       case 'inventario': _toggleControlInventario();
-                      case 'adelantos': _toggleAdelantos();
                     }
                   },
                   itemBuilder: (_) => [
@@ -930,12 +888,6 @@ class _RestaurantRowState extends State<_RestaurantRow> {
                             _r.controlInventario
                                 ? 'Desactivar control de inventario'
                                 : 'Activar control de inventario',
-                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
-                    PopupMenuItem(value: 'adelantos',
-                        child: Text(
-                            _r.adelantos
-                                ? 'Desactivar adelantos de reservas'
-                                : 'Activar adelantos de reservas',
                             style: const TextStyle(fontFamily: 'Poppins', fontSize: 13))),
                   ],
                 ),
@@ -1135,6 +1087,97 @@ class _SucursalConfigRow extends StatelessWidget {
     required this.onUpdated,
   });
 
+  /// Opción del menú con su estado a la vista: el superadmin ve qué está
+  /// encendido sin tener que tocar nada.
+  PopupMenuItem<String> _itemInterruptor(String valor, String titulo, bool activo) {
+    return PopupMenuItem(
+      value: valor,
+      child: Row(
+        children: [
+          Icon(activo ? Icons.toggle_on_rounded : Icons.toggle_off_outlined,
+              size: 22, color: activo ? AppColors.success : AppColors.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(titulo,
+                style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
+          Text(activo ? 'Activo' : 'Apagado',
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w600,
+                  color: activo ? AppColors.success : AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmar(BuildContext context, String titulo, String mensaje, String accion) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(titulo, style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+        content: Text(mensaje, style: const TextStyle(fontFamily: 'Poppins', fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(accion)),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _aplicar(BuildContext context, Future<void> Function() cambio, String exito) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await cambio();
+      messenger.showSnackBar(SnackBar(content: Text(exito), backgroundColor: AppColors.success));
+      onUpdated();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error));
+    }
+  }
+
+  /// Adelantos de reservas por sucursal: no todos los locales de un negocio
+  /// cobran por adelantado al reservar.
+  Future<void> _toggleAdelantos(BuildContext context) async {
+    final activar = !sucursal.adelantos;
+    final ok = await _confirmar(
+      context,
+      activar ? 'Activar adelantos de reservas' : 'Desactivar adelantos de reservas',
+      activar
+          ? '"${sucursal.nombre}" podrá registrar adelantos de reservas y descontarlos '
+            'al cobrar. Sus cajeros necesitan la versión nueva de la app.'
+          : '"${sucursal.nombre}" dejará de ver los adelantos en su app y no podrá '
+            'descontarlos al cobrar. Lo registrado no se borra: al reactivarlo, '
+            'los pendientes siguen ahí. ¿Continuar?',
+      activar ? 'Activar' : 'Desactivar',
+    );
+    if (!ok || !context.mounted) return;
+    await _aplicar(context, () => repo.setAdelantosSucursal(sucursal.sucursalId, activar),
+        activar ? 'Adelantos activados' : 'Adelantos desactivados');
+  }
+
+  /// Pedir el número de personas al abrir una mesa, para el promedio por
+  /// persona. Por sucursal: hay locales que no lo manejan.
+  Future<void> _togglePedirPersonas(BuildContext context) async {
+    final activar = !sucursal.pedirPersonas;
+    final ok = await _confirmar(
+      context,
+      activar ? 'Pedir número de personas' : 'Dejar de pedir el número de personas',
+      activar
+          ? 'En "${sucursal.nombre}", al abrir una mesa el mesero tendrá que escribir '
+            'cuántas personas son, y Reportes mostrará el promedio por persona. '
+            'Los meseros necesitan la versión nueva de la app.'
+          : 'En "${sucursal.nombre}" ya no se pedirá el número de personas y Reportes '
+            'dejará de mostrar el promedio por persona. Lo registrado no se borra. ¿Continuar?',
+      activar ? 'Activar' : 'Desactivar',
+    );
+    if (!ok || !context.mounted) return;
+    await _aplicar(context, () => repo.setPedirPersonas(sucursal.sucursalId, activar),
+        activar ? 'Se pedirá el número de personas' : 'Ya no se pedirá el número de personas');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1179,6 +1222,20 @@ class _SucursalConfigRow extends StatelessWidget {
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Funciones de la sucursal',
+                  icon: const Icon(Icons.tune_rounded, size: 16, color: AppColors.primary),
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'adelantos': _toggleAdelantos(context);
+                      case 'personas':  _togglePedirPersonas(context);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    _itemInterruptor('adelantos', 'Adelantos de reservas', sucursal.adelantos),
+                    _itemInterruptor('personas', 'Pedir número de personas', sucursal.pedirPersonas),
+                  ],
                 ),
                 IconButton(
                   tooltip: 'Editar datos (RUC, razón social...)',

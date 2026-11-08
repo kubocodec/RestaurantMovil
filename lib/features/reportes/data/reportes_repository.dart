@@ -9,6 +9,15 @@ class ResumenDiarioModel {
   /// Mesas (órdenes) cobradas en el día: una mesa que paga en varias partes
   /// cuenta una vez. 0 si el backend aún no lo envía.
   final int totalMesasCobradas;
+  /// Promedio por persona (solo sucursales que piden el número de personas):
+  /// personas atendidas, cuántas mesas cobradas lo tienen y lo que vendieron
+  /// esas mesas (con IVA, sin propinas). Las mesas sin el dato quedan fuera
+  /// del numerador y del divisor. 0 si la sucursal no lo usa.
+  final int totalPersonas;
+  final int mesasConPersonas;
+  /// Mesas cobradas que ocupaban mesa (sin para llevar).
+  final int mesasCobradasEnSala;
+  final double ventasConPersonas;
   final double totalVentas;
   final double totalDescuentos;
   final double totalIva;
@@ -25,6 +34,10 @@ class ResumenDiarioModel {
     required this.totalOrdenes,
     required this.totalFacturas,
     this.totalMesasCobradas = 0,
+    this.totalPersonas = 0,
+    this.mesasConPersonas = 0,
+    this.mesasCobradasEnSala = 0,
+    this.ventasConPersonas = 0,
     required this.totalVentas,
     required this.totalDescuentos,
     required this.totalIva,
@@ -41,6 +54,10 @@ class ResumenDiarioModel {
     totalOrdenes:     (j['totalOrdenes'] as num?)?.toInt() ?? 0,
     totalFacturas:    (j['totalFacturas'] as num?)?.toInt() ?? 0,
     totalMesasCobradas: (j['totalMesasCobradas'] as num?)?.toInt() ?? 0,
+    totalPersonas:    (j['totalPersonas'] as num?)?.toInt() ?? 0,
+    mesasConPersonas: (j['mesasConPersonas'] as num?)?.toInt() ?? 0,
+    mesasCobradasEnSala: (j['mesasCobradasEnSala'] as num?)?.toInt() ?? 0,
+    ventasConPersonas: _d(j['ventasConPersonas']),
     totalVentas:      _d(j['totalVentas']),
     totalDescuentos:  _d(j['totalDescuentos']),
     totalIva:         _d(j['totalIva']),
@@ -66,6 +83,11 @@ class ResumenDiarioModel {
   /// aunque haya pagado en varias partes. null si no hubo ventas.
   double? get ticketPromedioMesa =>
       totalMesasCobradas > 0 ? _ventasSinPropina / totalMesasCobradas : null;
+
+  /// Cuánto gasta cada persona. null si ninguna mesa cobrada tiene el
+  /// número de personas (sucursal que no lo pide): la tarjeta no lo muestra.
+  double? get promedioPorPersona =>
+      totalPersonas > 0 ? ventasConPersonas / totalPersonas : null;
 }
 
 /// Reporte de caja del día: agregados de todos los turnos de la sucursal
