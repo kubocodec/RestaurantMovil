@@ -258,13 +258,31 @@ class _AdelantosScreenState extends State<AdelantosScreen> {
         ),
       );
     }
+    // Un cliente puede abonar varias veces ($100 y luego $200): en los
+    // pendientes se muestra cuánto tiene a favor en total, para que el
+    // cajero no tenga que sumarlo a mano.
+    final porCliente = <String, (int, double)>{};
+    if (_estado == 'PENDIENTE') {
+      for (final a in _adelantos) {
+        final (n, total) = porCliente[a.clienteId] ?? (0, 0.0);
+        porCliente[a.clienteId] = (n + 1, total + a.disponible);
+      }
+    }
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         itemCount: _adelantos.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) => _AdelantoCard(adelanto: _adelantos[i], onTap: () => _acciones(_adelantos[i])),
+        itemBuilder: (_, i) {
+          final a = _adelantos[i];
+          final grupo = porCliente[a.clienteId];
+          return _AdelantoCard(
+            adelanto: a,
+            totalCliente: grupo != null && grupo.$1 > 1 ? grupo : null,
+            onTap: () => _acciones(a),
+          );
+        },
       ),
     );
   }
@@ -272,8 +290,10 @@ class _AdelantosScreenState extends State<AdelantosScreen> {
 
 class _AdelantoCard extends StatelessWidget {
   final AdelantoModel adelanto;
+  /// (cantidad, total) de los pendientes del mismo cliente; null si tiene uno solo.
+  final (int, double)? totalCliente;
   final VoidCallback onTap;
-  const _AdelantoCard({required this.adelanto, required this.onTap});
+  const _AdelantoCard({required this.adelanto, this.totalCliente, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -316,6 +336,14 @@ class _AdelantoCard extends StatelessWidget {
                       Text(a.nota!,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                    if (totalCliente != null)
+                      Text(
+                        '${totalCliente!.$1} adelantos de este cliente · '
+                        '\$${_fmt.format(totalCliente!.$2)} en total',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 12,
+                          fontWeight: FontWeight.w700, color: AppColors.primary)),
                   ],
                 ),
               ),

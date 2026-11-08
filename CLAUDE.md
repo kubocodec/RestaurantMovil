@@ -126,9 +126,13 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   **Pago dividido**: botón en el diálogo de cobro, hasta 3 filas; la última se completa
   sola con lo que falta (contra el total del servidor) y "Sí, cobrar" no se activa hasta
   que cuadre. El vuelto se calcula solo sobre la parte en efectivo. Va por `/pagos/lote`.
-  **Adelantos**: "Aplicar adelanto de reserva" en el mismo diálogo; se descuenta hasta el
-  total y, si sobra, muestra en grande "DEVOLVER AL CLIENTE". El cálculo de los pagos está
-  en `_armarPagos`. **Precuenta**: ícono en la barra; la pantalla es
+  **Adelantos**: "Aplicar adelanto de reserva" en el mismo diálogo. Un cliente puede abonar
+  varias veces ($100 y luego $200): se marcan **varios** (al marcar uno se marcan todos los
+  del cliente; máximo 7, porque el backend acepta 10 pagos y el dividido usa 3). Se usan del
+  más antiguo al más nuevo, cada uno completo hasta cubrir el total (`_repartoAdelantos`);
+  solo el último puede quedar a medias y su diferencia se muestra en grande "DEVOLVER AL
+  CLIENTE"; los que ya no hacen falta se avisan y siguen pendientes. El cálculo de los
+  pagos está en `_armarPagos`. **Precuenta**: ícono en la barra; la pantalla es
   `shared/widgets/precuenta_screen.dart` (solo informa, no cobra).
 - `features/adelantos/` — lista de adelantos (pendientes, usados, anulados), nuevo adelanto
   con recibo impreso, cambiar fecha, anular (solo admin). Se entra desde el panel del

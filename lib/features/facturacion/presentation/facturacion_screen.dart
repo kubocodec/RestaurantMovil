@@ -85,7 +85,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// Adelantos de reservas: solo en los restaurantes que los usan.
   bool _adelantosHabilitados = false;
   /// Adelanto que se descuenta en ESTE cobro (null = ninguno).
-  AdelantoModel? _adelantoAplicado;
+  // Adelantos que se descuentan en este cobro: un cliente puede haber
+  // abonado varias veces ($100 y luego $200) y se usan todos juntos.
+  List<AdelantoModel> _adelantosAplicados = const [];
 
   /// Pago dividido: hasta 3 métodos. Los controllers viven en el State y no en
   /// el diálogo (ver la trampa del TextEditingController en CLAUDE.md).
@@ -251,7 +253,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     if (sinCobro) {
       _propina = 0;
       _pagosDivididos = null;
-      _adelantoAplicado = null;
+      _adelantosAplicados = const [];
     }
 
     setState(() => _emitiendo = true);
@@ -289,13 +291,13 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       // Una cuenta en $0 (solo cortesías) el backend la deja pagada al
       // emitirla: no hay pago que registrar (y un pago de $0 sería rechazado).
       final divididos = _pagosDivididos;
-      final adelanto = _adelantoAplicado;
+      final adelantos = _adelantosAplicados;
       final facturaPagada = factura.estado == 'PAGADA'
           ? factura
-          : divididos != null || adelanto != null
+          : divididos != null || adelantos.isNotEmpty
               ? await _factRepo.registrarPagos(
                   facturaVentaId: factura.facturaVentaId,
-                  pagos: _armarPagos(divididos, adelanto, metodoPagoId, factura.total),
+                  pagos: _armarPagos(divididos, adelantos, metodoPagoId, factura.total),
                 )
               : await _factRepo.registrarPago(
                   facturaVentaId: factura.facturaVentaId,
@@ -319,20 +321,39 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     }
   }
 
+  /// Cuánto se descuenta de cada adelanto, en centavos: del más antiguo al
+  /// más nuevo, cada uno completo hasta cubrir el total. Solo el último que
+  /// se usa puede quedar a medias (la diferencia se devuelve al cliente). Los
+  /// que ya no hacen falta no entran: siguen pendientes para otro día.
+  static List<(AdelantoModel, int)> _repartoAdelantos(
+      List<AdelantoModel> adelantos, int totalCentavos) {
+    final ordenados = [...adelantos]
+      ..sort((a, b) => a.fechaRegistro.compareTo(b.fechaRegistro));
+    var restante = totalCentavos;
+    final reparto = <(AdelantoModel, int)>[];
+    for (final a in ordenados) {
+      if (restante <= 0) break;
+      final aplicado = min((a.disponible * 100).round(), restante);
+      if (aplicado <= 0) continue;
+      reparto.add((a, aplicado));
+      restante -= aplicado;
+    }
+    return reparto;
+  }
+
   /// Pagos del cobro contra el total del servidor, en centavos enteros para
-  /// que sumen exacto. Primero el adelanto (hasta el total: si sobra, el
+  /// que sumen exacto. Primero los adelantos (hasta el total: si sobra, el
   /// backend registra la devolución); el resto, dividido o con el método
   /// elegido. En la división, la última fila se lleva lo que falta.
   List<PagoLote> _armarPagos(
     List<({String metodoPagoId, int? centavos, String? referencia})>? filas,
-    AdelantoModel? adelanto,
+    List<AdelantoModel> adelantos,
     String metodoPagoId,
     double total,
   ) {
     var restante = (total * 100).round();
     final pagos = <PagoLote>[];
-    if (adelanto != null) {
-      final aplicado = min((adelanto.disponible * 100).round(), restante);
+    for (final (adelanto, aplicado) in _repartoAdelantos(adelantos, restante)) {
       pagos.add((
         metodoPagoId: adelanto.metodoPagoId,
         monto: aplicado / 100,
@@ -406,8 +427,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     bool esEfectivoId(String id) =>
         (metodoDe(id)?.nombre ?? '').toUpperCase().contains('EFECTIVO');
 
-    // Adelanto de reserva: también arranca sin aplicar cada vez.
-    AdelantoModel? adelanto;
+    // Adelantos de reserva: también arrancan sin aplicar cada vez.
+    var adelantos = <AdelantoModel>[];
     var cubierto = false;
 
     final confirmado = await showDialog<bool>(
@@ -428,14 +449,19 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           // En centavos enteros: con doubles, 20 - 13,51 puede dar 6,4899999.
           final totalCentavos = ((consumo + propina) * 100).round();
 
-          // Adelanto: cubre hasta el total; si sobra, se devuelve al cliente.
-          final ad = adelanto;
-          final disponibleCentavos = ad == null ? 0 : (ad.disponible * 100).round();
-          final aplicadoCentavos = min(disponibleCentavos, totalCentavos);
-          final devolverCentavos = disponibleCentavos - aplicadoCentavos;
+          // Adelantos: cubren hasta el total; si sobra, se devuelve al cliente
+          // lo que quedó del último que se usó.
+          final reparto = _repartoAdelantos(adelantos, totalCentavos);
+          final usados = [for (final (a, _) in reparto) a];
+          // Ya no hacen falta (la cuenta quedó cubierta): siguen pendientes.
+          final sobrantes = adelantos.where((a) => !usados.contains(a)).toList();
+          final aplicadoCentavos = reparto.fold<int>(0, (s, r) => s + r.$2);
+          final devolverCentavos = reparto.fold<int>(
+              0, (s, r) => s + (r.$1.disponible * 100).round() - r.$2);
+          final hayAdelantos = adelantos.isNotEmpty;
           // Lo que se cobra hoy, con uno o varios métodos.
           final aCobrarCentavos = totalCentavos - aplicadoCentavos;
-          cubierto = ad != null && aCobrarCentavos == 0;
+          cubierto = hayAdelantos && aCobrarCentavos == 0;
 
           // Pago dividido: el cajero escribe los montos de todas las filas
           // menos la última, que se lleva lo que falta. Así la suma cuadra
@@ -687,10 +713,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                               color: AppColors.textSecondary),
                           ),
                         ],
-                        if (ad != null && !cubierto) ...[
+                        if (hayAdelantos && !cubierto) ...[
                           const SizedBox(height: 2),
                           Text(
-                            'Adelanto −\$${_fmt.format(aplicadoCentavos / 100)}  ·  '
+                            '${adelantos.length > 1 ? 'Adelantos' : 'Adelanto'} −\$${_fmt.format(aplicadoCentavos / 100)}  ·  '
                             'resta \$${_fmt.format(aCobrarCentavos / 100)}',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
@@ -755,18 +781,20 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                   ],
                   if (_adelantosHabilitados) ...[
                     const SizedBox(height: 12),
-                    if (ad == null)
+                    if (!hayAdelantos)
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                           icon: const Icon(Icons.event_available_outlined, size: 18),
                           label: const Text('Aplicar adelanto de reserva'),
                           onPressed: () async {
-                            final elegido = await showDialog<AdelantoModel>(
+                            final elegidos = await showDialog<List<AdelantoModel>>(
                               context: ctx,
                               builder: (_) => _ElegirAdelantoDialog(sucursalId: _sucursalId),
                             );
-                            if (elegido != null) setDialogState(() => adelanto = elegido);
+                            if (elegidos != null && elegidos.isNotEmpty) {
+                              setDialogState(() => adelantos = elegidos);
+                            }
                           },
                         ),
                       )
@@ -785,21 +813,43 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Adelanto de ${ad.nombreCliente}',
+                                  Text(
+                                    adelantos.map((a) => a.nombreCliente).toSet().length == 1
+                                        ? (adelantos.length == 1
+                                            ? 'Adelanto de ${adelantos.first.nombreCliente}'
+                                            : '${adelantos.length} adelantos de ${adelantos.first.nombreCliente}')
+                                        : '${adelantos.length} adelantos',
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 13)),
-                                  Text(
-                                    '\$${_fmt.format(ad.disponible)} en ${ad.nombreMetodoPago}'
-                                    ' · se descuentan \$${_fmt.format(aplicadoCentavos / 100)}',
+                                  // Cada abono con su fecha y método: el cajero
+                                  // ve de dónde sale lo que se descuenta.
+                                  for (final (a, centavos) in reparto)
+                                    Text(
+                                      '\$${_fmt.format(a.disponible)} del '
+                                      '${DateFormat('dd/MM', 'es').format(a.fechaRegistro.toLocal())} '
+                                      'en ${a.nombreMetodoPago}'
+                                      '${centavos < (a.disponible * 100).round() ? ' · se usan \$${_fmt.format(centavos / 100)}' : ''}',
+                                      style: const TextStyle(
+                                        fontFamily: 'Poppins', fontSize: 11,
+                                        color: AppColors.textSecondary)),
+                                  for (final a in sobrantes)
+                                    Text(
+                                      '\$${_fmt.format(a.disponible)} del '
+                                      '${DateFormat('dd/MM', 'es').format(a.fechaRegistro.toLocal())}: '
+                                      'no hace falta, queda pendiente',
+                                      style: const TextStyle(
+                                        fontFamily: 'Poppins', fontSize: 11,
+                                        color: AppColors.warning)),
+                                  Text('Se descuentan \$${_fmt.format(aplicadoCentavos / 100)}',
                                     style: const TextStyle(
-                                      fontFamily: 'Poppins', fontSize: 11,
-                                      color: AppColors.textSecondary)),
+                                      fontFamily: 'Poppins', fontSize: 12,
+                                      fontWeight: FontWeight.w700, color: AppColors.primary)),
                                 ],
                               ),
                             ),
                             TextButton(
-                              onPressed: () => setDialogState(() => adelanto = null),
+                              onPressed: () => setDialogState(() => adelantos = []),
                               child: const Text('Quitar'),
                             ),
                           ],
@@ -843,7 +893,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(ad != null ? '¿Cómo paga el resto?' : '¿Cómo paga?',
+                          child: Text(hayAdelantos ? '¿Cómo paga el resto?' : '¿Cómo paga?',
                             style: const TextStyle(
                               fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
                         ),
@@ -1045,8 +1095,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     if (confirmado == true) {
       _propina = propina > 0 ? propina : 0;
       _recibido = pedirRecibido ? recibido : null;
-      // Si el adelanto cubre todo, no hay nada más que cobrar ni dividir.
-      _adelantoAplicado = adelanto;
+      // Si los adelantos cubren todo, no hay nada más que cobrar ni dividir.
+      _adelantosAplicados = List.of(adelantos);
       _pagosDivididos = dividir && !cubierto
           ? [
               for (var i = 0; i < filas.length; i++)
@@ -1177,8 +1227,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   Future<void> _mostrarComprobante(FacturaModel factura, List<ReciboItem> items) async {
-    final pagoAdelanto = factura.pagos.where((p) => p.esAdelanto).firstOrNull;
-    final dividido = factura.pagos.length > 1 || pagoAdelanto != null;
+    final pagosAdelanto = factura.pagos.where((p) => p.esAdelanto).toList();
+    final dividido = factura.pagos.length > 1 || pagosAdelanto.isNotEmpty;
     final metodoPago = dividido
         ? factura.pagos.map((p) => p.etiqueta).join(' + ')
         : _metodoPagoSeleccionado?.nombre ?? '';
@@ -1189,11 +1239,16 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
             .where((p) => !p.esAdelanto && p.nombreMetodoPago.toUpperCase().contains('EFECTIVO'))
             .fold<double>(0, (s, p) => s + p.monto)
         : null;
-    // Lo que sobró del adelanto y se le devolvió al cliente.
-    final adelanto = _adelantoAplicado;
-    final devuelto = pagoAdelanto != null && adelanto != null
-        ? max(0, (adelanto.disponible * 100).round() - (pagoAdelanto.monto * 100).round()) / 100
-        : null;
+    // Lo que sobró de los adelantos y se le devolvió al cliente, con los
+    // montos que registró el servidor para cada uno.
+    var devueltoCentavos = 0;
+    for (final p in pagosAdelanto) {
+      final a = _adelantosAplicados.where((x) => x.adelantoId == p.adelantoId).firstOrNull;
+      if (a != null) {
+        devueltoCentavos += max(0, (a.disponible * 100).round() - (p.monto * 100).round());
+      }
+    }
+    final devuelto = pagosAdelanto.isNotEmpty ? devueltoCentavos / 100 : null;
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -2034,9 +2089,11 @@ class _ResumenRow extends StatelessWidget {
 ///
 /// [basePorTarifa] va de porcentaje a base imponible: `{0.0: 42.50, 15.0: 3.00}`
 /// es una mesa de almuerzos al 0% con una cerveza gravada.
-/// Elige el adelanto pendiente que se descuenta en el cobro. Se busca por el
-/// cliente que lo pagó, no por el de la factura: en un restaurante quien
-/// reserva y quien paga suelen ser personas distintas.
+/// Elige los adelantos pendientes que se descuentan en el cobro. Se busca
+/// por el cliente que los pagó, no por el de la factura: en un restaurante
+/// quien reserva y quien paga suelen ser personas distintas. Un cliente puede
+/// haber abonado varias veces: al marcar uno se marcan todos los suyos (lo
+/// normal es usarlos todos) y el cajero puede desmarcar el que no.
 class _ElegirAdelantoDialog extends StatefulWidget {
   final String sucursalId;
   const _ElegirAdelantoDialog({required this.sucursalId});
@@ -2049,7 +2106,35 @@ class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
   final _buscarCtrl = TextEditingController();
   final _fmt = NumberFormat('#,##0.00', 'es');
   List<AdelantoModel> _todos = [];
+  final _marcados = <String>{};
   bool _cargando = true;
+
+  /// El backend acepta hasta 10 pagos por factura y el pago dividido usa
+  /// hasta 3: quedan 7 adelantos por cobro.
+  static const _maxAdelantos = 7;
+
+  void _alternar(AdelantoModel a) {
+    if (!_marcados.contains(a.adelantoId) && _marcados.length >= _maxAdelantos) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Máximo $_maxAdelantos adelantos por cobro'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+    setState(() {
+      if (_marcados.contains(a.adelantoId)) {
+        _marcados.remove(a.adelantoId);
+      } else if (_marcados.isEmpty) {
+        // Primer marcado: todos los adelantos pendientes de ese cliente,
+        // los más antiguos primero (son los que se usan primero).
+        final delCliente = _todos.where((x) => x.clienteId == a.clienteId).toList()
+          ..sort((x, y) => x.fechaRegistro.compareTo(y.fechaRegistro));
+        _marcados.addAll(delCliente.take(_maxAdelantos).map((x) => x.adelantoId));
+      } else {
+        _marcados.add(a.adelantoId);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -2085,9 +2170,16 @@ class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
         || (a.cedulaCliente ?? '').contains(q)).toList();
     final hoy = DateUtils.dateOnly(DateTime.now());
     final fmtFecha = DateFormat('dd/MM/yyyy', 'es');
+    final elegidos = _todos.where((a) => _marcados.contains(a.adelantoId)).toList();
+    final totalElegido = elegidos.fold<double>(0, (s, a) => s + a.disponible);
+    // Cuántos pendientes tiene cada cliente: se avisa en cada fila.
+    final porCliente = <String, int>{};
+    for (final a in _todos) {
+      porCliente[a.clienteId] = (porCliente[a.clienteId] ?? 0) + 1;
+    }
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: const Text('Aplicar adelanto'),
+      title: const Text('Aplicar adelantos'),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -2119,8 +2211,14 @@ class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
                           itemBuilder: (_, i) {
                             final a = visibles[i];
                             final esHoy = a.fechaPrevista == hoy;
+                            final marcado = _marcados.contains(a.adelantoId);
+                            final delCliente = porCliente[a.clienteId] ?? 1;
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
+                              leading: Checkbox(
+                                value: marcado,
+                                onChanged: (_) => _alternar(a),
+                              ),
                               title: Text(a.nombreCliente,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600)),
@@ -2129,6 +2227,8 @@ class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
                                   if (a.fechaPrevista != null)
                                     esHoy ? 'Reserva HOY' : 'Reserva ${fmtFecha.format(a.fechaPrevista!)}',
                                   a.nombreMetodoPago,
+                                  'recibido ${DateFormat('dd/MM', 'es').format(a.fechaRegistro.toLocal())}',
+                                  if (delCliente > 1) '$delCliente adelantos',
                                 ].join(' · '),
                                 style: TextStyle(
                                   fontFamily: 'Poppins', fontSize: 12,
@@ -2136,7 +2236,7 @@ class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
                                   color: esHoy ? AppColors.success : AppColors.textSecondary)),
                               trailing: Text('\$${_fmt.format(a.disponible)}',
                                 style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
-                              onTap: () => Navigator.pop(context, a),
+                              onTap: () => _alternar(a),
                             );
                           },
                         ),
@@ -2146,6 +2246,12 @@ class _ElegirAdelantoDialogState extends State<_ElegirAdelantoDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          onPressed: elegidos.isEmpty ? null : () => Navigator.pop(context, elegidos),
+          child: Text(elegidos.isEmpty
+              ? 'Aplicar'
+              : 'Aplicar \$${_fmt.format(totalElegido)}'),
+        ),
       ],
     );
   }
