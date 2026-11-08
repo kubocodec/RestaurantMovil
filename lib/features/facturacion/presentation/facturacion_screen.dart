@@ -1355,15 +1355,19 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         children: [
           const Icon(Icons.receipt_long_outlined, color: AppColors.primary, size: 28),
           const SizedBox(width: 12),
-          Column(
+          Expanded(
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Orden #$numero', style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 16)),
               Text(
-                _orden?.esParaLlevar == true ? 'Para llevar' : 'Mesa: $lugar',
+                _orden?.esParaLlevar == true ? _orden!.lugarConNota : 'Mesa: $lugar',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
               Text('Estado: $estado', style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
             ],
+            ),
           ),
         ],
       ),

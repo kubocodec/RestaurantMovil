@@ -29,7 +29,7 @@ class _DetalleFlat {
 
   factory _DetalleFlat.from(DetalleOrdenModel d, OrdenModel o) => _DetalleFlat(
     detalleId:   d.ordenDetalleId,
-    mesaNombre:  o.lugar,
+    mesaNombre:  o.lugarConNota,
     platoNombre: d.nombrePlato,
     cantidad:    d.cantidad,
     estado:      d.estado,
@@ -98,7 +98,7 @@ class _CocinaScreenState extends State<CocinaScreen> with SingleTickerProviderSt
         final listos  = detalles.where((d) => d.isListo).toList();
         todos.addAll(activos);
         if (listos.isNotEmpty) {
-          listaListos.add(_OrdenFlat(mesaNombre: o.lugar, detalles: listos));
+          listaListos.add(_OrdenFlat(mesaNombre: o.lugarConNota, detalles: listos));
         }
       }
 
@@ -232,9 +232,13 @@ class _CocinaScreenState extends State<CocinaScreen> with SingleTickerProviderSt
                     children: [
                       const Icon(Icons.check_circle, color: AppColors.estadoListo, size: 14),
                       const SizedBox(width: 4),
-                      Text(orden.mesaNombre, style: const TextStyle(
-                        fontFamily: 'Poppins', fontWeight: FontWeight.w700,
-                        color: AppColors.estadoListo, fontSize: 13)),
+                      Flexible(
+                        child: Text(orden.mesaNombre,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                            color: AppColors.estadoListo, fontSize: 13)),
+                      ),
                     ],
                   ),
                 ),
@@ -342,14 +346,19 @@ class _DetalleCard extends StatelessWidget {
                       size: 12,
                       color: detalle.paraLlevar ? AppColors.earth2 : AppColors.textSecondary),
                     const SizedBox(width: 4),
-                    Text(
-                      detalle.paraLlevar && detalle.mesaNombre != 'Para llevar'
-                          ? '${detalle.mesaNombre} · llevar'
-                          : detalle.mesaNombre,
-                      style: TextStyle(
-                        fontFamily: 'Poppins', fontSize: 12,
-                        fontWeight: detalle.paraLlevar ? FontWeight.w600 : FontWeight.w400,
-                        color: detalle.paraLlevar ? AppColors.earth2 : AppColors.textSecondary)),
+                    Flexible(
+                      child: Text(
+                        // La orden para llevar ya lo dice ("Para llevar · nota")
+                        detalle.paraLlevar && !detalle.mesaNombre.startsWith('Para llevar')
+                            ? '${detalle.mesaNombre} · llevar'
+                            : detalle.mesaNombre,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        style: TextStyle(
+                          fontFamily: 'Poppins', fontSize: 12,
+                          fontWeight: detalle.paraLlevar ? FontWeight.w600 : FontWeight.w400,
+                          color: detalle.paraLlevar ? AppColors.earth2 : AppColors.textSecondary)),
+                    ),
                   ],
                 ),
                 if (detalle.notas != null && detalle.notas!.isNotEmpty)

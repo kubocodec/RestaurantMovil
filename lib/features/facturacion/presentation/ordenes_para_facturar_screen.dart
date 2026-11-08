@@ -165,8 +165,11 @@ class _OrdenCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(orden.lugar,
-                        style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
+                      Flexible(
+                        child: Text(orden.lugarConNota,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
+                      ),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

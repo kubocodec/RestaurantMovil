@@ -162,6 +162,10 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   cocina" no se habilita sin el número. Después se corrige tocando 👥 en la franja de la orden
   (ámbar con "¿?" si no tiene dato). Para llevar nunca lo pide. Reportes muestra "Por
   persona" y "Personas" solo si hubo mesas con el dato.
+- **Nota del pedido para llevar** (opcional, sin interruptor): se escribe al confirmar el
+  pedido ("Juan, retira 13:30") y va en `observaciones` de la orden, campo que el backend ya
+  tenía y la app no usaba (no hizo falta deploy). `OrdenModel.notaPedido` / `lugarConNota` la
+  muestran en mesas, cocina, cobro, precuenta y en la comanda. No se edita después.
 - `core/printing/comanda_printer.dart` — comandas y tickets térmicos.
 
 ## Qué probar antes de sacar un APK

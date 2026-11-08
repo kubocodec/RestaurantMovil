@@ -101,6 +101,8 @@ class _OrdenScreenState extends State<OrdenScreen> {
   // en el diálogo por la trampa del TextEditingController destruido.
   bool _pidePersonas = false;
   final _personasCtrl = TextEditingController();
+  // Nota opcional del pedido para llevar (nombre del cliente, hora…).
+  final _notaCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -112,6 +114,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
   void dispose() {
     _busquedaCtrl.dispose();
     _personasCtrl.dispose();
+    _notaCtrl.dispose();
     super.dispose();
   }
 
@@ -260,6 +263,14 @@ class _OrdenScreenState extends State<OrdenScreen> {
   bool get _pedirPersonasAlEnviar =>
       _pidePersonas && !widget.esParaLlevar && _ordenExistente == null;
 
+  /// La nota del pedido para llevar se escribe al crearlo.
+  bool get _pedirNotaAlEnviar => widget.esParaLlevar && _ordenExistente == null;
+
+  String? get _notaEscrita {
+    final n = _notaCtrl.text.trim();
+    return _pedirNotaAlEnviar && n.isNotEmpty ? n : null;
+  }
+
   int? get _personasEscritas {
     final n = int.tryParse(_personasCtrl.text.trim());
     return (n != null && n >= 1 && n <= 999) ? n : null;
@@ -300,6 +311,22 @@ class _OrdenScreenState extends State<OrdenScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.esParaLlevar ? 'Pedido para llevar' : 'Mesa: ${widget.mesaNombre}'),
+            if (_pedirNotaAlEnviar) ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: _notaCtrl,
+                maxLength: 120,
+                minLines: 1,
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Nota del pedido (opcional)',
+                  hintText: 'Ej: Juan, retira a las 13:30',
+                  prefixIcon: Icon(Icons.sticky_note_2_outlined),
+                  isDense: true,
+                ),
+              ),
+            ],
             if (_pedirPersonasAlEnviar) ...[
               const SizedBox(height: 10),
               // Vacío a propósito (no la capacidad de la mesa): así el dato
@@ -409,6 +436,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
           tipoOrden: widget.esParaLlevar ? 'PARA_LLEVAR' : _tipoOrden,
           tipoOrigen: 'MESERO',
           numComensales: _pedirPersonasAlEnviar ? _personasEscritas : null,
+          observaciones: _notaEscrita,
           clientRequestId: _envioRequestId,
           items: [
             for (final item in _carrito)
@@ -436,6 +464,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
       final resultados = await ComandaPrinter.imprimirComandas(
         mesa: widget.mesaNombre,
         numeroOrden: orden.numeroOrden,
+        nota: orden.notaPedido,
         mesero: mesero,
         detalles: enviados,
       );
@@ -517,6 +546,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
       final resultados = await ComandaPrinter.imprimirComandas(
         mesa: widget.mesaNombre,
         numeroOrden: orden.numeroOrden,
+        nota: orden.notaPedido,
         mesero: mesero,
         detalles: enviados,
         esReimpresion: true,
@@ -1209,12 +1239,26 @@ class _OrdenScreenState extends State<OrdenScreen> {
               const Icon(Icons.receipt_outlined, color: AppColors.mesaOcupada, size: 20),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  'Orden #${o.numeroOrden} · ${o.detalles.length} items · \$${o.total.toStringAsFixed(2)}',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins', fontSize: 12.5,
-                    fontWeight: FontWeight.w600, color: AppColors.mesaOcupada),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Orden #${o.numeroOrden} · ${o.detalles.length} items · \$${o.total.toStringAsFixed(2)}',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins', fontSize: 12.5,
+                        fontWeight: FontWeight.w600, color: AppColors.mesaOcupada),
+                    ),
+                    if (o.notaPedido != null)
+                      Text(
+                        o.notaPedido!,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins', fontSize: 12,
+                          fontStyle: FontStyle.italic, color: AppColors.textSecondary),
+                      ),
+                  ],
                 ),
               ),
               if (_pidePersonas && !o.esParaLlevar) ...[

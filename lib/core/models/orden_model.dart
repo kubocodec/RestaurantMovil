@@ -154,6 +154,17 @@ class OrdenModel {
   /// no ocupa mesa (el backend no envía numeroMesa en ese caso).
   String get lugar => numeroMesa.isNotEmpty ? numeroMesa : 'Para llevar';
 
+  /// Nota libre del pedido para llevar (nombre del cliente, hora de
+  /// retiro…). Va en `observaciones` de la orden, que el backend ya tenía y
+  /// la app no usaba; en órdenes de mesa no se muestra.
+  String? get notaPedido {
+    final n = observaciones?.trim() ?? '';
+    return esParaLlevar && n.isNotEmpty ? n : null;
+  }
+
+  /// [lugar] seguido de la nota del pedido para llevar, si tiene.
+  String get lugarConNota => notaPedido != null ? '$lugar · $notaPedido' : lugar;
+
   double get total => detalles.fold(0.0, (s, d) => s + d.subtotal);
 
   List<DetalleOrdenModel> get detallesNoFacturados =>

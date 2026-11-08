@@ -108,7 +108,7 @@ class _PrecuentaScreenState extends State<PrecuentaScreen> {
         puerto: elegida.puerto ?? 9100,
         mac: elegida.mac,
         nombreSucursal: user?.sucursalNombre ?? '',
-        lugar: orden.lugar,
+        lugar: orden.lugarConNota,
         numeroOrden: orden.numeroOrden,
         lineas: [
           for (final p in _pendientes)
@@ -215,7 +215,7 @@ class _PrecuentaScreenState extends State<PrecuentaScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${orden.lugar} · Orden #${orden.numeroOrden}',
+                        Text('${orden.lugarConNota} · Orden #${orden.numeroOrden}',
                           style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
                         const Divider(height: 20),
                         if (_pendientes.isEmpty)

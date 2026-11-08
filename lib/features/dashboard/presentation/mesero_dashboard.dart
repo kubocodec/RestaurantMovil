@@ -319,7 +319,8 @@ class _OrdenResumenTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${orden.lugar} · Orden #${orden.numeroOrden}',
+                Text('${orden.lugarConNota} · Orden #${orden.numeroOrden}',
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
                 Text(
                   'Desde ${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}',

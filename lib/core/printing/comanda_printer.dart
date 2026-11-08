@@ -67,6 +67,8 @@ class ComandaPrinter {
     required String mesero,
     required List<DetalleOrdenModel> detalles,
     bool esReimpresion = false,
+    // Nota del pedido para llevar (nombre del cliente, hora de retiro…)
+    String? nota,
   }) async {
     final porImpresora = <String, List<DetalleOrdenModel>>{};
     for (final d in detalles) {
@@ -93,6 +95,7 @@ class ComandaPrinter {
             mesero: mesero,
             detalles: entry.value,
             esReimpresion: esReimpresion,
+            nota: nota,
           ),
         );
         resultados.add(ResultadoImpresion(nombre, true, via: via));
@@ -111,6 +114,7 @@ class ComandaPrinter {
     required String mesero,
     required List<DetalleOrdenModel> detalles,
     bool esReimpresion = false,
+    String? nota,
   }) {
     // Si toda la comanda es para llevar se anuncia en grande en la cabecera;
     // si es mixta (mesa + algunos platos para llevar) se marca cada plato.
@@ -127,6 +131,8 @@ class ComandaPrinter {
       // el mesero necesita saber a dónde entregar lo empacado); solo se
       // omite cuando la orden no tiene mesa (ya lo dice el banner).
       if (mesa != 'Para llevar') ..._texto('$mesa\n'),
+      // A quién se entrega lo empacado: en negrita bajo la cabecera.
+      if (nota != null && nota.isNotEmpty) ..._texto('$nota\n'),
       ..._boldOff, ..._left,
       ..._texto('${'-' * _cols}\n'),
       ..._texto('Hora: ${_horaActual()}   Mesero: $mesero\n'),

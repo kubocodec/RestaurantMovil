@@ -365,9 +365,17 @@ class _ParaLlevarCard extends StatelessWidget {
                   style: const TextStyle(
                     fontFamily: 'Poppins', fontWeight: FontWeight.w700,
                     fontSize: 13, color: AppColors.earth2)),
-                Text('Desde $horaTxt',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                // La nota (nombre del cliente…) identifica el pedido.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 170),
+                  child: Text(
+                    orden.notaPedido != null ? '${orden.notaPedido} · $horaTxt' : 'Desde $horaTxt',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Poppins', fontSize: 11,
+                      fontWeight: orden.notaPedido != null ? FontWeight.w600 : FontWeight.w400,
+                      color: AppColors.textSecondary)),
+                ),
               ],
             ),
           ],
