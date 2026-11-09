@@ -129,14 +129,15 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.info.withValues(alpha: 0.25)),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.info_outline_rounded, color: AppColors.info, size: 18),
-              SizedBox(width: 10),
+              const Icon(Icons.info_outline_rounded, color: AppColors.info, size: 18),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Al enviar una orden, cada ítem se imprime en la impresora asignada a su categoría (ej: bebidas → barra, platos fuertes → cocina). Usa el botón de búsqueda para detectar impresoras en la red WiFi y/o configura su Bluetooth como respaldo si falla la red.',
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
+                  'Al enviar una orden, cada ítem se imprime en la impresora asignada a su categoría (ej: bebidas → barra, platos fuertes → cocina). Usa el botón de búsqueda para detectar impresoras en la red WiFi'
+                  '${ComandaPrinter.bluetoothDisponible ? ' y/o configura su Bluetooth como respaldo si falla la red' : ''}.',
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary),
                 ),
               ),
             ],
@@ -232,24 +233,29 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Puerto', helperText: '9100 en la mayoría de impresoras térmicas'),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: macCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Bluetooth (MAC)',
-                    hintText: 'ej: 66:12:8B:22:D4:A1',
-                    helperText: 'Respaldo si falla la red. Requiere IP o Bluetooth.',
-                    helperMaxLines: 2,
-                    suffixIcon: IconButton(
-                      tooltip: 'Buscar impresoras emparejadas',
-                      icon: const Icon(Icons.bluetooth_searching_rounded),
-                      onPressed: () async {
-                        final mac = await _elegirBluetooth(ctx);
-                        if (mac != null) setDialogState(() => macCtrl.text = mac);
-                      },
+                // En iPhone/iPad no hay Bluetooth clásico (ver
+                // ComandaPrinter.bluetoothDisponible). Sin el campo, macCtrl
+                // conserva la MAC cargada desde Android y se guarda intacta.
+                if (ComandaPrinter.bluetoothDisponible) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: macCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Bluetooth (MAC)',
+                      hintText: 'ej: 66:12:8B:22:D4:A1',
+                      helperText: 'Respaldo si falla la red. Requiere IP o Bluetooth.',
+                      helperMaxLines: 2,
+                      suffixIcon: IconButton(
+                        tooltip: 'Buscar impresoras emparejadas',
+                        icon: const Icon(Icons.bluetooth_searching_rounded),
+                        onPressed: () async {
+                          final mac = await _elegirBluetooth(ctx);
+                          if (mac != null) setDialogState(() => macCtrl.text = mac);
+                        },
+                      ),
                     ),
                   ),
-                ),
+                ],
                 if (!esEdicion) ...[
                   const SizedBox(height: 12),
                   const Text('Categorías que imprime:',
@@ -268,7 +274,9 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                 final mac = macCtrl.text.trim();
                 if (nombre.isEmpty || (ip.isEmpty && mac.isEmpty)) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Nombre y al menos una conexión (IP o Bluetooth) son requeridos')),
+                    SnackBar(content: Text(ComandaPrinter.bluetoothDisponible
+                        ? 'Nombre y al menos una conexión (IP o Bluetooth) son requeridos'
+                        : 'Nombre e IP son requeridos')),
                   );
                   return;
                 }

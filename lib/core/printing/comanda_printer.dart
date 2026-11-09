@@ -35,6 +35,12 @@ class ReciboItem {
 /// Bluetooth configurada, reintenta por Bluetooth. Los bytes ESC/POS se
 /// generan a mano y son los mismos por ambas vías.
 class ComandaPrinter {
+  /// Hay Bluetooth para imprimir en esta plataforma. La pantalla de impresoras
+  /// esconde el campo de la MAC donde es `false` —iPhone y iPad— en vez de
+  /// ofrecer algo que no puede funcionar: el plugin de térmicas habla
+  /// Bluetooth clásico (SPP), que iOS no le abre a las apps.
+  static bool get bluetoothDisponible => Platform.isAndroid;
+
   // Comandos ESC/POS
   static const _init = [0x1B, 0x40];
   static const _boldOn = [0x1B, 0x45, 0x01];
