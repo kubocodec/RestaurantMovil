@@ -35,12 +35,32 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
   /// Clasificación: TODOS | FACTURA | NOTA_VENTA | ANULADA
   String _filtro = 'TODOS';
 
-  List<FacturaModel> get _visibles => switch (_filtro) {
-    'FACTURA'    => _comprobantes.where((c) => c.esFactura && !c.isAnulada).toList(),
-    'NOTA_VENTA' => _comprobantes.where((c) => c.esNotaVenta && !c.isAnulada).toList(),
-    'ANULADA'    => _comprobantes.where((c) => c.isAnulada).toList(),
-    _            => _comprobantes,
-  };
+  /// Cajero elegido (null = todos). Con varias cajas cada cajero cobra en la
+  /// suya, así que esto también separa lo emitido por cada caja.
+  String? _cajero;
+
+  /// Cajeros que emitieron algo en la fecha, en orden alfabético.
+  List<String> get _cajeros => _comprobantes
+      .map((c) => c.cajero ?? '')
+      .where((n) => n.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+
+  /// Comprobantes del cajero elegido: sobre ellos se cuentan los tipos y el total.
+  List<FacturaModel> get _delCajero => _cajero == null
+      ? _comprobantes
+      : _comprobantes.where((c) => c.cajero == _cajero).toList();
+
+  List<FacturaModel> get _visibles {
+    final base = _delCajero;
+    return switch (_filtro) {
+      'FACTURA'    => base.where((c) => c.esFactura && !c.isAnulada).toList(),
+      'NOTA_VENTA' => base.where((c) => c.esNotaVenta && !c.isAnulada).toList(),
+      'ANULADA'    => base.where((c) => c.isAnulada).toList(),
+      _            => base,
+    };
+  }
 
   String get _sucursalId {
     final s = context.read<AuthBloc>().state;
@@ -58,7 +78,12 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
     try {
       final data = await _repo.getComprobantes(_sucursalId, fecha: _fecha);
       if (!mounted) return;
-      setState(() { _comprobantes = data; _loading = false; });
+      setState(() {
+        _comprobantes = data;
+        // Si el cajero elegido no emitió nada en la nueva fecha, ver todos.
+        if (_cajero != null && !data.any((c) => c.cajero == _cajero)) _cajero = null;
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = ApiClient.parseError(e); _loading = false; });
@@ -156,15 +181,42 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
     }
 
     final visibles = _visibles;
-    final totalDia = _comprobantes
+    final base = _delCajero;
+    final cajeros = _cajeros;
+    final totalDia = base
         .where((c) => !c.isAnulada)
         .fold(0.0, (s, c) => s + c.total);
-    final facturas = _comprobantes.where((c) => c.esFactura && !c.isAnulada).length;
-    final notas    = _comprobantes.where((c) => c.esNotaVenta && !c.isAnulada).length;
-    final anuladas = _comprobantes.where((c) => c.isAnulada).length;
+    final facturas = base.where((c) => c.esFactura && !c.isAnulada).length;
+    final notas    = base.where((c) => c.esNotaVenta && !c.isAnulada).length;
+    final anuladas = base.where((c) => c.isAnulada).length;
 
     return Column(
       children: [
+        // Filtro por cajero: solo si en la fecha cobró más de uno.
+        if (cajeros.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _FiltroChip(
+                    label: 'Todos los cajeros',
+                    selected: _cajero == null,
+                    onTap: () => setState(() => _cajero = null),
+                  ),
+                  for (final n in cajeros)
+                    _FiltroChip(
+                      label: '$n (${_comprobantes.where((c) => c.cajero == n).length})',
+                      selected: _cajero == n,
+                      onTap: () => setState(() => _cajero = n),
+                    ),
+                ],
+              ),
+            ),
+          ),
         // Clasificación de comprobantes
         SizedBox(
           height: 40,
@@ -173,7 +225,7 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               _FiltroChip(
-                label: 'Todos (${_comprobantes.length})',
+                label: 'Todos (${base.length})',
                 selected: _filtro == 'TODOS',
                 onTap: () => setState(() => _filtro = 'TODOS'),
               ),
@@ -202,7 +254,7 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
             children: [
               Text('${visibles.length} comprobantes',
                   style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
-              Text('Total del día: \$${_fmt.format(totalDia)}',
+              Text('${_cajero == null ? 'Total del día' : 'Total de $_cajero'}: \$${_fmt.format(totalDia)}',
                   style: const TextStyle(
                     fontFamily: 'Poppins', fontSize: 13,
                     fontWeight: FontWeight.w700, color: AppColors.cajeroColor)),
@@ -385,7 +437,8 @@ class _ComprobanteCard extends StatelessWidget {
                     ],
                   ),
                   Text(
-                    '${DateFormat('HH:mm').format(f.fecha.toLocal())} · ${f.nombreCliente ?? 'Consumidor Final'}',
+                    '${DateFormat('HH:mm').format(f.fecha.toLocal())} · ${f.nombreCliente ?? 'Consumidor Final'}'
+                    '${(f.cajero?.isNotEmpty ?? false) ? ' · Cajero: ${f.cajero}' : ''}',
                     style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
                     overflow: TextOverflow.ellipsis,
                   ),
