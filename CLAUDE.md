@@ -142,6 +142,12 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   (`shared/widgets/cierre_detalle_sheet.dart`) muestra "Incluye propinas", las cortesías
   del turno y los adelantos; `totalCaja` resta lo pagado con adelantos y suma los recibidos
   por transferencia o tarjeta (con 0 en ambos, la fórmula es la de siempre).
+- **Resumen del período** (`features/reportes/presentation/resumen_periodo_screen.dart`,
+  se entra desde la franja "Resumen del período" de Reportes): período (hoy, 7 días, mes,
+  mes anterior, rango) y sucursal o todas. Resultados con ▲/▼ contra el período anterior,
+  platos más/menos vendidos (por unidades o dinero), sin ventas, más rentables (solo si hay
+  costos), categorías, día y hora, mesa/llevar, métodos de pago, personal y pérdidas. Cada
+  sección se esconde si el local no tiene esos datos. Modelo en `data/resumen_periodo_model.dart`.
 - `features/inventario/` — inventario en pestañas: **Insumos** (stock, conteo, merma,
   historial), **Platos** (por unidades, con ingreso y ajuste; y los que van por receta),
   **Compras** y **Proveedores**. `receta_screen.dart` edita la receta de un plato y

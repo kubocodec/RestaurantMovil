@@ -14,6 +14,7 @@ import 'comparativo_sucursales_screen.dart';
 import 'cortesias_screen.dart';
 import 'ordenes_anuladas_screen.dart';
 import 'propinas_screen.dart';
+import 'resumen_periodo_screen.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -171,6 +172,47 @@ class _ReportesScreenState extends State<ReportesScreen> {
                         label: const Text('Cambiar fecha'),
                       ),
                     ],
+                  ),
+                  // Entrada al resumen del período: platos, horarios, meseros.
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => ResumenPeriodoScreen(
+                        restaurantId: _restaurantId,
+                        sucursalId: _sucursalId,
+                        sucursales: _sucursales,
+                      ),
+                    )),
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 4, bottom: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.insights_outlined, size: 20, color: AppColors.primary),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Resumen del período',
+                                    style: TextStyle(
+                                        fontFamily: 'Poppins', fontWeight: FontWeight.w700,
+                                        fontSize: 13, color: AppColors.primary)),
+                                Text('Platos más y menos vendidos, horarios, meseros',
+                                    style: TextStyle(
+                                        fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right, color: AppColors.primary),
+                        ],
+                      ),
+                    ),
                   ),
                   if (_sucursales.length > 1)
                     Row(

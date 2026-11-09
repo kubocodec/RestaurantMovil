@@ -1,6 +1,7 @@
 import '../../../core/models/caja_model.dart';
 import '../../../core/models/orden_model.dart';
 import '../../../core/network/api_client.dart';
+import 'resumen_periodo_model.dart';
 
 class ResumenDiarioModel {
   final String nombreSucursal;
@@ -384,6 +385,22 @@ class ReportesRepository {
       'hasta': _fechaParam(hasta),
     });
     return ReporteVentasSucursalesModel.fromJson(r.data['data'] ?? r.data);
+  }
+
+  // Resumen general del período (solo admin): de una sucursal, o de todas
+  // las del restaurante si no se indica sucursal.
+  Future<ResumenPeriodoModel> getResumenPeriodo({
+    String? sucursalId,
+    required String restaurantId,
+    required DateTime desde,
+    required DateTime hasta,
+  }) async {
+    final r = await _dio.get('/api/reportes/resumen-periodo', queryParameters: {
+      if (sucursalId != null) 'sucursalId': sucursalId else 'restaurantId': restaurantId,
+      'desde': _fechaParam(desde),
+      'hasta': _fechaParam(hasta),
+    });
+    return ResumenPeriodoModel.fromJson(r.data['data'] ?? r.data);
   }
 
   // Propinas cobradas en un período (solo admin): total a repartir entre los
