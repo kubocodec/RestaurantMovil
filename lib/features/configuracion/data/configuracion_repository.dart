@@ -620,6 +620,11 @@ class ConfiguracionRepository {
     return SucursalModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  Future<SucursalModel> setNotasVenta(String sucursalId, bool activo) async {
+    final r = await _dio.patch('/api/sucursales/$sucursalId/notas-venta?activo=$activo');
+    return SucursalModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<List<SucursalModel>> getSucursalesByRestaurant(String restaurantId) async {
     final r = await _dio.get('/api/sucursales/restaurant/$restaurantId');
     final List data = r.data['data'] ?? [];

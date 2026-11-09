@@ -65,6 +65,16 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   /// cuando el cliente la pide.
   bool _esFactura = false;
 
+  /// Factura a CONSUMIDOR FINAL (sin datos del cliente). El SRI la permite
+  /// solo hasta $50 con IVA (Reglamento de Comprobantes de Venta, art. 19) y
+  /// desde 2026 no se puede anular: pasado el tope se exigen los datos.
+  bool _consumidorFinal = false;
+  static const _topeConsumidorFinal = 50.0;
+
+  /// La sucursal no emite notas de venta (interruptor del superadmin): solo
+  /// factura electrónica.
+  bool _soloFacturas = false;
+
   /// Propina de ESTE cobro, en dólares (monto libre, no porcentaje). La
   /// elige el cajero en el diálogo de confirmación; el backend la suma al
   /// total sin cobrarle IVA.
@@ -138,6 +148,8 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       final cajas    = await _cajaRepo.getCajasBySucursal(_sucursalId);
       // Responde "no habilitado" si falla: el cobro nunca depende de esto.
       final adelantos = await AdelantosRepository().listar(_sucursalId);
+      // false si falla: el cobro de siempre, con nota de venta.
+      final soloFacturas = await _factRepo.soloFacturas(_sucursalId);
       AperturaCajaModel? apertura;
       if (cajas.isNotEmpty) {
         apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
@@ -149,6 +161,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         _metodosPago = metodos;
         if (iva != null) _ivaPorcentaje = iva;
         _adelantosHabilitados = adelantos.habilitado;
+        _soloFacturas = soloFacturas;
+        if (soloFacturas) {
+          _esFactura = true;
+          _consumidorFinal = true;
+        }
         _aperturaCierreCajaId = apertura?.aperturaCierreCajaId;
         if (metodos.isNotEmpty) _selectedMetodoPagoId = metodos.first.metodoPagoId;
         // Por defecto se cobra todo lo pendiente; el cajero baja cantidades
@@ -222,7 +239,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       _haySeleccion &&
       _selectedMetodoPagoId != null &&
       _aperturaCierreCajaId != null &&
-      (!_esFactura || _clienteEncontrado != null);
+      (!_esFactura || (_consumidorFinal ? _cabeConsumidorFinal : _clienteEncontrado != null));
+
+  /// El total de lo elegido entra en el tope de consumidor final (la
+  /// propina se suma después y se vuelve a revisar al confirmar).
+  bool get _cabeConsumidorFinal => _desglose.total <= _topeConsumidorFinal;
 
   MetodoPagoModel? get _metodoPagoSeleccionado =>
       _metodosPago.where((m) => m.metodoPagoId == _selectedMetodoPagoId).firstOrNull;
@@ -231,7 +252,11 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     if (!_puedeEmitir) {
       final msg = _aperturaCierreCajaId == null
           ? 'No hay caja abierta. Abre la caja antes de facturar.'
-          : 'Selecciona al menos un ítem y un método de pago.';
+          : _esFactura && _consumidorFinal && !_cabeConsumidorFinal
+              ? 'Pasa de \$${_topeConsumidorFinal.toStringAsFixed(0)}: el SRI exige los datos del cliente.'
+              : _esFactura && !_consumidorFinal && _clienteEncontrado == null
+                  ? 'Busca o registra al cliente para la factura.'
+                  : 'Selecciona al menos un ítem y un método de pago.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: AppColors.warning),
       );
@@ -254,6 +279,22 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       _propina = 0;
       _pagosDivididos = null;
       _adelantosAplicados = const [];
+    }
+    // Consumidor final: la propina puede pasar la cuenta del tope, y la
+    // factura no se puede anular después. Se frena aquí, antes de emitir.
+    if (!sinCobro && _esFactura && _consumidorFinal) {
+      final totalFactura = _desglose.total + _propina;
+      if (totalFactura > _topeConsumidorFinal) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Con la propina la factura llega a \$${totalFactura.toStringAsFixed(2)}: '
+              'pasa de \$${_topeConsumidorFinal.toStringAsFixed(0)} y el SRI exige los datos del cliente.'),
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 5),
+        ));
+        return;
+      }
+      final seguro = await _confirmarConsumidorFinal(totalFactura);
+      if (seguro != true || !mounted) return;
     }
 
     setState(() => _emitiendo = true);
@@ -282,7 +323,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       final factura = await _factRepo.emitirFactura(
         ordenId: widget.ordenId,
         aperturaCierreCajaId: aperturaCierreCajaId,
-        clienteId: _esFactura ? _clienteEncontrado?.clienteId : null,
+        clienteId: _esFactura && !_consumidorFinal ? _clienteEncontrado?.clienteId : null,
         tipoComprobante: _esFactura ? 'FACTURA' : 'NOTA_VENTA',
         detalles: detalles,
         propina: _propina,
@@ -1114,6 +1155,28 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
     return confirmado;
   }
 
+  /// Última confirmación de una factura a consumidor final: desde 2026 el
+  /// SRI no permite anularla ni corregirla con nota de crédito.
+  Future<bool?> _confirmarConsumidorFinal(double total) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Factura a consumidor final'),
+        content: Text(
+          'Se emitirá una factura electrónica de \$${total.toStringAsFixed(2)} '
+          'a CONSUMIDOR FINAL.\n\nUna vez enviada al SRI no se puede anular ni '
+          'corregir. Si el cliente quiere su factura con datos, cancela y elige '
+          '"Con datos del cliente".',
+          style: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Emitir')),
+        ],
+      ),
+    );
+  }
+
   Future<bool?> _confirmarSinCobro() {
     return showDialog<bool>(
       context: context,
@@ -1501,43 +1564,86 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         const Text('Tipo de comprobante',
           style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: ChoiceChip(
-                label: const Text('Nota de venta'),
-                selected: !_esFactura,
-                onSelected: (_) => setState(() => _esFactura = false),
+        // Sin notas de venta (interruptor de la sucursal) solo queda Factura.
+        if (!_soloFacturas)
+          Row(
+            children: [
+              Expanded(
+                child: ChoiceChip(
+                  label: const Text('Nota de venta'),
+                  selected: !_esFactura,
+                  onSelected: (_) => setState(() => _esFactura = false),
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12,
+                    color: !_esFactura ? Colors.white : AppColors.textPrimary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ChoiceChip(
+                  label: const Text('Factura'),
+                  selected: _esFactura,
+                  onSelected: (_) => setState(() => _esFactura = true),
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12,
+                    color: _esFactura ? Colors.white : AppColors.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        if (_esFactura) ...[
+          if (!_soloFacturas) const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              ChoiceChip(
+                label: Text('Consumidor final (hasta \$${_topeConsumidorFinal.toStringAsFixed(0)})'),
+                selected: _consumidorFinal,
+                onSelected: (_) => setState(() => _consumidorFinal = true),
                 selectedColor: AppColors.primary,
+                showCheckmark: false,
                 labelStyle: TextStyle(
                   fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12,
-                  color: !_esFactura ? Colors.white : AppColors.textPrimary),
+                  color: _consumidorFinal ? Colors.white : AppColors.textPrimary),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ChoiceChip(
-                label: const Text('Factura (con datos)'),
-                selected: _esFactura,
-                onSelected: (_) => setState(() => _esFactura = true),
+              ChoiceChip(
+                label: const Text('Con datos del cliente'),
+                selected: !_consumidorFinal,
+                onSelected: (_) => setState(() => _consumidorFinal = false),
                 selectedColor: AppColors.primary,
+                showCheckmark: false,
                 labelStyle: TextStyle(
                   fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 12,
-                  color: _esFactura ? Colors.white : AppColors.textPrimary),
+                  color: !_consumidorFinal ? Colors.white : AppColors.textPrimary),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         const SizedBox(height: 6),
-        Text(
-          _esFactura
-              ? 'Se emitirá factura electrónica al SRI con los datos del cliente.'
-              : 'Comprobante interno del local; no se envía al SRI. '
-                'Elige Factura solo si el cliente la pide.',
-          style: const TextStyle(
-            fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
-        ),
-        if (_esFactura) _buildDatosCliente(),
+        if (_esFactura && _consumidorFinal && !_cabeConsumidorFinal)
+          Text(
+            'La cuenta pasa de \$${_topeConsumidorFinal.toStringAsFixed(0)}: el SRI exige '
+            'la cédula o RUC del cliente. Elige "Con datos del cliente".',
+            style: const TextStyle(
+              fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.error),
+          )
+        else
+          Text(
+            !_esFactura
+                ? 'Comprobante interno del local; no se envía al SRI. '
+                  'Elige Factura solo si el cliente la pide.'
+                : _consumidorFinal
+                    ? '${_soloFacturas ? 'Esta sucursal emite solo facturas. ' : ''}'
+                      'Factura electrónica al SRI como CONSUMIDOR FINAL. No se puede anular después.'
+                    : '${_soloFacturas ? 'Esta sucursal emite solo facturas. ' : ''}'
+                      'Se emitirá factura electrónica al SRI con los datos del cliente.',
+            style: const TextStyle(
+              fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary),
+          ),
+        if (_esFactura && !_consumidorFinal) _buildDatosCliente(),
       ],
     );
   }

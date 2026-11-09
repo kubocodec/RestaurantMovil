@@ -123,6 +123,11 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   defecto; la apaga el cajero de un local sin propinas.
   Con el teclado abierto el diálogo de cobro se compacta y el vuelto se repite en el
   título (que no se desplaza): en pantallas chicas era imposible verlo al escribir.
+  **Consumidor final**: dentro de Factura, "Consumidor final (hasta $50)" o "Con datos del
+  cliente". Pasado $50 (con propina) se bloquea y se piden los datos; antes de emitir se
+  confirma que no se podrá anular. Si la sucursal tiene las notas de venta apagadas
+  (`soloFacturas`, interruptor del superadmin) no aparece "Nota de venta" y arranca en
+  consumidor final.
   **Pago dividido**: botón en el diálogo de cobro, hasta 3 filas; la última se completa
   sola con lo que falta (contra el total del servidor) y "Sí, cobrar" no se activa hasta
   que cuadre. El vuelto se calcula solo sobre la parte en efectivo. Va por `/pagos/lote`.

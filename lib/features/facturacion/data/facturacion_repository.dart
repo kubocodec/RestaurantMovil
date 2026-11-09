@@ -34,6 +34,18 @@ class FacturacionRepository {
     }
   }
 
+  /// true si la sucursal cobra solo con factura electrónica (notas de venta
+  /// apagadas y facturación electrónica activa). Ante cualquier error o con
+  /// un backend que no lo envía: false, el cobro de siempre.
+  Future<bool> soloFacturas(String sucursalId) async {
+    try {
+      final r = await _dio.get('/api/sucursales/$sucursalId');
+      return (r.data['data'] ?? r.data)['soloFacturas'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<ClienteModel?> buscarClientePorCedula(String cedula) async {
     try {
       final r = await _dio.get('/api/clientes/cedula/$cedula');

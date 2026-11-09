@@ -233,6 +233,9 @@ class SucursalModel {
   final bool adelantos;
   /// Pedir el número de personas al abrir una mesa (promedio por persona).
   final bool pedirPersonas;
+  /// Permite cobrar con nota de venta (comprobante interno). Activado por
+  /// defecto: un backend viejo no lo envía y todo sigue como siempre.
+  final bool notasVenta;
 
   const SucursalModel({
     required this.sucursalId,
@@ -248,6 +251,7 @@ class SucursalModel {
     required this.activo,
     this.adelantos = false,
     this.pedirPersonas = false,
+    this.notasVenta = true,
   });
 
   factory SucursalModel.fromJson(Map<String, dynamic> j) => SucursalModel(
@@ -264,6 +268,7 @@ class SucursalModel {
     activo:       j['activo'] ?? true,
     adelantos:    j['adelantos'] == true,
     pedirPersonas: j['pedirPersonas'] == true,
+    notasVenta:   j['notasVenta'] != false,
   );
 }
 

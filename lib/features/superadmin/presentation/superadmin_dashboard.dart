@@ -1178,6 +1178,28 @@ class _SucursalConfigRow extends StatelessWidget {
         activar ? 'Se pedirá el número de personas' : 'Ya no se pedirá el número de personas');
   }
 
+  /// Notas de venta (comprobante interno sin validez tributaria). Apagado,
+  /// la sucursal cobra todo con factura electrónica; solo surte efecto si
+  /// el restaurante tiene la facturación electrónica activada.
+  Future<void> _toggleNotasVenta(BuildContext context) async {
+    final activar = !sucursal.notasVenta;
+    final ok = await _confirmar(
+      context,
+      activar ? 'Permitir notas de venta' : 'Solo facturas electrónicas',
+      activar
+          ? 'En "${sucursal.nombre}" el cajero podrá volver a elegir nota de venta '
+            '(comprobante interno, sin validez tributaria) o factura.'
+          : 'En "${sucursal.nombre}" desaparece la nota de venta: todo se cobrará con '
+            'factura electrónica (consumidor final hasta \$50, o con los datos del '
+            'cliente). Solo aplica si el restaurante tiene la facturación electrónica '
+            'activada. Los cajeros necesitan la versión nueva de la app. ¿Continuar?',
+      activar ? 'Permitir' : 'Solo facturas',
+    );
+    if (!ok || !context.mounted) return;
+    await _aplicar(context, () => repo.setNotasVenta(sucursal.sucursalId, activar),
+        activar ? 'Notas de venta permitidas' : 'La sucursal emitirá solo facturas');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1230,11 +1252,13 @@ class _SucursalConfigRow extends StatelessWidget {
                     switch (v) {
                       case 'adelantos': _toggleAdelantos(context);
                       case 'personas':  _togglePedirPersonas(context);
+                      case 'notas':     _toggleNotasVenta(context);
                     }
                   },
                   itemBuilder: (_) => [
                     _itemInterruptor('adelantos', 'Adelantos de reservas', sucursal.adelantos),
                     _itemInterruptor('personas', 'Pedir número de personas', sucursal.pedirPersonas),
+                    _itemInterruptor('notas', 'Notas de venta sin validez tributaria', sucursal.notasVenta),
                   ],
                 ),
                 IconButton(
