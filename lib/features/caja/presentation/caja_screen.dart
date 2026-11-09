@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import '../../../core/caja/caja_actual.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/caja_model.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
@@ -25,6 +27,11 @@ class _CajaScreenState extends State<CajaScreen> {
   bool _loading = true;
   bool _sinCaja = false;
   String? _error;
+  // Con varias cajas en la sucursal: cuántas hay y el turno de cada una, para
+  // la lista donde el cajero elige la suya. Con una sola caja nada de esto se
+  // muestra y la pantalla es la de siempre.
+  EstadoCajas? _estado;
+  bool _eligiendo = false;
 
   @override
   void initState() {
@@ -37,18 +44,48 @@ class _CajaScreenState extends State<CajaScreen> {
     return s is AuthAuthenticated ? s.user.sucursalId : '';
   }
 
+  String get _usuarioId {
+    final s = context.read<AuthBloc>().state;
+    return s is AuthAuthenticated ? s.user.id : '';
+  }
+
+  bool get _esAdmin {
+    final s = context.read<AuthBloc>().state;
+    return s is AuthAuthenticated &&
+        (s.user.rol == UserRole.admin || s.user.rol == UserRole.superadmin);
+  }
+
   Future<void> _loadCaja() async {
-    setState(() { _loading = true; _error = null; _sinCaja = false; });
+    setState(() { _loading = true; _error = null; _sinCaja = false; _eligiendo = false; });
     try {
       final sid = _sucursalId;
       if (sid.isEmpty) throw Exception('Sin sucursal asignada');
-      final cajas = await _repo.getCajasBySucursal(sid);
-      if (cajas.isEmpty) {
+      final estado = await CajaActual.resolver(
+          sucursalId: sid, usuarioId: _usuarioId, esAdmin: _esAdmin);
+      if (estado.cajas.isEmpty) {
         if (mounted) setState(() { _loading = false; _sinCaja = true; });
         return;
       }
-      final caja = cajas.first;
-      final apertura = await _repo.getAperturaActiva(caja.cajaId);
+      // Con varias cajas: la del usuario; si su turno ya se cerró, la que usó
+      // la última vez (para volver a abrirla); si nunca eligió, la lista.
+      final caja = estado.caja ??
+          (estado.cajaGuardada != null && estado.aperturas[estado.cajaGuardada!.cajaId] == null
+              ? estado.cajaGuardada
+              : null);
+      if (caja == null) {
+        if (mounted) {
+          setState(() {
+            _estado = estado;
+            _caja = null;
+            _apertura = null;
+            _resumen = null;
+            _eligiendo = true;
+            _loading = false;
+          });
+        }
+        return;
+      }
+      final apertura = estado.caja != null ? estado.apertura : null;
       ResumenCajaModel? resumen;
       if (apertura != null && apertura.isAbierta) {
         try {
@@ -59,6 +96,7 @@ class _CajaScreenState extends State<CajaScreen> {
       }
       if (mounted) {
         setState(() {
+          _estado = estado;
           _caja = caja;
           _apertura = apertura;
           _resumen = resumen;
@@ -135,6 +173,8 @@ class _CajaScreenState extends State<CajaScreen> {
         cajaId: caja.cajaId,
         montoInicial: double.parse(ctrl.text.trim().replaceAll(',', '.')),
       );
+      // Desde ahora el cobro de este usuario va a esta caja.
+      await CajaActual.guardar(_usuarioId, caja.cajaId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Caja abierta correctamente'), backgroundColor: AppColors.success),
@@ -288,13 +328,64 @@ class _CajaScreenState extends State<CajaScreen> {
     );
   }
 
+  /// Muestra la lista de cajas con el turno de cada una (varias cajas).
+  Future<void> _verCajas() async {
+    final estado = _estado;
+    if (estado == null) return;
+    setState(() => _loading = true);
+    try {
+      final aperturas = await CajaActual.estadoDeTodas(estado.cajas);
+      if (!mounted) return;
+      setState(() {
+        _estado = EstadoCajas(
+          cajas: estado.cajas,
+          caja: estado.caja,
+          apertura: estado.apertura,
+          aperturas: aperturas,
+          cajaGuardada: estado.cajaGuardada,
+        );
+        _eligiendo = true;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() { _error = ApiClient.parseError(e); _loading = false; });
+    }
+  }
+
+  Future<void> _elegir(CajaModel caja) async {
+    final aperturas = _estado?.aperturas ?? const {};
+    // Con su turno abierto en otra caja tiene que cerrarlo antes: si no, sus
+    // ventas quedarían repartidas en dos cierres.
+    final propia = _estado?.cajas.where((c) =>
+        c.cajaId != caja.cajaId &&
+        aperturas[c.cajaId]?.usuarioAperturaId == _usuarioId).firstOrNull;
+    if (propia != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Tienes abierta la caja ${propia.nombre}: ciérrala antes de cambiar.'),
+        backgroundColor: AppColors.warning,
+      ));
+      return;
+    }
+    await CajaActual.guardar(_usuarioId, caja.cajaId);
+    await _loadCaja();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final varias = _estado?.varias == true;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Gestión de Caja'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadCaja)],
+        actions: [
+          if (varias && !_eligiendo && !_loading)
+            IconButton(
+              icon: const Icon(Icons.swap_horiz),
+              tooltip: 'Cambiar de caja',
+              onPressed: _verCajas,
+            ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadCaja),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
@@ -302,7 +393,64 @@ class _CajaScreenState extends State<CajaScreen> {
               ? _buildError()
               : _sinCaja
                   ? _buildSinCaja()
-                  : _buildBody(),
+                  : _eligiendo
+                      ? _buildSelector()
+                      : _buildBody(),
+    );
+  }
+
+  Widget _buildSelector() {
+    final estado = _estado!;
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _loadCaja,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text('Elige tu caja',
+              style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text(
+              _esAdmin
+                  ? 'Abre una caja cerrada o entra a una abierta para ayudar a cobrar: '
+                    'la venta va al cierre de esa caja.'
+                  : 'Abre una caja cerrada. Lo que cobres irá al cierre de tu caja.',
+              style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+            const SizedBox(height: 14),
+            ...estado.cajas.map((c) {
+              final a = estado.aperturas[c.cajaId];
+              final mia = a != null && a.usuarioAperturaId == _usuarioId;
+              final deOtro = a != null && !mia;
+              // El cajero no entra a la caja de otro: su arqueo dejaría de cuadrar.
+              final habilitada = !deOtro || _esAdmin;
+              final color = a == null ? AppColors.textSecondary : AppColors.cajeroColor;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  enabled: habilitada,
+                  onTap: habilitada ? () => _elegir(c) : null,
+                  leading: Icon(a == null ? Icons.lock_rounded : Icons.lock_open_rounded, color: color),
+                  title: Text(c.nombre,
+                    style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                  subtitle: Text(
+                    a == null
+                        ? 'Cerrada'
+                        : mia
+                            ? 'Abierta por ti'
+                            : 'Abierta por ${a.nombreUsuarioApertura.isEmpty ? 'otro usuario' : a.nombreUsuarioApertura}',
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: color)),
+                  trailing: Text(
+                    a == null ? 'Abrir' : habilitada ? 'Entrar' : '',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+                      fontSize: 13, color: AppColors.primary)),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 
@@ -379,6 +527,12 @@ class _CajaScreenState extends State<CajaScreen> {
                       ),
                     if (caja != null)
                       Text(caja.nombre, style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 12)),
+                    // Con varias cajas el admin puede estar en la caja de otro.
+                    if (_estado?.varias == true && apertura != null &&
+                        apertura.usuarioAperturaId != _usuarioId &&
+                        apertura.nombreUsuarioApertura.isNotEmpty)
+                      Text('Abierta por ${apertura.nombreUsuarioApertura}',
+                        style: const TextStyle(color: Colors.white70, fontFamily: 'Poppins', fontSize: 12)),
                   ],
                 ),
               ),

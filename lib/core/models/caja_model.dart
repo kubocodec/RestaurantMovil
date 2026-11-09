@@ -23,6 +23,9 @@ class AperturaCajaModel {
   final String aperturaCierreCajaId;
   final String cajaId;
   final String nombreCaja;
+  /// Quién abrió el turno: con varias cajas, cada cajero cobra en el suyo.
+  final String usuarioAperturaId;
+  final String nombreUsuarioApertura;
   final String estado;
   final double montoInicial;
   final double? montoFinal;
@@ -35,6 +38,8 @@ class AperturaCajaModel {
     required this.aperturaCierreCajaId,
     required this.cajaId,
     required this.nombreCaja,
+    this.usuarioAperturaId = '',
+    this.nombreUsuarioApertura = '',
     required this.estado,
     required this.montoInicial,
     this.montoFinal,
@@ -48,6 +53,8 @@ class AperturaCajaModel {
     aperturaCierreCajaId: j['aperturaCierreCajaId']?.toString() ?? '',
     cajaId:               j['cajaId']?.toString() ?? '',
     nombreCaja:           j['nombreCaja']?.toString() ?? '',
+    usuarioAperturaId:    j['usuarioAperturaId']?.toString() ?? '',
+    nombreUsuarioApertura: j['nombreUsuarioApertura']?.toString() ?? '',
     estado:               j['estado']?.toString() ?? 'ABIERTA',
     montoInicial:         _toDouble(j['montoInicial']),
     montoFinal:           j['montoFinal'] != null ? _toDouble(j['montoFinal']) : null,

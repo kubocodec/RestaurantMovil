@@ -83,6 +83,21 @@ En Tasas de IVA, la **estrella** marca la predeterminada y es una decisión apar
 switch de activo: el negocio mixto necesita las dos tarifas activas y solo una
 predeterminada.
 
+## Varias cajas en una sucursal: cada cajero cobra en la suya
+
+Antes cada pantalla tomaba `cajas.first`, así que con varias cajas (un evento con 14
+cajeros) todos abrían y cobraban en la primera y su cierre mezclaba las ventas de todos.
+La regla vive en **`core/caja/caja_actual.dart`** (`CajaActual.resolver`) y la usan Caja,
+Cobro, Adelantos y el panel del cajero: **no volver a usar `cajas.first`**.
+
+- **Una sola caja: idéntico a antes** (esa caja y su turno, lo haya abierto quien sea).
+- Varias: el cajero cobra solo en el turno que **él** abrió (`usuarioAperturaId`, que el
+  backend ya enviaba); elige su caja en Gestión de Caja y queda guardada en el equipo por
+  usuario, así el cobro hace una sola consulta. Sin turno propio no cobra.
+- El **admin** sin turno propio puede elegir una caja abierta por otro (lista en Caja o
+  chips en el cobro): la venta va al cierre de esa caja. Decisión del 2026-11-09.
+- No necesitó cambios en el backend: ya permitía un turno abierto por caja.
+
 ## Trampa que ya causó una pantalla roja
 
 Un `TextEditingController` creado y destruido **dentro de un diálogo** revienta con
