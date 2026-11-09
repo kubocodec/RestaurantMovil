@@ -7,6 +7,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/models/config_models.dart';
 import '../../core/models/orden_model.dart';
 import '../../core/network/api_client.dart';
+import '../../core/plataforma/capacidades.dart';
 import '../../core/printing/comanda_printer.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
 import '../../features/auth/bloc/auth_state.dart';
@@ -278,22 +279,25 @@ class _PrecuentaScreenState extends State<PrecuentaScreen> {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _imprimiendo || _pendientes.isEmpty ? null : _imprimir,
-                icon: _imprimiendo
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.print_outlined),
-                label: Text(_imprimiendo ? 'Imprimiendo...' : 'Imprimir precuenta'),
+        // Sin impresora alcanzable (navegador) la precuenta sigue sirviendo
+        // para consultarla en pantalla, pero sin el botón.
+        if (Capacidades.puedeImprimir)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _imprimiendo || _pendientes.isEmpty ? null : _imprimir,
+                  icon: _imprimiendo
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.print_outlined),
+                  label: Text(_imprimiendo ? 'Imprimiendo...' : 'Imprimir precuenta'),
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }

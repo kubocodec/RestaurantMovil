@@ -13,6 +13,7 @@ import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/config_models.dart';
+import '../../../core/plataforma/capacidades.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../core/settings/ajustes_cobro.dart';
 import '../../../features/adelantos/data/adelantos_repository.dart';
@@ -2028,13 +2029,15 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         ),
       ),
       actions: [
-        TextButton.icon(
-          onPressed: _imprimiendo ? null : _imprimir,
-          icon: _imprimiendo
-              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.print_outlined, size: 18),
-          label: Text(_imprimiendo ? 'Imprimiendo...' : 'Imprimir'),
-        ),
+        // En el navegador no hay impresora alcanzable (ver Capacidades).
+        if (Capacidades.puedeImprimir)
+          TextButton.icon(
+            onPressed: _imprimiendo ? null : _imprimir,
+            icon: _imprimiendo
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.print_outlined, size: 18),
+            label: Text(_imprimiendo ? 'Imprimiendo...' : 'Imprimir'),
+          ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Listo'),

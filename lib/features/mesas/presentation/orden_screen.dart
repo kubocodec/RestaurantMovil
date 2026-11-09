@@ -9,6 +9,7 @@ import '../../../core/models/orden_model.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/plataforma/capacidades.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
@@ -848,8 +849,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
             ? 'Para llevar · #${_ordenExistente!.numeroOrden}'
             : widget.mesaNombre),
         actions: [
-          // Reimprimir la comanda de lo ya enviado (papel atascado, ticket perdido)
-          if (_ordenExistente != null)
+          // Reimprimir la comanda de lo ya enviado (papel atascado, ticket
+          // perdido). En el navegador no hay manera de imprimir, así que el
+          // botón no se muestra en vez de fallar al tocarlo (ver Capacidades).
+          if (_ordenExistente != null && Capacidades.puedeImprimir)
             IconButton(
               tooltip: 'Reimprimir comanda',
               icon: const Icon(Icons.print_outlined),

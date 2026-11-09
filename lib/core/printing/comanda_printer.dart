@@ -8,6 +8,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import '../models/caja_model.dart';
 import '../models/factura_model.dart';
 import '../models/orden_model.dart';
+import '../plataforma/capacidades.dart';
 
 /// Resultado de la impresión de una comanda.
 class ResultadoImpresion {
@@ -36,10 +37,12 @@ class ReciboItem {
 /// generan a mano y son los mismos por ambas vías.
 class ComandaPrinter {
   /// Hay Bluetooth para imprimir en esta plataforma. La pantalla de impresoras
-  /// esconde el campo de la MAC donde es `false` —iPhone y iPad— en vez de
-  /// ofrecer algo que no puede funcionar: el plugin de térmicas habla
-  /// Bluetooth clásico (SPP), que iOS no le abre a las apps.
-  static bool get bluetoothDisponible => Platform.isAndroid;
+  /// esconde el campo de la MAC donde es `false` —iPhone, iPad y navegador—
+  /// en vez de ofrecer algo que no puede funcionar.
+  ///
+  /// Delega en [Capacidades] para que la regla de cada plataforma viva en un
+  /// solo lugar.
+  static bool get bluetoothDisponible => Capacidades.impresionBluetooth;
 
   // Comandos ESC/POS
   static const _init = [0x1B, 0x40];
@@ -207,6 +210,14 @@ class ComandaPrinter {
     String? mac,
     required List<int> bytes,
   }) async {
+    // Red de seguridad: la UI ya esconde los botones de imprimir donde no se
+    // puede, pero si algún camino se escapa, mejor un mensaje que se entienda
+    // que el UnsupportedError que lanza dart:io dentro del navegador.
+    if (!Capacidades.puedeImprimir) {
+      throw Exception('Desde el navegador no se puede imprimir en una térmica: '
+          'la pestaña no puede abrir sockets ni Bluetooth. Usa la app del '
+          'celular o la de Windows.');
+    }
     final tieneIp = ip != null && ip.isNotEmpty;
     final tieneMac = mac != null && mac.isNotEmpty;
     if (!tieneIp && !tieneMac) {
@@ -330,7 +341,9 @@ class ComandaPrinter {
     // grupo "Dispositivos cercanos" (un solo diálogo). CONNECT es el
     // obligatorio; SCAN solo permite cancelar una búsqueda de dispositivos
     // en curso antes de conectar, así que no se exige.
-    if (!Platform.isAndroid) return;
+    // Por Capacidades y no por Platform.isAndroid: en el navegador ese getter
+    // de dart:io compila pero revienta al ejecutarse.
+    if (!Capacidades.impresionBluetooth) return;
     final estados = await [
       Permission.bluetoothConnect,
       Permission.bluetoothScan,

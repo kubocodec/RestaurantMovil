@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/factura_model.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/plataforma/capacidades.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
@@ -557,16 +558,20 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
                 ],
                 Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _imprimiendo ? null : _imprimir,
-                        icon: _imprimiendo
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.print_outlined, size: 18),
-                        label: Text(_imprimiendo ? 'Imprimiendo...' : 'Reimprimir'),
+                    // En el navegador no hay impresora alcanzable: queda solo
+                    // el botón de cerrar (ver Capacidades).
+                    if (Capacidades.puedeImprimir) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _imprimiendo ? null : _imprimir,
+                          icon: _imprimiendo
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.print_outlined, size: 18),
+                          label: Text(_imprimiendo ? 'Imprimiendo...' : 'Reimprimir'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
+                      const SizedBox(width: 12),
+                    ],
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(context),

@@ -10,6 +10,7 @@ import '../../../core/models/config_models.dart';
 import '../../../core/models/factura_model.dart';
 import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/plataforma/capacidades.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
@@ -88,11 +89,13 @@ class _AdelantosScreenState extends State<AdelantosScreen> {
                   style: const TextStyle(fontFamily: 'Poppins')),
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.print_outlined),
-              title: const Text('Reimprimir recibo'),
-              onTap: () => Navigator.pop(ctx, 'imprimir'),
-            ),
+            // En el navegador no hay impresora alcanzable (ver Capacidades).
+            if (Capacidades.puedeImprimir)
+              ListTile(
+                leading: const Icon(Icons.print_outlined),
+                title: const Text('Reimprimir recibo'),
+                onTap: () => Navigator.pop(ctx, 'imprimir'),
+              ),
             if (a.pendiente)
               ListTile(
                 leading: const Icon(Icons.event_outlined),

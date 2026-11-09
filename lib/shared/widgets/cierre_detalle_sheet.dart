@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/models/caja_model.dart';
 import '../../core/models/config_models.dart';
 import '../../core/network/api_client.dart';
+import '../../core/plataforma/capacidades.dart';
 import '../../core/printing/comanda_printer.dart';
 import '../../features/configuracion/data/configuracion_repository.dart';
 
@@ -137,7 +138,8 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
         ),
         const SizedBox(height: 14),
         _buildHeader(c),
-        if (widget.sucursalId != null) ...[
+        // En el navegador no hay impresora alcanzable (ver Capacidades).
+        if (widget.sucursalId != null && Capacidades.puedeImprimir) ...[
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/plataforma/capacidades.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../core/printing/network_printer_scanner.dart';
 import '../data/configuracion_repository.dart';
@@ -209,22 +210,27 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                   decoration: InputDecoration(
                     labelText: 'IP en la red local',
                     hintText: 'ej: 192.168.1.50',
-                    suffixIcon: IconButton(
-                      tooltip: 'Buscar impresoras en la red',
-                      icon: const Icon(Icons.wifi_find_rounded),
-                      onPressed: () async {
-                        final sel = await showDialog<ImpresoraRed>(
-                          context: ctx,
-                          builder: (_) => const _BuscarImpresorasRedDialog(),
-                        );
-                        if (sel != null) {
-                          setDialogState(() {
-                            ipCtrl.text = sel.ip;
-                            puertoCtrl.text = sel.puerto.toString();
-                          });
-                        }
-                      },
-                    ),
+                    // Buscar impresoras usa mDNS y escaneo de la subred, o sea
+                    // sockets: desde el navegador no existe esa posibilidad,
+                    // pero la IP se puede escribir a mano igual.
+                    suffixIcon: !Capacidades.descubrirImpresoras
+                        ? null
+                        : IconButton(
+                            tooltip: 'Buscar impresoras en la red',
+                            icon: const Icon(Icons.wifi_find_rounded),
+                            onPressed: () async {
+                              final sel = await showDialog<ImpresoraRed>(
+                                context: ctx,
+                                builder: (_) => const _BuscarImpresorasRedDialog(),
+                              );
+                              if (sel != null) {
+                                setDialogState(() {
+                                  ipCtrl.text = sel.ip;
+                                  puertoCtrl.text = sel.puerto.toString();
+                                });
+                              }
+                            },
+                          ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -552,11 +558,14 @@ class _ImpresoraCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
-                onPressed: onTest,
-                icon: const Icon(Icons.print_outlined, size: 16),
-                label: const Text('Probar', style: TextStyle(fontFamily: 'Poppins', fontSize: 12)),
-              ),
+              // Probar manda un ticket de verdad: no se puede desde el
+              // navegador (ver Capacidades).
+              if (Capacidades.puedeImprimir)
+                TextButton.icon(
+                  onPressed: onTest,
+                  icon: const Icon(Icons.print_outlined, size: 16),
+                  label: const Text('Probar', style: TextStyle(fontFamily: 'Poppins', fontSize: 12)),
+                ),
               TextButton.icon(
                 onPressed: onCategorias,
                 icon: const Icon(Icons.category_outlined, size: 16),
