@@ -24,6 +24,8 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
   List<SalonModel> _salones = [];
   List<MesaModel> _todasMesas = [];
   List<OrdenModel> _paraLlevar = [];
+  // Local sin mesas (interruptor de la sucursal): solo pedidos para llevar.
+  bool _soloParaLlevar = false;
   bool _loading = true;
   String? _error;
   late TabController _tabCtrl;
@@ -68,10 +70,12 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
       _repo.getSalonesBySucursal(sid),
       _repo.getMesasBySucursal(sid),
       _ordenesRepo.getOrdenesActivas(sid),
+      _ordenesRepo.soloParaLlevar(sid),
     ]);
     final salones = resultados[0] as List<SalonModel>;
     final mesas   = resultados[1] as List<MesaModel>;
     final ordenes = resultados[2] as List<OrdenModel>;
+    final soloParaLlevar = resultados[3] as bool;
     if (!mounted) return;
     final len = salones.isEmpty ? 1 : salones.length + 1;
     // Conservar la pestaña seleccionada: solo recrear si cambió el número
@@ -88,6 +92,7 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
       _todasMesas = mesas;
       // Órdenes sin mesa: pedidos para llevar aún abiertos (ver/cobrar)
       _paraLlevar = ordenes.where((o) => o.mesaId.isEmpty).toList();
+      _soloParaLlevar = soloParaLlevar;
     });
   }
 
@@ -107,9 +112,9 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Mesas'),
+        title: Text(_soloParaLlevar ? 'Pedidos' : 'Mesas'),
         actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
-        bottom: _salones.isEmpty ? null : TabBar(
+        bottom: _salones.isEmpty || _soloParaLlevar ? null : TabBar(
           controller: _tabCtrl,
           isScrollable: true,
           labelColor: Colors.white,
@@ -136,13 +141,17 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
           await context.push('/mesero/para-llevar');
           if (mounted) _load();
         },
-        icon: const Icon(Icons.takeout_dining_outlined),
-        label: const Text('Para llevar'),
+        icon: Icon(_soloParaLlevar ? Icons.add_shopping_cart : Icons.takeout_dining_outlined),
+        label: Text(_soloParaLlevar ? 'Nuevo pedido' : 'Para llevar'),
       ),
     );
   }
 
   Widget _buildContent() {
+    if (_soloParaLlevar) {
+      return _ListaParaLlevar(
+        ordenes: _paraLlevar, onTap: _onLlevarTap, onRefresh: _load);
+    }
     if (_todasMesas.isEmpty) {
       return const Center(child: Text('No hay mesas configuradas', style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)));
     }
@@ -328,6 +337,58 @@ class _MesaCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Local sin mesas: la pantalla es la lista de pedidos abiertos (los que
+/// quedaron sin cobrar) y el botón de pedido nuevo.
+class _ListaParaLlevar extends StatelessWidget {
+  final List<OrdenModel> ordenes;
+  final Future<void> Function(OrdenModel) onTap;
+  final Future<void> Function() onRefresh;
+  const _ListaParaLlevar({required this.ordenes, required this.onTap, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: onRefresh,
+      child: ordenes.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 120),
+                Icon(Icons.takeout_dining_outlined, size: 56, color: AppColors.textHint),
+                SizedBox(height: 12),
+                Text('No hay pedidos pendientes de cobro',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.textSecondary)),
+                SizedBox(height: 4),
+                Text('Toca "Nuevo pedido" para empezar',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
+              ],
+            )
+          : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              // Espacio final para que el botón flotante no tape el último pedido.
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+              children: [
+                Text('Pendientes de cobro (${ordenes.length})',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins', fontSize: 13,
+                    fontWeight: FontWeight.w700, color: AppColors.earth2)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: ordenes
+                      .map((o) => _ParaLlevarCard(orden: o, onTap: () => onTap(o)))
+                      .toList(),
+                ),
+              ],
+            ),
     );
   }
 }

@@ -1200,6 +1200,26 @@ class _SucursalConfigRow extends StatelessWidget {
         activar ? 'Notas de venta permitidas' : 'La sucursal emitirá solo facturas');
   }
 
+  /// Local sin mesas (conciertos, barras de evento): todo es para llevar y
+  /// el cajero pasa directo al cobro al confirmar el pedido.
+  Future<void> _toggleSoloParaLlevar(BuildContext context) async {
+    final activar = !sucursal.soloParaLlevar;
+    final ok = await _confirmar(
+      context,
+      activar ? 'Local sin mesas' : 'Volver a usar mesas',
+      activar
+          ? 'En "${sucursal.nombre}" la app no mostrará mesas: todos los pedidos serán '
+            'para llevar y el cajero pasará directo al cobro al confirmarlos. Las mesas '
+            'configuradas no se borran. Los equipos necesitan la versión nueva de la app.'
+          : 'En "${sucursal.nombre}" volverán a verse las mesas. Los pedidos para llevar '
+            'abiertos siguen ahí. ¿Continuar?',
+      activar ? 'Activar' : 'Desactivar',
+    );
+    if (!ok || !context.mounted) return;
+    await _aplicar(context, () => repo.setSoloParaLlevar(sucursal.sucursalId, activar),
+        activar ? 'La sucursal trabajará sin mesas' : 'La sucursal vuelve a usar mesas');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1253,12 +1273,14 @@ class _SucursalConfigRow extends StatelessWidget {
                       case 'adelantos': _toggleAdelantos(context);
                       case 'personas':  _togglePedirPersonas(context);
                       case 'notas':     _toggleNotasVenta(context);
+                      case 'llevar':    _toggleSoloParaLlevar(context);
                     }
                   },
                   itemBuilder: (_) => [
                     _itemInterruptor('adelantos', 'Adelantos de reservas', sucursal.adelantos),
                     _itemInterruptor('personas', 'Pedir número de personas', sucursal.pedirPersonas),
                     _itemInterruptor('notas', 'Notas de venta sin validez tributaria', sucursal.notasVenta),
+                    _itemInterruptor('llevar', 'Sin mesas (solo para llevar)', sucursal.soloParaLlevar),
                   ],
                 ),
                 IconButton(

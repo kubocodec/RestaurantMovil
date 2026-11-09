@@ -100,6 +100,9 @@ class _OrdenScreenState extends State<OrdenScreen> {
   // la mesa (promedio por persona en Reportes). El controller vive aquí y no
   // en el diálogo por la trampa del TextEditingController destruido.
   bool _pidePersonas = false;
+  // Local sin mesas (interruptor de la sucursal): el cajero que confirma un
+  // pedido para llevar pasa directo al cobro, sin volver a buscarlo.
+  bool _soloParaLlevar = false;
   final _personasCtrl = TextEditingController();
   // Nota opcional del pedido para llevar (nombre del cliente, hora…).
   final _notaCtrl = TextEditingController();
@@ -141,12 +144,14 @@ class _OrdenScreenState extends State<OrdenScreen> {
       final resultados = await Future.wait([
         _repo.getPlatosBySucursal(_sucursalId),
         _repo.getOrdenesActivas(_sucursalId),
-        // Para llevar no lleva personas: ni se consulta.
-        widget.esParaLlevar ? Future.value(false) : _repo.pidePersonas(_sucursalId),
+        // Para llevar no lleva personas: en su lugar se consulta si el local
+        // trabaja sin mesas (la misma consulta de la sucursal).
+        widget.esParaLlevar ? _repo.soloParaLlevar(_sucursalId) : _repo.pidePersonas(_sucursalId),
       ]);
       final platos  = resultados[0] as List<PlatoModel>;
       final activas = resultados[1] as List<OrdenModel>;
-      final pidePersonas = resultados[2] as bool;
+      final pidePersonas = !widget.esParaLlevar && resultados[2] as bool;
+      final soloParaLlevar = widget.esParaLlevar && resultados[2] as bool;
       OrdenModel? existente;
       if (widget.ordenId != null) {
         // Orden para llevar existente: se abre directo por su id
@@ -182,6 +187,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
         _platos = platos;
         _ordenExistente = existente;
         _pidePersonas = pidePersonas;
+        _soloParaLlevar = soloParaLlevar;
         _loading = false;
       });
     } catch (e) {
@@ -262,6 +268,10 @@ class _OrdenScreenState extends State<OrdenScreen> {
   /// desde la franja de la orden.
   bool get _pedirPersonasAlEnviar =>
       _pidePersonas && !widget.esParaLlevar && _ordenExistente == null;
+
+  /// Local sin mesas y alguien que cobra (cajero o admin): al confirmar el
+  /// pedido se pasa directo al cobro. El mesero sigue como siempre.
+  bool get _cobrarAlEnviar => widget.esParaLlevar && _soloParaLlevar && _puedeCobrar;
 
   /// La nota del pedido para llevar se escribe al crearlo.
   bool get _pedirNotaAlEnviar => widget.esParaLlevar && _ordenExistente == null;
@@ -378,7 +388,7 @@ class _OrdenScreenState extends State<OrdenScreen> {
               onPressed: !_pedirPersonasAlEnviar || _personasEscritas != null
                   ? () => responder(ctx, true)
                   : null,
-              child: const Text('Enviar a cocina'),
+              child: Text(_cobrarAlEnviar ? 'Continuar al cobro' : 'Enviar a cocina'),
             ),
           ),
         ],
@@ -471,20 +481,31 @@ class _OrdenScreenState extends State<OrdenScreen> {
 
       if (mounted) {
         final fallidas = resultados.where((r) => !r.ok).toList();
-        if (fallidas.isEmpty) {
+        // Sin mesas y sin comanda que imprimir no hay nada que avisar: se
+        // sigue directo al cobro.
+        final sinAviso = _cobrarAlEnviar && resultados.isEmpty;
+        if (fallidas.isEmpty && !sinAviso) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(resultados.isEmpty
                 ? '¡Orden enviada a cocina!'
                 : '¡Orden enviada! Comandas impresas: ${resultados.map((r) => r.via == 'Bluetooth' ? '${r.impresora} (BT)' : r.impresora).join(', ')}'),
             backgroundColor: AppColors.success,
           ));
-        } else {
+        } else if (fallidas.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
               'Orden enviada, pero falló la impresión en: ${fallidas.map((r) => r.impresora).join(', ')}. Revisa la impresora.'),
             backgroundColor: AppColors.warning,
             duration: const Duration(seconds: 5),
           ));
+        }
+        // Local sin mesas: el cajero cobra enseguida. Se abre el cobro ENCIMA
+        // de esta pantalla (push, no go/replace) y al volver se sigue como
+        // siempre: si el cliente se arrepiente y el cajero sale sin cobrar,
+        // el pedido queda en la lista de pendientes.
+        if (_cobrarAlEnviar) {
+          await context.push('/cajero/factura/${orden.ordenId}');
+          if (!mounted) return;
         }
         // pop (no go): así el await del push en MesasScreen se completa
         // y la pantalla de mesas recarga mostrando la mesa OCUPADA.

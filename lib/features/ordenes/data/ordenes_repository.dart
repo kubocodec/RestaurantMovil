@@ -121,6 +121,18 @@ class OrdenesRepository {
     }
   }
 
+  /// Si la sucursal trabaja sin mesas (solo para llevar). Ante cualquier
+  /// falla responde false: se ven las mesas como siempre.
+  Future<bool> soloParaLlevar(String sucursalId) async {
+    try {
+      final r = await _dio.get('/api/sucursales/$sucursalId');
+      final d = r.data['data'] ?? r.data;
+      return d is Map && d['soloParaLlevar'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Corregir las personas de una orden abierta ("llegaron 2 más")
   Future<OrdenModel> cambiarPersonas(String ordenId, int personas) async {
     final r = await _dio.patch('/api/ordenes/$ordenId/personas',

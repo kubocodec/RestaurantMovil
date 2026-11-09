@@ -236,6 +236,8 @@ class SucursalModel {
   /// Permite cobrar con nota de venta (comprobante interno). Activado por
   /// defecto: un backend viejo no lo envía y todo sigue como siempre.
   final bool notasVenta;
+  /// Local sin mesas (conciertos, barras de evento): todo es para llevar.
+  final bool soloParaLlevar;
 
   const SucursalModel({
     required this.sucursalId,
@@ -252,6 +254,7 @@ class SucursalModel {
     this.adelantos = false,
     this.pedirPersonas = false,
     this.notasVenta = true,
+    this.soloParaLlevar = false,
   });
 
   factory SucursalModel.fromJson(Map<String, dynamic> j) => SucursalModel(
@@ -269,6 +272,7 @@ class SucursalModel {
     adelantos:    j['adelantos'] == true,
     pedirPersonas: j['pedirPersonas'] == true,
     notasVenta:   j['notasVenta'] != false,
+    soloParaLlevar: j['soloParaLlevar'] == true,
   );
 }
 

@@ -620,6 +620,12 @@ class ConfiguracionRepository {
     return SucursalModel.fromJson(r.data['data'] ?? r.data);
   }
 
+  /// Local sin mesas: la app no muestra mesas y todo pedido es para llevar.
+  Future<SucursalModel> setSoloParaLlevar(String sucursalId, bool activo) async {
+    final r = await _dio.patch('/api/sucursales/$sucursalId/solo-para-llevar?activo=$activo');
+    return SucursalModel.fromJson(r.data['data'] ?? r.data);
+  }
+
   Future<SucursalModel> setNotasVenta(String sucursalId, bool activo) async {
     final r = await _dio.patch('/api/sucursales/$sucursalId/notas-venta?activo=$activo');
     return SucursalModel.fromJson(r.data['data'] ?? r.data);

@@ -177,6 +177,13 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   pedido ("Juan, retira 13:30") y va en `observaciones` de la orden, campo que el backend ya
   tenía y la app no usaba (no hizo falta deploy). `OrdenModel.notaPedido` / `lugarConNota` la
   muestran en mesas, cocina, cobro, precuenta y en la comanda. No se edita después.
+- **Sin mesas / solo para llevar** (interruptor `soloParaLlevar` de la sucursal, para
+  conciertos y barras de evento): `mesas_screen.dart` no muestra mesas, solo "Pedidos" con
+  los pendientes de cobro y el botón "Nuevo pedido". En `orden_screen.dart`, si quien
+  confirma puede cobrar (cajero o admin), el botón dice "Continuar al cobro" y se abre el
+  cobro **encima** de la orden (`push`, no `go` ni replace); al volver, con o sin cobrar,
+  se sale como siempre y lo no cobrado queda en la lista. El mesero sigue igual. Con el
+  interruptor apagado o un backend que no envía el campo, todo se ve como antes.
 - `core/printing/comanda_printer.dart` — comandas y tickets térmicos.
 
 ## Qué probar antes de sacar un APK
