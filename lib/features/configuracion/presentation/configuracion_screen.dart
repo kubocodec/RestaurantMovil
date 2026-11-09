@@ -6,6 +6,7 @@ import '../../../core/models/user_model.dart';
 import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../carta/presentation/carta_digital_screen.dart';
 import '../data/configuracion_repository.dart';
 import 'tasa_iva_screen.dart';
 import 'salones_mesas_screen.dart';
@@ -206,6 +207,20 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen> {
                 restaurantId: _restaurantId,
               )),
             ),
+            // Solo el superadmin: la carta vive en otro servidor y se entra
+            // con una clave del proveedor, no con el usuario del restaurante.
+            if (_esSuperAdmin)
+              _buildItem(
+                icon: Icons.qr_code_2_rounded,
+                label: 'Carta digital (QR)',
+                subtitle: 'El menú en una página pública para el cliente',
+                done: true,
+                color: AppColors.meseroColor,
+                onTap: () => _goTo(CartaDigitalScreen(
+                  sucursalId: _sucursalId,
+                  sucursalNombre: widget.sucursalNombre,
+                )),
+              ),
             const SizedBox(height: 24),
             if (s.isComplete)
               _buildCompleteBanner()

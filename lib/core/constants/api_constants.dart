@@ -50,6 +50,14 @@ class ApiConstants {
   // Menú público QR
   static const String menuPublico = '/api/menu/publico';
 
+  // ── Carta digital ───────────────────────────────────────────────────────────
+  /// Servicio aparte, en otro servidor: traduce la dirección del negocio
+  /// (carta.kubocode.com/elnegocio) al token de mesa que entiende
+  /// `/api/menu/publico/{token}`, y sirve el HTML que ve el cliente al
+  /// escanear el QR. Tiene su propia clave de panel, que NO es el token de
+  /// Wasi: ver features/carta/.
+  static const String cartaBaseUrl = 'https://carta.kubocode.com';
+
   // ── Configuración (superadmin / admin) ──────────────────────────────────────
   static const String tenants             = '/api/tenants';
   static const String restaurants         = '/api/restaurants';
