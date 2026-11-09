@@ -9,11 +9,11 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/factura_model.dart';
 import '../../../core/models/user_model.dart';
+import '../../../core/caja/caja_actual.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
-import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/facturacion/data/facturacion_repository.dart';
 import '../../../shared/widgets/cliente_busqueda.dart';
@@ -419,7 +419,6 @@ class NuevoAdelantoScreen extends StatefulWidget {
 class _NuevoAdelantoScreenState extends State<NuevoAdelantoScreen> {
   final _repo = AdelantosRepository();
   final _factRepo = FacturacionRepository();
-  final _cajaRepo = CajaRepository();
   final _buscarCtrl = TextEditingController();
   final _montoCtrl = TextEditingController();
   final _refCtrl = TextEditingController();
@@ -455,10 +454,18 @@ class _NuevoAdelantoScreenState extends State<NuevoAdelantoScreen> {
   }
 
   Future<void> _cargar() async {
+    // El adelanto en efectivo entra a la caja de quien lo recibe. Se lee
+    // antes del primer await para no usar el context tras la espera.
+    final s = context.read<AuthBloc>().state;
+    final user = s is AuthAuthenticated ? s.user : null;
     try {
       final metodos = await _factRepo.getMetodosPago(widget.sucursalId);
-      final cajas = await _cajaRepo.getCajasBySucursal(widget.sucursalId);
-      final apertura = cajas.isEmpty ? null : await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
+      final estadoCajas = await CajaActual.resolver(
+        sucursalId: widget.sucursalId,
+        usuarioId: user?.id ?? '',
+        esAdmin: user?.rol == UserRole.admin || user?.rol == UserRole.superadmin,
+      );
+      final apertura = estadoCajas.apertura;
       if (!mounted) return;
       setState(() {
         _metodos = metodos;
