@@ -9,7 +9,7 @@ import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
 import '../../../features/adelantos/data/adelantos_repository.dart';
 import '../../../features/adelantos/presentation/adelantos_screen.dart';
-import '../../../features/caja/data/caja_repository.dart';
+import '../../../core/caja/caja_actual.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
 import '../../../shared/widgets/app_drawer.dart';
@@ -46,7 +46,6 @@ class _CajeroBody extends StatefulWidget {
 }
 
 class _CajeroBodyState extends State<_CajeroBody> {
-  final _cajaRepo = CajaRepository();
   final _reportesRepo = ReportesRepository();
   final _ordenesRepo = OrdenesRepository();
   final _adelantosRepo = AdelantosRepository();
@@ -82,13 +81,14 @@ class _CajeroBodyState extends State<_CajeroBody> {
       return;
     }
     try {
-      final cajas = await _cajaRepo.getCajasBySucursal(sucursalId);
-      if (cajas.isEmpty) {
-        setState(() => _cajaAbierta = false);
-      } else {
-        final apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
-        if (mounted) setState(() => _cajaAbierta = apertura?.isAbierta == true);
-      }
+      // "Caja abierta" es la de este cajero (con una sola caja, esa caja).
+      final user = widget.user;
+      final estado = await CajaActual.resolver(
+        sucursalId: sucursalId,
+        usuarioId: user?.id ?? '',
+        esAdmin: user?.rol == UserRole.admin || user?.rol == UserRole.superadmin,
+      );
+      if (mounted) setState(() => _cajaAbierta = estado.apertura != null);
     } catch (_) {
       if (mounted) setState(() => _cajaAbierta = false);
     }

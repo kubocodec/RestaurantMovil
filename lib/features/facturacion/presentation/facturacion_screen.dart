@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import '../../../core/caja/caja_actual.dart';
 import '../../../core/cobro/desglose_cobro.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/caja_model.dart';
@@ -16,7 +17,6 @@ import '../../../core/models/config_models.dart';
 import '../../../core/printing/comanda_printer.dart';
 import '../../../core/settings/ajustes_cobro.dart';
 import '../../../features/adelantos/data/adelantos_repository.dart';
-import '../../../features/caja/data/caja_repository.dart';
 import '../../../features/configuracion/data/configuracion_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../shared/widgets/cliente_busqueda.dart';
@@ -37,7 +37,6 @@ class FacturacionScreen extends StatefulWidget {
 class _FacturacionScreenState extends State<FacturacionScreen> {
   final _ordenRepo = OrdenesRepository();
   final _factRepo  = FacturacionRepository();
-  final _cajaRepo  = CajaRepository();
   final _fmt = NumberFormat('#,##0.00', 'es');
 
   OrdenModel? _orden;
@@ -46,6 +45,9 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   // como respaldo si el endpoint aún no existe en el servidor.
   double _ivaPorcentaje = 15;
   String? _aperturaCierreCajaId;
+  // Con varias cajas: en cuál se cobra (se muestra arriba) y, si el admin no
+  // tiene turno propio, las abiertas entre las que puede elegir.
+  EstadoCajas? _estadoCajas;
   bool _loading = true;
   bool _emitiendo = false;
   String? _error;
@@ -145,15 +147,15 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       final orden    = await _ordenRepo.getOrden(widget.ordenId);
       final metodos  = await _factRepo.getMetodosPago(_sucursalId);
       final iva      = await _factRepo.getIvaVigente(_sucursalId);
-      final cajas    = await _cajaRepo.getCajasBySucursal(_sucursalId);
+      // Con una sola caja es su turno abierto, como siempre; con varias, el
+      // turno de este cajero (ver CajaActual).
+      final estadoCajas = await CajaActual.resolver(
+          sucursalId: _sucursalId, usuarioId: _usuarioId, esAdmin: _esAdmin);
       // Responde "no habilitado" si falla: el cobro nunca depende de esto.
       final adelantos = await AdelantosRepository().listar(_sucursalId);
       // false si falla: el cobro de siempre, con nota de venta.
       final soloFacturas = await _factRepo.soloFacturas(_sucursalId);
-      AperturaCajaModel? apertura;
-      if (cajas.isNotEmpty) {
-        apertura = await _cajaRepo.getAperturaActiva(cajas.first.cajaId);
-      }
+      final apertura = estadoCajas.apertura;
 
       if (!mounted) return;
       setState(() {
@@ -167,6 +169,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
           _consumidorFinal = true;
         }
         _aperturaCierreCajaId = apertura?.aperturaCierreCajaId;
+        _estadoCajas = estadoCajas;
         if (metodos.isNotEmpty) _selectedMetodoPagoId = metodos.first.metodoPagoId;
         // Por defecto se cobra todo lo pendiente; el cajero baja cantidades
         // cuando el cliente paga solo una parte (cuentas divididas)
@@ -1363,7 +1366,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_aperturaCierreCajaId == null) _buildCajaWarning(),
+          if (_aperturaCierreCajaId == null) _buildCajaWarning() else _buildCajaActual(),
           _buildOrdenInfo(),
           const SizedBox(height: 16),
           _buildItemsSelector(),
@@ -1382,6 +1385,10 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
   }
 
   Widget _buildCajaWarning() {
+    final estado = _estadoCajas;
+    final varias = estado?.varias == true;
+    // El admin sin turno propio puede ayudar a cobrar en una caja abierta.
+    final paraElegir = varias && _esAdmin ? estado!.abiertas : const <CajaModel>[];
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(14),
@@ -1390,13 +1397,81 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.warning.withValues(alpha: 0.5)),
       ),
-      child: const Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
-          SizedBox(width: 10),
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  !varias
+                      ? 'No hay caja abierta. Ve a Gestión de Caja y ábrela primero.'
+                      : paraElegir.isNotEmpty
+                          ? 'No tienes una caja abierta. Elige en qué caja cobrar:'
+                          : 'No tienes una caja abierta. Ve a Gestión de Caja, elige tu caja y ábrela.',
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.warning)),
+              ),
+            ],
+          ),
+          if (paraElegir.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: paraElegir.map((c) {
+                final quien = estado!.aperturas[c.cajaId]?.nombreUsuarioApertura ?? '';
+                return ActionChip(
+                  avatar: const Icon(Icons.point_of_sale_outlined, size: 16, color: AppColors.primary),
+                  label: Text(quien.isEmpty ? c.nombre : '${c.nombre} · $quien'),
+                  labelStyle: const TextStyle(
+                    fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+                    fontSize: 13, color: AppColors.textPrimary),
+                  onPressed: () => _cobrarEnCaja(c),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// El admin elige una caja abierta por otro: la venta va a ese cierre. Se
+  /// recuerda para los siguientes cobros mientras ese turno siga abierto.
+  Future<void> _cobrarEnCaja(CajaModel caja) async {
+    final apertura = _estadoCajas?.aperturas[caja.cajaId];
+    if (apertura == null) return;
+    await CajaActual.guardar(_usuarioId, caja.cajaId);
+    if (!mounted) return;
+    setState(() {
+      _aperturaCierreCajaId = apertura.aperturaCierreCajaId;
+      _estadoCajas = EstadoCajas(
+        cajas: _estadoCajas!.cajas,
+        caja: caja,
+        apertura: apertura,
+        aperturas: _estadoCajas!.aperturas,
+      );
+    });
+  }
+
+  /// Con varias cajas, en cuál se está cobrando (con una sola no se muestra).
+  Widget _buildCajaActual() {
+    final estado = _estadoCajas;
+    final caja = estado?.caja;
+    if (estado == null || !estado.varias || caja == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.point_of_sale_outlined, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
           Expanded(
-            child: Text('No hay caja abierta. Ve a Gestión de Caja y ábrela primero.',
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.warning)),
+            child: Text('Cobrando en: ${caja.nombre}',
+              style: const TextStyle(
+                fontFamily: 'Poppins', fontSize: 11,
+                fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
           ),
         ],
       ),
