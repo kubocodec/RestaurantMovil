@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------------------
+# Wasi · app web — despliegue en el VPS (Docker + Traefik)
+#
+# Es la MISMA app del celular compilada para el navegador: nginx sirviendo
+# archivos estáticos y nada más. No hay base de datos, ni volúmenes, ni
+# secretos: el API es el de producción y la dirección va compilada adentro
+# (ApiConstants.baseUrl). Por eso el contenedor se puede tirar y volver a
+# levantar sin perder nada.
+#
+# Las variables de Traefik las escribe deploy/detectar-traefik.sh en el .env
+# que queda junto a este archivo, en ~/kubocode/wasi-web del servidor.
+# Comparte el VPS con Kufac, Quinde 17 y la carta: los nombres de routers y
+# middlewares son propios de la app para no pisarlos.
+#
+# Comandos útiles en el VPS (dentro de ~/kubocode/wasi-web):
+#   docker compose ps
+#   docker compose logs -f web
+#   docker compose restart web
+# ---------------------------------------------------------------------------
+name: wasi-web
+
+services:
+  web:
+    image: ${IMAGE}
+    container_name: wasi-web
+    restart: unless-stopped
+
+    environment:
+      TZ: America/Guayaquil
+
+    networks:
+      - traefik
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK}
+      - traefik.http.services.wasiweb.loadbalancer.server.port=80
+
+      # --- Subdominio (HTTPS) ---
+      - traefik.http.routers.wasiweb.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.wasiweb.entrypoints=${ENTRYPOINT_HTTPS}
+      - traefik.http.routers.wasiweb.tls=true
+      - traefik.http.routers.wasiweb.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.wasiweb.service=wasiweb
+      - traefik.http.routers.wasiweb.middlewares=wasiweb-seguridad@docker
+
+      # --- HTTP -> HTTPS ---
+      - traefik.http.routers.wasiweb-http.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.wasiweb-http.entrypoints=${ENTRYPOINT_HTTP}
+      - traefik.http.routers.wasiweb-http.service=wasiweb
+      - traefik.http.routers.wasiweb-http.middlewares=wasiweb-https@docker
+
+      # --- Middlewares ---
+      # frameDeny SÍ, al revés que en la carta: ésta es la pantalla donde se
+      # cobra, y nadie tiene por qué incrustarla en un iframe ajeno.
+      - traefik.http.middlewares.wasiweb-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.wasiweb-https.redirectscheme.permanent=true
+      - traefik.http.middlewares.wasiweb-seguridad.headers.stsSeconds=31536000
+      - traefik.http.middlewares.wasiweb-seguridad.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.wasiweb-seguridad.headers.frameDeny=true
+      - traefik.http.middlewares.wasiweb-seguridad.headers.referrerPolicy=strict-origin-when-cross-origin
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  # Red que ya usa Traefik en este VPS (la detecta detectar-traefik.sh).
+  traefik:
+    name: ${TRAEFIK_NETWORK}
+    external: true

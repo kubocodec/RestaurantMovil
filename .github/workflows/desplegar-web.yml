@@ -1,0 +1,190 @@
+# ---------------------------------------------------------------------------
+# Autodespliegue de la app web de Wasi (mismo esquema que la carta y Kufac)
+#
+# 1. Compila la app para el navegador en el runner de GitHub.
+# 2. Empaqueta el resultado en una imagen nginx y la publica en GHCR.
+# 3. Copia deploy/ al VPS y ejecuta deploy/desplegar.sh (detecta Traefik,
+#    escribe el .env, descarga la imagen y levanta el contenedor).
+# 4. Comprueba que https://DOMAIN/salud responde.
+#
+# OJO: esto despliega SOLO la web. El APK y el IPA se siguen compilando y
+# repartiendo a mano, así que un cambio de backend tiene que seguir siendo
+# compatible hacia atrás: los celulares andan con versiones más viejas.
+#
+# Secrets (Settings > Secrets and variables > Actions de ESTE repositorio):
+#   HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_PASSWORD, HOSTINGER_SSH_PORT
+#   GHCR_USER, GHCR_PAT   token con read:packages para descargar la imagen
+# ---------------------------------------------------------------------------
+name: Desplegar la app web
+
+on:
+  push:
+    branches: ["main"]
+    # Un commit que solo toca ios/ o android/ no tiene por qué redesplegar
+    # la web ni gastar diez minutos de runner.
+    paths:
+      - "lib/**"
+      - "web/**"
+      - "assets/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "deploy/**"
+      - ".github/workflows/desplegar-web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: desplegar-wasi-web
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  DOMAIN: wasi.kubocode.com
+  DEPLOY_DIR: kubocode/wasi-web
+  # La misma del .metadata del proyecto. Al subir el SDK en local, subirlo
+  # también acá: compilar con otra versión es pedir sorpresas.
+  FLUTTER_VERSION: 3.44.9
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  construir:
+    name: Compilar y publicar imagen
+    runs-on: ubuntu-latest
+    outputs:
+      imagen: ${{ steps.meta.outputs.imagen }}
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Flutter ${{ env.FLUTTER_VERSION }}
+        run: |
+          curl --fail --location --retry 5 --retry-delay 10 --retry-all-errors \
+            -o /tmp/flutter.tar.xz \
+            "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
+          tar -xf /tmp/flutter.tar.xz -C /opt
+          echo "/opt/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Dependencias
+        run: |
+          flutter --version
+          flutter pub get
+
+      # La regla del proyecto: ni un error ni un warning nuevo. Los ~124 avisos
+      # `info` que arrastra el código (withOpacity, unnecessary_const) no
+      # frenan el despliegue, pero un error sí. No se usa el código de salida
+      # de `flutter analyze` porque devuelve 1 también con solo infos.
+      - name: Analizar
+        run: |
+          flutter analyze > analisis.txt 2>&1 || true
+          sed -n '$p' analisis.txt
+          if grep -qE "^ +(error|warning) •" analisis.txt; then
+            echo "::error title=flutter analyze::Hay errores o warnings:"
+            grep -E "^ +(error|warning) •" analisis.txt
+            exit 1
+          fi
+          echo "Sin errores ni warnings."
+
+      # --no-web-resources-cdn: canvaskit viaja dentro de la imagen y la app no
+      # depende de un CDN de terceros cada vez que alguien la abre.
+      - name: Compilar para el navegador
+        run: flutter build web --release --no-web-resources-cdn
+
+      # El contexto de Docker es solo el resultado, no el repositorio entero:
+      # mandar 1 GB de código y assets al daemon para copiar una carpeta es
+      # tiempo de build tirado.
+      - name: Preparar el contexto de la imagen
+        run: |
+          mkdir -p contexto
+          cp -r build/web contexto/web
+          cp deploy/nginx.conf deploy/Dockerfile contexto/
+          du -sh contexto
+
+      - name: Calcular nombre de la imagen
+        id: meta
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "repo=${REPO_LC}-web" >> "$GITHUB_OUTPUT"
+          echo "imagen=${{ env.REGISTRY }}/${REPO_LC}-web:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Preparar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Iniciar sesión en GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: contexto
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.imagen }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.repo }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  desplegar:
+    name: Desplegar en el VPS
+    runs-on: ubuntu-latest
+    needs: construir
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Copiar archivos de despliegue al servidor
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          password: ${{ secrets.HOSTINGER_PASSWORD }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          source: "deploy/docker-compose.yml,deploy/detectar-traefik.sh,deploy/desplegar.sh"
+          target: "~/${{ env.DEPLOY_DIR }}"
+          strip_components: 1
+          overwrite: true
+
+      # Toda la lógica vive en deploy/desplegar.sh. Los valores llegan como
+      # variables de entorno (envs), no pegados en el texto del script.
+      - name: Levantar la nueva versión
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ needs.construir.outputs.imagen }}
+          DOMAIN: ${{ env.DOMAIN }}
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          password: ${{ secrets.HOSTINGER_PASSWORD }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          envs: IMAGE,DOMAIN
+          script: |
+            set -euo pipefail
+            cd "$HOME/${{ env.DEPLOY_DIR }}"
+            chmod +x detectar-traefik.sh desplegar.sh
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
+            ./desplegar.sh
+
+      - name: Comprobar que la app responde
+        run: |
+          echo "Esperando a que el contenedor arranque…"
+          sleep 15
+          for intento in 1 2 3 4 5 6; do
+            if respuesta=$(curl -fsS --max-time 15 "https://${{ env.DOMAIN }}/salud"); then
+              if echo "${respuesta}" | grep -q "ok"; then
+                echo "✅ ${{ env.DOMAIN }} está en pie."
+                exit 0
+              fi
+            fi
+            echo "Intento ${intento} sin éxito, reintentando en 15s…"
+            sleep 15
+          done
+          echo "⚠️  La app no quedó sana. Revisá en el VPS: docker compose logs -f web"
+          exit 1

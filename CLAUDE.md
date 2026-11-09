@@ -7,8 +7,11 @@ repo `BackendRestaurant`, que se despliega aparte.
 
 - La app apunta **directo a producción**: `ApiConstants.baseUrl` en
   `lib/core/constants/api_constants.dart`. No hay entorno de pruebas.
-- **Un push a `main` aquí no despliega nada**: el APK se compila y distribuye a mano.
-  Por eso los clientes suelen andar con una versión más vieja que el servidor, y todo
+- **Un push a `main` despliega la web, pero NO el móvil.** Desde 2026-11-09 el Action
+  `.github/workflows/desplegar-web.yml` compila la app para el navegador y la publica
+  en `https://wasi.kubocode.com`, pero solo si el commit toca `lib/`, `web/`,
+  `assets/`, `pubspec` o `deploy/`. El APK y el IPA se siguen compilando y repartiendo
+  a mano: por eso los clientes andan con una versión más vieja que el servidor, y todo
   cambio de backend debe ser compatible hacia atrás.
 - **`flutter analyze` antes de cada push.** Hay ~119 avisos `info` preexistentes
   (`withOpacity`, `unnecessary_const`, llaves de `if`); lo que no puede haber es
@@ -26,6 +29,28 @@ repo `BackendRestaurant`, que se despliega aparte.
   cuando van dentro de `ThemeData` (`core/theme/app_theme.dart`).
 - Gradle 8.10.2, AGP 8.7.0 y Kotlin 2.0.0 están por debajo de lo que Flutter va a
   exigir; hoy solo avisa, en la próxima subida frena el build.
+
+## La misma app en cuatro lados
+
+Android, iOS, navegador y Windows de escritorio salen del mismo código. Lo que cambia
+por plataforma se declara **una sola vez** en `core/plataforma/capacidades.dart` y la
+UI pregunta: nada de `if (Platform.isAndroid)` desparramado.
+
+- **Nunca `Platform` de `dart:io` para decidir**: en el navegador ese archivo compila
+  igual, pero `Platform.isAndroid` revienta al ejecutarse con un `UnsupportedError`
+  que aparece lejos de su causa. Siempre `kIsWeb` y `defaultTargetPlatform`.
+- **Desde el navegador no se puede imprimir**: una pestaña no abre sockets crudos al
+  puerto 9100 ni Bluetooth. Las pantallas esconden el botón (`Capacidades.puedeImprimir`)
+  en vez de dejarlo fallar al tocarlo. En configuración de impresoras la IP y el puerto
+  **sí** se editan desde la PC —el admin configura, imprime el celular o Windows—; lo
+  único que se va es el botón de buscar.
+- **Bluetooth solo en Android**: `ComandaPrinter.bluetoothDisponible`. En iPhone y iPad
+  no hay SPP. Cuando el campo de la MAC no se muestra, el controlador conserva la que
+  venía y se guarda intacta: configurar desde un iPhone no borra el respaldo del local.
+- En pantalla grande `app.dart` limita la app a 1200 px centrada. Recorta también el
+  `size` del `MediaQuery`, no solo lo dibujado: si no, una pantalla que decide por ancho
+  creería tener el monitor entero mientras se dibuja en 1200.
+- El build de Windows no se puede hacer desde el Mac; sale por GitHub Actions.
 
 ## Convenciones
 
