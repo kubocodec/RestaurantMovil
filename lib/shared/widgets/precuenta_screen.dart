@@ -108,6 +108,7 @@ class _PrecuentaScreenState extends State<PrecuentaScreen> {
         ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
         mac: elegida.mac,
+        anchoPapel: elegida.anchoPapel,
         nombreSucursal: user?.sucursalNombre ?? '',
         lugar: orden.lugarConNota,
         numeroOrden: orden.numeroOrden,

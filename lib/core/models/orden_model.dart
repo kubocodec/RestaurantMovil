@@ -16,6 +16,8 @@ class DetalleOrdenModel {
   final String? impresoraIp;
   final int? impresoraPuerto;
   final String? impresoraMac;
+  /// Ancho del papel de esa impresora (80 o 58 mm); sin dato, 80.
+  final int impresoraAnchoPapel;
   /// Plato regalado: se cobra en $0 (el backend lo descuenta completo).
   final bool cortesia;
   final String? motivoCortesia;
@@ -38,6 +40,7 @@ class DetalleOrdenModel {
     this.impresoraIp,
     this.impresoraPuerto,
     this.impresoraMac,
+    this.impresoraAnchoPapel = 80,
     this.cortesia = false,
     this.motivoCortesia,
     this.cortesiaPor,
@@ -60,6 +63,7 @@ class DetalleOrdenModel {
     impresoraIp:     j['impresoraIp']?.toString(),
     impresoraPuerto: (j['impresoraPuerto'] as num?)?.toInt(),
     impresoraMac:    j['impresoraMac']?.toString(),
+    impresoraAnchoPapel: (j['impresoraAnchoPapel'] as num?)?.toInt() == 58 ? 58 : 80,
     cortesia:        j['cortesia'] == true,
     motivoCortesia:  j['motivoCortesia']?.toString(),
     cortesiaPor:     j['cortesiaPor']?.toString(),

@@ -757,6 +757,7 @@ Future<void> imprimirReciboAdelanto(
       ip: elegida.ip,
       puerto: elegida.puerto ?? 9100,
       mac: elegida.mac,
+      anchoPapel: elegida.anchoPapel,
       nombreSucursal: user?.sucursalNombre ?? '',
       cliente: a.nombreCliente,
       cedula: a.cedulaCliente,

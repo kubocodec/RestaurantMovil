@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import 'unidades.dart';
 
 /// Un plato con control de stock.
 class InventarioItemModel {
@@ -153,6 +154,12 @@ class InsumoModel {
   final double valorStock;
   final bool bajoMinimo;
   final bool negativo;
+  /// Presentación opcional ("Botella" de 750 ml). Un backend viejo no la
+  /// envía: null, y se muestra en la unidad base como siempre.
+  final String? presentacionNombre;
+  final double? presentacionContenido;
+
+  Presentacion? get presentacion => Presentacion.de(presentacionNombre, presentacionContenido);
 
   const InsumoModel({
     required this.insumoId,
@@ -166,6 +173,8 @@ class InsumoModel {
     this.valorStock = 0,
     this.bajoMinimo = false,
     this.negativo = false,
+    this.presentacionNombre,
+    this.presentacionContenido,
   });
 
   factory InsumoModel.fromJson(Map<String, dynamic> j) => InsumoModel(
@@ -180,6 +189,8 @@ class InsumoModel {
         valorStock:    _dbl(j['valorStock']) ?? 0,
         bajoMinimo:    j['bajoMinimo'] ?? false,
         negativo:      j['negativo'] ?? false,
+        presentacionNombre:    j['presentacionNombre']?.toString(),
+        presentacionContenido: _dbl(j['presentacionContenido']),
       );
 }
 
@@ -192,6 +203,12 @@ class RecetaItemModel {
   final double? costoUnitario;
   final double? costoLinea;
 
+  /// Presentación del insumo (para mostrar "1 botella"); null = unidad base.
+  final String? presentacionNombre;
+  final double? presentacionContenido;
+
+  Presentacion? get presentacion => Presentacion.de(presentacionNombre, presentacionContenido);
+
   const RecetaItemModel({
     required this.insumoId,
     required this.nombre,
@@ -199,6 +216,8 @@ class RecetaItemModel {
     required this.cantidad,
     this.costoUnitario,
     this.costoLinea,
+    this.presentacionNombre,
+    this.presentacionContenido,
   });
 
   factory RecetaItemModel.fromJson(Map<String, dynamic> j) => RecetaItemModel(
@@ -208,6 +227,8 @@ class RecetaItemModel {
         cantidad:      _dbl(j['cantidad']) ?? 0,
         costoUnitario: _dbl(j['costoUnitario']),
         costoLinea:    _dbl(j['costoLinea']),
+        presentacionNombre:    j['presentacionNombre']?.toString(),
+        presentacionContenido: _dbl(j['presentacionContenido']),
       );
 }
 
@@ -287,6 +308,12 @@ class CompraItemModel {
   final double costoUnitario;
   final double subtotal;
 
+  /// Presentación del insumo (para mostrar "1 botella"); null = unidad base.
+  final String? presentacionNombre;
+  final double? presentacionContenido;
+
+  Presentacion? get presentacion => Presentacion.de(presentacionNombre, presentacionContenido);
+
   const CompraItemModel({
     required this.insumoId,
     required this.nombre,
@@ -294,6 +321,8 @@ class CompraItemModel {
     required this.cantidad,
     required this.costoUnitario,
     required this.subtotal,
+    this.presentacionNombre,
+    this.presentacionContenido,
   });
 
   factory CompraItemModel.fromJson(Map<String, dynamic> j) => CompraItemModel(
@@ -303,6 +332,8 @@ class CompraItemModel {
         cantidad:      _dbl(j['cantidad']) ?? 0,
         costoUnitario: _dbl(j['costoUnitario']) ?? 0,
         subtotal:      _dbl(j['subtotal']) ?? 0,
+        presentacionNombre:    j['presentacionNombre']?.toString(),
+        presentacionContenido: _dbl(j['presentacionContenido']),
       );
 }
 
@@ -441,12 +472,17 @@ class InventarioRepository {
     required String unidad,
     String? categoria,
     double? stockMinimo,
+    Presentacion? presentacion,
   }) async {
     final body = {
       'nombre': nombre,
       'unidad': unidad,
       if (categoria != null && categoria.isNotEmpty) 'categoria': categoria,
       if (stockMinimo != null) 'stockMinimo': stockMinimo,
+      // Siempre se envía: nombre vacío le dice al backend que la quite. (Un
+      // APK viejo no manda nada y el backend la deja como estaba.)
+      'presentacionNombre': presentacion?.nombre ?? '',
+      if (presentacion != null) 'presentacionContenido': presentacion.contenido,
     };
     final r = insumoId == null
         ? await _dio.post('${_base(sucursalId)}/insumos', data: body)

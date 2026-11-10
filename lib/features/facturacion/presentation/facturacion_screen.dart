@@ -2174,6 +2174,7 @@ class _ComprobanteDialogState extends State<_ComprobanteDialog> {
         ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
         mac: elegida.mac,
+        anchoPapel: elegida.anchoPapel,
         factura: _factura,
         items: widget.items,
         metodoPago: widget.metodoPago,

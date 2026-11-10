@@ -36,6 +36,9 @@ class CantidadDialog extends StatefulWidget {
   final String? etiquetaNota;
   final bool notaObligatoria;
   final bool permitirCero;
+  /// Presentación del insumo ("Botella" de 750 ml): se puede escribir
+  /// "11 botellas + 190 ml". null = como siempre, solo la unidad base.
+  final Presentacion? presentacion;
 
   const CantidadDialog({
     super.key,
@@ -47,6 +50,7 @@ class CantidadDialog extends StatefulWidget {
     this.etiquetaNota,
     this.notaObligatoria = false,
     this.permitirCero = false,
+    this.presentacion,
   });
 
   @override
@@ -56,27 +60,66 @@ class CantidadDialog extends StatefulWidget {
 class _CantidadDialogState extends State<CantidadDialog> {
   late final TextEditingController _ctrl;
   final _notaCtrl = TextEditingController();
+  // Lo que sobra de la última presentación abierta ("+ 190 ml").
+  final _restoCtrl = TextEditingController();
   late UnidadCompra _unidad;
   String? _error;
+
+  List<UnidadCompra> get _opciones =>
+      Unidades.opciones(widget.unidadBase, p: widget.presentacion);
+
+  /// Está escribiendo en presentaciones (botellas): se muestra el "+ ml".
+  bool get _enPresentacion =>
+      widget.presentacion != null && _unidad == _opciones.first;
 
   @override
   void initState() {
     super.initState();
-    _unidad = Unidades.opciones(widget.unidadBase).first;
-    _ctrl = TextEditingController(
-        text: widget.inicialBase == null ? '' : Unidades.numero(widget.inicialBase!));
+    final p = widget.presentacion;
+    final inicial = widget.inicialBase;
+    if (p == null) {
+      _unidad = Unidades.opciones(widget.unidadBase).first;
+      _ctrl = TextEditingController(text: inicial == null ? '' : Unidades.numero(inicial));
+      return;
+    }
+    // Con presentación arranca en botellas, salvo que lo que ya hay sea menos
+    // de una: los 60 ml de un cóctel se siguen editando en ml.
+    if (inicial != null && inicial > 0 && inicial < p.contenido) {
+      _unidad = _opciones[1];
+      _ctrl = TextEditingController(text: Unidades.numero(inicial));
+    } else {
+      _unidad = _opciones.first;
+      if (inicial == null) {
+        _ctrl = TextEditingController();
+      } else {
+        final (n, resto) = p.partir(inicial);
+        _ctrl = TextEditingController(text: '$n');
+        if (resto > 0) _restoCtrl.text = Unidades.numero(resto);
+      }
+    }
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
     _notaCtrl.dispose();
+    _restoCtrl.dispose();
     super.dispose();
   }
 
   void _aceptar() {
     final valor = Unidades.leer(_ctrl.text);
-    if (valor == null || valor < 0 || (!widget.permitirCero && valor == 0)) {
+    // Sin presentación no hay "+ ml": resto 0 y todo queda como siempre.
+    var resto = 0.0;
+    if (_enPresentacion && _restoCtrl.text.trim().isNotEmpty) {
+      final r = Unidades.leer(_restoCtrl.text);
+      if (r == null || r < 0) {
+        setState(() => _error = 'Lo que sobra no es válido');
+        return;
+      }
+      resto = r;
+    }
+    if (valor == null || valor < 0 || (!widget.permitirCero && valor == 0 && resto == 0)) {
       setState(() => _error = widget.permitirCero
           ? 'Escribe una cantidad válida'
           : 'Escribe una cantidad mayor que cero');
@@ -86,12 +129,12 @@ class _CantidadDialogState extends State<CantidadDialog> {
       setState(() => _error = 'Escribe el motivo');
       return;
     }
-    Navigator.pop(context, CantidadYNota(valor * _unidad.factor, _notaCtrl.text.trim()));
+    Navigator.pop(context, CantidadYNota(valor * _unidad.factor + resto, _notaCtrl.text.trim()));
   }
 
   @override
   Widget build(BuildContext context) {
-    final opciones = Unidades.opciones(widget.unidadBase);
+    final opciones = _opciones;
     return AlertDialog(
       title: Text(widget.titulo, style: _titulo),
       content: SingleChildScrollView(
@@ -141,6 +184,20 @@ class _CantidadDialogState extends State<CantidadDialog> {
                   ),
               ],
             ),
+            if (_enPresentacion) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _restoCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [_formatoNumero],
+                decoration: InputDecoration(
+                  labelText: 'Más lo que sobra de una ${widget.presentacion!.singular} abierta (opcional)',
+                  suffixText: Unidades.corta(widget.unidadBase),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _aceptar(),
+              ),
+            ],
             if (widget.etiquetaNota != null) ...[
               const SizedBox(height: 10),
               TextField(
@@ -173,7 +230,10 @@ class InsumoForm {
   final String unidad;
   final String? categoria;
   final double? stockMinimo;
-  const InsumoForm(this.nombre, this.unidad, this.categoria, this.stockMinimo);
+  /// null = sin presentación (se quita si la tenía).
+  final Presentacion? presentacion;
+  const InsumoForm(this.nombre, this.unidad, this.categoria, this.stockMinimo,
+      [this.presentacion]);
 }
 
 class InsumoDialog extends StatefulWidget {
@@ -188,20 +248,42 @@ class _InsumoDialogState extends State<InsumoDialog> {
   late final TextEditingController _nombre;
   late final TextEditingController _categoria;
   late final TextEditingController _minimo;
+  // Presentación opcional: "Botella" de "750" ml.
+  late final TextEditingController _presNombre;
+  late final TextEditingController _presContenido;
   late String _unidad;
   late UnidadCompra _unidadMinimo;
+  late UnidadCompra _unidadContenido;
   String? _error;
+
+  /// La presentación tal como está escrita ahora (null si está incompleta).
+  Presentacion? get _presentacion {
+    final c = Unidades.leer(_presContenido.text);
+    return Presentacion.de(_presNombre.text, c == null ? null : c * _unidadContenido.factor);
+  }
+
+  List<UnidadCompra> get _opcionesMinimo => Unidades.opciones(_unidad, p: _presentacion);
 
   @override
   void initState() {
     super.initState();
     final i = widget.insumo;
+    final p = i?.presentacion;
     _nombre = TextEditingController(text: i?.nombre ?? '');
     _categoria = TextEditingController(text: i?.categoria ?? '');
-    _minimo = TextEditingController(
-        text: i?.stockMinimo == null ? '' : Unidades.numero(i!.stockMinimo!));
     _unidad = i?.unidad ?? 'GRAMO';
-    _unidadMinimo = Unidades.opciones(_unidad).first;
+    _presNombre = TextEditingController(text: p?.nombre ?? '');
+    _presContenido = TextEditingController(text: p == null ? '' : Unidades.numero(p.contenido));
+    _unidadContenido = Unidades.opciones(_unidad).first;
+    if (p != null && i?.stockMinimo != null) {
+      // El mínimo se muestra en botellas si la tiene: "avisar con 2 botellas".
+      _unidadMinimo = Unidades.opciones(_unidad, p: p).first;
+      _minimo = TextEditingController(text: Unidades.numero(i!.stockMinimo! / p.contenido));
+    } else {
+      _minimo = TextEditingController(
+          text: i?.stockMinimo == null ? '' : Unidades.numero(i!.stockMinimo!));
+      _unidadMinimo = Unidades.opciones(_unidad).first;
+    }
   }
 
   @override
@@ -209,7 +291,15 @@ class _InsumoDialogState extends State<InsumoDialog> {
     _nombre.dispose();
     _categoria.dispose();
     _minimo.dispose();
+    _presNombre.dispose();
+    _presContenido.dispose();
     super.dispose();
+  }
+
+  /// Si cambió la presentación y la unidad del mínimo ya no existe, vuelve a
+  /// la base para que el DropdownButton no quede con un valor fuera de la lista.
+  void _ajustarUnidadMinimo() {
+    if (!_opcionesMinimo.contains(_unidadMinimo)) _unidadMinimo = _opcionesMinimo.first;
   }
 
   void _aceptar() {
@@ -227,8 +317,21 @@ class _InsumoDialogState extends State<InsumoDialog> {
       }
       minimo = v * _unidadMinimo.factor;
     }
+    // Presentación: o completa (nombre y contenido) o vacía.
+    final presNombre = _presNombre.text.trim();
+    final presTexto = _presContenido.text.trim();
+    Presentacion? pres;
+    if (presNombre.isNotEmpty || presTexto.isNotEmpty) {
+      pres = _presentacion;
+      if (pres == null) {
+        setState(() => _error = presNombre.isEmpty
+            ? 'Escribe el nombre de la presentación (botella, caja…)'
+            : 'Escribe cuánto trae una ${presNombre.toLowerCase()}');
+        return;
+      }
+    }
     final cat = _categoria.text.trim();
-    Navigator.pop(context, InsumoForm(nombre, _unidad, cat.isEmpty ? null : cat, minimo));
+    Navigator.pop(context, InsumoForm(nombre, _unidad, cat.isEmpty ? null : cat, minimo, pres));
   }
 
   @override
@@ -267,7 +370,8 @@ class _InsumoDialogState extends State<InsumoDialog> {
                   selectedColor: AppColors.primary,
                   onSelected: (_) => setState(() {
                     _unidad = u;
-                    _unidadMinimo = Unidades.opciones(u).first;
+                    _unidadContenido = Unidades.opciones(u).first;
+                    _unidadMinimo = _opcionesMinimo.first;
                   }),
                 );
               }).toList(),
@@ -287,6 +391,64 @@ class _InsumoDialogState extends State<InsumoDialog> {
               decoration: const InputDecoration(
                   labelText: 'Grupo (opcional): Carnes, Verduras…', isDense: true),
             ),
+            const SizedBox(height: 14),
+            const Text('Se compra y se cuenta por (opcional)',
+                style: TextStyle(
+                    fontFamily: 'Poppins', fontSize: 12, color: AppColors.textSecondary)),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: 10,
+              children: [
+                SizedBox(
+                  width: 130,
+                  child: TextField(
+                    controller: _presNombre,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                        labelText: 'Botella, caja…', isDense: true),
+                    onChanged: (_) => setState(_ajustarUnidadMinimo),
+                  ),
+                ),
+                SizedBox(
+                  width: 90,
+                  child: TextField(
+                    controller: _presContenido,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [_formatoNumero],
+                    decoration: const InputDecoration(labelText: 'Trae', isDense: true),
+                    onChanged: (_) => setState(_ajustarUnidadMinimo),
+                  ),
+                ),
+                if (Unidades.opciones(_unidad).length > 1)
+                  DropdownButton<UnidadCompra>(
+                    value: _unidadContenido,
+                    underline: const SizedBox.shrink(),
+                    items: Unidades.opciones(_unidad)
+                        .map((u) => DropdownMenuItem(
+                            value: u,
+                            child: Text(u.etiqueta,
+                                style: const TextStyle(
+                                    fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary))))
+                        .toList(),
+                    onChanged: (u) => setState(() {
+                      _unidadContenido = u ?? _unidadContenido;
+                      _ajustarUnidadMinimo();
+                    }),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(Unidades.corta(_unidad),
+                        style: const TextStyle(
+                            fontFamily: 'Poppins', fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary)),
+                  ),
+              ],
+            ),
+            const Text('Ej: Botella de 750 ml. El stock se verá "12 botellas" en vez de "9 L".',
+                style: TextStyle(
+                    fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -304,7 +466,7 @@ class _InsumoDialogState extends State<InsumoDialog> {
                 DropdownButton<UnidadCompra>(
                   value: _unidadMinimo,
                   underline: const SizedBox.shrink(),
-                  items: Unidades.opciones(_unidad)
+                  items: _opcionesMinimo
                       .map((u) => DropdownMenuItem(
                           value: u,
                           child: Text(u.etiqueta,
@@ -389,7 +551,8 @@ class _SelectorInsumoSheetState extends State<SelectorInsumoSheet> {
     try {
       final nuevo = await widget.repo.guardarInsumo(widget.sucursalId,
           nombre: form.nombre, unidad: form.unidad,
-          categoria: form.categoria, stockMinimo: form.stockMinimo);
+          categoria: form.categoria, stockMinimo: form.stockMinimo,
+          presentacion: form.presentacion);
       if (mounted) Navigator.pop(context, nuevo);
     } catch (e) {
       if (!mounted) return;
@@ -454,7 +617,7 @@ class _SelectorInsumoSheetState extends State<SelectorInsumoSheet> {
                                 subtitle: Text(
                                     '${Unidades.nombre(ins.unidad)}'
                                     '${ins.categoria != null ? ' · ${ins.categoria}' : ''}'
-                                    ' · hay ${Unidades.formato(ins.stock, ins.unidad)}',
+                                    ' · hay ${Unidades.formato(ins.stock, ins.unidad, p: ins.presentacion)}',
                                     style: const TextStyle(fontFamily: 'Poppins', fontSize: 11.5)),
                                 trailing: ya
                                     ? const Icon(Icons.check_circle, color: AppColors.success)

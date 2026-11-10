@@ -182,6 +182,8 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
     final puertoCtrl = TextEditingController(text: (impresora?.puerto ?? 9100).toString());
     final macCtrl    = TextEditingController(text: impresora?.mac ?? '');
     final seleccion  = Set<String>.from(impresora?.categoriaIds ?? const []);
+    // 80 mm las de cocina y caja; 58 mm las incorporadas de los POS portátiles.
+    var anchoPapel   = impresora?.anchoPapel ?? 80;
 
     showDialog(
       context: context,
@@ -262,6 +264,23 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                const Text('Ancho del papel:',
+                    style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final mm in const [80, 58])
+                      ChoiceChip(
+                        label: Text('$mm mm'),
+                        selected: anchoPapel == mm,
+                        onSelected: (_) => setDialogState(() => anchoPapel = mm),
+                      ),
+                  ],
+                ),
+                const Text('58 mm: impresoras incorporadas de los POS portátiles.',
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: AppColors.textSecondary)),
                 if (!esEdicion) ...[
                   const SizedBox(height: 12),
                   const Text('Categorías que imprime:',
@@ -297,6 +316,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                       ip: ip,
                       puerto: int.tryParse(puertoCtrl.text.trim()) ?? 9100,
                       mac: mac,
+                      anchoPapel: anchoPapel,
                     );
                   } else {
                     await _repo.crearImpresora(
@@ -306,6 +326,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
                       ip: ip,
                       puerto: int.tryParse(puertoCtrl.text.trim()) ?? 9100,
                       mac: mac,
+                      anchoPapel: anchoPapel,
                       categoriaIds: seleccion.toList(),
                     );
                   }
@@ -447,6 +468,7 @@ class _ImpresorasConfigScreenState extends State<ImpresorasConfigScreen> {
         mac: imp.mac,
         nombre: imp.nombre,
         area: imp.area,
+        anchoPapel: imp.anchoPapel,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -495,7 +517,10 @@ class _ImpresoraCard extends StatelessWidget {
       if (impresora.ip?.isNotEmpty ?? false) '${impresora.ip}:${impresora.puerto ?? 9100}',
       if (impresora.mac?.isNotEmpty ?? false) 'BT ${impresora.mac}',
     ];
-    return partes.isEmpty ? 'sin conexión' : partes.join(' · ');
+    if (partes.isEmpty) return 'sin conexión';
+    // Solo se avisa el ancho que no es el de siempre.
+    if (impresora.anchoPapel == 58) partes.add('papel 58 mm');
+    return partes.join(' · ');
   }
 
   @override

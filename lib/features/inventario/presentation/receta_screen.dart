@@ -32,7 +32,10 @@ class _Linea {
   final String unidad;
   double cantidad;
   final double? costoUnitario;
-  _Linea(this.insumoId, this.nombre, this.unidad, this.cantidad, this.costoUnitario);
+  /// Presentación del insumo: "1 botella" en vez de 750 ml.
+  final Presentacion? presentacion;
+  _Linea(this.insumoId, this.nombre, this.unidad, this.cantidad, this.costoUnitario,
+      [this.presentacion]);
 
   double? get costo => costoUnitario == null ? null : costoUnitario! * cantidad;
 }
@@ -73,7 +76,8 @@ class _RecetaScreenState extends State<RecetaScreen> {
     _lineas
       ..clear()
       ..addAll(r.items.map((i) =>
-          _Linea(i.insumoId, i.nombre, i.unidad, i.cantidad, i.costoUnitario)));
+          _Linea(i.insumoId, i.nombre, i.unidad, i.cantidad, i.costoUnitario,
+              i.presentacion)));
     _cambios = false;
   }
 
@@ -110,6 +114,7 @@ class _RecetaScreenState extends State<RecetaScreen> {
         unidadBase: ins.unidad,
         etiqueta: 'Cantidad por porción',
         inicialBase: existente?.cantidad,
+        presentacion: ins.presentacion,
       ),
     );
     if (r == null) return;
@@ -118,7 +123,7 @@ class _RecetaScreenState extends State<RecetaScreen> {
         existente.cantidad = r.cantidadBase;
       } else {
         _lineas.add(_Linea(ins.insumoId, ins.nombre, ins.unidad, r.cantidadBase,
-            ins.costoPromedio));
+            ins.costoPromedio, ins.presentacion));
       }
       _cambios = true;
     });
@@ -133,6 +138,7 @@ class _RecetaScreenState extends State<RecetaScreen> {
         unidadBase: l.unidad,
         etiqueta: 'Cantidad por porción',
         inicialBase: l.cantidad,
+        presentacion: l.presentacion,
       ),
     );
     if (r == null) return;
@@ -400,8 +406,8 @@ class _RecetaScreenState extends State<RecetaScreen> {
             style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: Text(
           l.costo == null
-              ? '${Unidades.formato(l.cantidad, l.unidad)} · sin costo'
-              : '${Unidades.formato(l.cantidad, l.unidad)} · \$${l.costo!.toStringAsFixed(2)}',
+              ? '${Unidades.formato(l.cantidad, l.unidad, p: l.presentacion)} · sin costo'
+              : '${Unidades.formato(l.cantidad, l.unidad, p: l.presentacion)} · \$${l.costo!.toStringAsFixed(2)}',
           style: const TextStyle(fontFamily: 'Poppins', fontSize: 12),
         ),
         trailing: IconButton(

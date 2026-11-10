@@ -199,6 +199,15 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   muestra su costo y margen. `data/unidades.dart` convierte kg/lb/L a la unidad base
   (g, ml, u): el backend solo acepta esas tres. Los diálogos de `inventario_dialogos.dart`
   son widgets con estado propio por la trampa del `TextEditingController`.
+  **Presentación del insumo** (opcional, `Presentacion` en `unidades.dart`): "Botella" de
+  750 ml. El stock sigue en ml; solo cambia cómo se ve y se escribe: "12 botellas",
+  "11 botellas + 190 ml", compras en botellas, conteo con "+ ml" de la abierta, mínimo y
+  costo por botella. Es el caso de la botella que se vende entera **y** por vasos o
+  cócteles: un solo insumo en ml, y la botella y el cóctel como platos **por receta**
+  (750 ml y 60 ml). Nunca el plato "por unidades" además del insumo: son dos stocks que
+  no se conectan. Sin presentación, `formato/opciones/costo` devuelven lo mismo que antes
+  (comprobado contra el código anterior al hacerlo). `UnidadCompra` compara por valor
+  porque la opción de la presentación se crea en cada build y el Dropdown lo exige.
 - `features/configuracion/presentation/menu_config_screen.dart` — catálogo: precios,
   disponibilidad, control de stock por plato (sin control / por unidades / por receta) y **tarifa de IVA** (masiva por
   subcategoría con el ícono `%`, o individual con el chip `IVA —` de cada plato).
@@ -224,7 +233,15 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   cobro **encima** de la orden (`push`, no `go` ni replace); al volver, con o sin cobrar,
   se sale como siempre y lo no cobrado queda en la lista. El mesero sigue igual. Con el
   interruptor apagado o un backend que no envía el campo, todo se ve como antes.
-- `core/printing/comanda_printer.dart` — comandas y tickets térmicos.
+- `core/printing/comanda_printer.dart` — comandas y tickets térmicos. **Ancho del papel
+  por impresora** (`anchoPapel`, 80 o 58 mm; sin dato = 80): cada impresión recibe las
+  columnas (`cols`: 48 o 32), nunca una constante. En 80 mm el ticket debe salir **byte
+  por byte igual** que antes (se comprobó así al hacerlo); lo propio de 58 mm va siempre
+  detrás de `cols < 48`: pie del recibo cortado a mano y nombres largos con el monto en
+  la línea siguiente en vez de recortados. La comanda toma el ancho de cada ítem
+  (`impresoraAnchoPapel`). Los POS portátiles del evento traen una impresora Bluetooth
+  **virtual** con la misma MAC en todos (`00:AA:11:BB:22:CC`, no se ve desde afuera):
+  una sola impresora registrada en la sucursal sirve a todos y cada uno imprime en la suya.
 
 ## Qué probar antes de sacar un APK
 
