@@ -72,7 +72,8 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
     if (form == null) return;
     await _ejecutar(() => _repo.guardarInsumo(widget.sucursalId,
         nombre: form.nombre, unidad: form.unidad,
-        categoria: form.categoria, stockMinimo: form.stockMinimo));
+        categoria: form.categoria, stockMinimo: form.stockMinimo,
+        presentacion: form.presentacion));
   }
 
   Future<void> _editar(InsumoModel i) async {
@@ -81,7 +82,8 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
     if (form == null) return;
     await _ejecutar(() => _repo.guardarInsumo(widget.sucursalId,
         insumoId: i.insumoId, nombre: form.nombre, unidad: form.unidad,
-        categoria: form.categoria, stockMinimo: form.stockMinimo));
+        categoria: form.categoria, stockMinimo: form.stockMinimo,
+        presentacion: form.presentacion));
   }
 
   Future<void> _conteo(InsumoModel i) async {
@@ -90,8 +92,9 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
       builder: (_) => CantidadDialog(
         titulo: 'Conteo de ${i.nombre}',
         ayuda: 'Pesa o cuenta lo que hay físicamente y escríbelo. El sistema tiene '
-            '${Unidades.formato(i.stock, i.unidad)}; la diferencia queda en el historial.',
+            '${Unidades.formato(i.stock, i.unidad, p: i.presentacion)}; la diferencia queda en el historial.',
         unidadBase: i.unidad,
+        presentacion: i.presentacion,
         etiqueta: 'Cantidad real',
         etiquetaNota: 'Nota (opcional)',
         permitirCero: true,
@@ -109,6 +112,7 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
         titulo: 'Merma de ${i.nombre}',
         ayuda: 'Lo que salió sin venderse: se dañó, se botó o lo consumió el personal.',
         unidadBase: i.unidad,
+        presentacion: i.presentacion,
         etiqueta: 'Cantidad',
         etiquetaNota: 'Motivo (obligatorio)',
         notaObligatoria: true,
@@ -133,7 +137,7 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
       builder: (_) => HistorialSheet(
         titulo: i.nombre,
         cargar: () => _repo.getMovimientosInsumo(widget.sucursalId, i.insumoId),
-        formatear: (c) => Unidades.formato(c, i.unidad),
+        formatear: (c) => Unidades.formato(c, i.unidad, p: i.presentacion),
       ),
     );
   }
@@ -236,8 +240,8 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
                 : AppColors.success;
     final detalle = [
       if (i.categoria != null) i.categoria!,
-      Unidades.costo(i.costoPromedio, i.unidad),
-      if (i.stockMinimo != null) 'mínimo ${Unidades.formato(i.stockMinimo, i.unidad)}',
+      Unidades.costo(i.costoPromedio, i.unidad, p: i.presentacion),
+      if (i.stockMinimo != null) 'mínimo ${Unidades.formato(i.stockMinimo, i.unidad, p: i.presentacion)}',
       if (!i.activo) 'desactivado',
     ].join('  ·  ');
     return Container(
@@ -273,7 +277,7 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(Unidades.formato(i.stock, i.unidad),
+                  Text(Unidades.formato(i.stock, i.unidad, p: i.presentacion),
                       style: TextStyle(
                           fontFamily: 'Poppins', fontWeight: FontWeight.w700,
                           fontSize: 17, color: color)),

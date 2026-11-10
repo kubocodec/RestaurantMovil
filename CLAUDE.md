@@ -199,6 +199,15 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   muestra su costo y margen. `data/unidades.dart` convierte kg/lb/L a la unidad base
   (g, ml, u): el backend solo acepta esas tres. Los diálogos de `inventario_dialogos.dart`
   son widgets con estado propio por la trampa del `TextEditingController`.
+  **Presentación del insumo** (opcional, `Presentacion` en `unidades.dart`): "Botella" de
+  750 ml. El stock sigue en ml; solo cambia cómo se ve y se escribe: "12 botellas",
+  "11 botellas + 190 ml", compras en botellas, conteo con "+ ml" de la abierta, mínimo y
+  costo por botella. Es el caso de la botella que se vende entera **y** por vasos o
+  cócteles: un solo insumo en ml, y la botella y el cóctel como platos **por receta**
+  (750 ml y 60 ml). Nunca el plato "por unidades" además del insumo: son dos stocks que
+  no se conectan. Sin presentación, `formato/opciones/costo` devuelven lo mismo que antes
+  (comprobado contra el código anterior al hacerlo). `UnidadCompra` compara por valor
+  porque la opción de la presentación se crea en cada build y el Dropdown lo exige.
 - `features/configuracion/presentation/menu_config_screen.dart` — catálogo: precios,
   disponibilidad, control de stock por plato (sin control / por unidades / por receta) y **tarifa de IVA** (masiva por
   subcategoría con el ícono `%`, o individual con el chip `IVA —` de cada plato).

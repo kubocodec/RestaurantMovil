@@ -206,7 +206,7 @@ class _DetalleCompraSheetState extends State<_DetalleCompraSheet> {
                           style: const TextStyle(
                               fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
                       subtitle: Text(
-                          '${Unidades.formato(i.cantidad, i.unidad)} · ${Unidades.costo(i.costoUnitario, i.unidad)}',
+                          '${Unidades.formato(i.cantidad, i.unidad, p: i.presentacion)} · ${Unidades.costo(i.costoUnitario, i.unidad, p: i.presentacion)}',
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 12)),
                       trailing: Text('\$${i.subtotal.toStringAsFixed(2)}',
                           style: const TextStyle(
@@ -448,8 +448,8 @@ class _NuevaCompraScreenState extends State<NuevaCompraScreen> {
                           style: const TextStyle(
                               fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14)),
                       subtitle: Text(
-                          '${Unidades.formato(l.cantidadBase, l.insumo.unidad)} · '
-                          '${Unidades.costo(l.cantidadBase > 0 ? l.costoTotal / l.cantidadBase : null, l.insumo.unidad)}',
+                          '${Unidades.formato(l.cantidadBase, l.insumo.unidad, p: l.insumo.presentacion)} · '
+                          '${Unidades.costo(l.cantidadBase > 0 ? l.costoTotal / l.cantidadBase : null, l.insumo.unidad, p: l.insumo.presentacion)}',
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 12)),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -508,9 +508,11 @@ class _LineaCompraDialogState extends State<_LineaCompraDialog> {
   @override
   void initState() {
     super.initState();
-    final opciones = Unidades.opciones(widget.insumo.unidad);
-    // Las compras de peso suelen venir en kilos o libras, no en gramos.
-    _unidad = opciones.length > 1 ? opciones[1] : opciones.first;
+    final p = widget.insumo.presentacion;
+    final opciones = Unidades.opciones(widget.insumo.unidad, p: p);
+    // Con presentación la compra viene en botellas (la primera opción). Si no,
+    // las compras de peso suelen venir en kilos o libras, no en gramos.
+    _unidad = p != null ? opciones.first : opciones.length > 1 ? opciones[1] : opciones.first;
   }
 
   @override
@@ -558,7 +560,7 @@ class _LineaCompraDialogState extends State<_LineaCompraDialog> {
                 DropdownButton<UnidadCompra>(
                   value: _unidad,
                   underline: const SizedBox.shrink(),
-                  items: Unidades.opciones(widget.insumo.unidad)
+                  items: Unidades.opciones(widget.insumo.unidad, p: widget.insumo.presentacion)
                       .map((u) => DropdownMenuItem(
                           value: u,
                           child: Text(u.etiqueta,
