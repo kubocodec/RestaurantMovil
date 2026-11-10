@@ -19,7 +19,10 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.wasi.restaurante"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
+    // El plugin jni, que entró como dependencia transitiva al subir a Flutter
+    // 3.44, pide este NDK. Son compatibles hacia atrás, así que manda el más
+    // alto de todos los plugins.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

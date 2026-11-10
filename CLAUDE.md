@@ -27,8 +27,20 @@ repo `BackendRestaurant`, que se despliega aparte.
   `flutter_localizations`.
 - Flutter 3.32 renombró `TabBarTheme`, `DialogTheme` y `CardTheme` a `...ThemeData`
   cuando van dentro de `ThemeData` (`core/theme/app_theme.dart`).
-- Gradle 8.10.2, AGP 8.7.0 y Kotlin 2.0.0 están por debajo de lo que Flutter va a
-  exigir; hoy solo avisa, en la próxima subida frena el build.
+- **Android va con Gradle 8.14.6, AGP 8.13.2, Kotlin 2.2.21 y NDK 28.2** (subidos el
+  2026-11-10). No fue por los avisos de Flutter: el build se cayó, porque
+  `androidx.core 1.17` y `androidx.browser 1.9` —que entran solas al resolver las
+  dependencias— exigen AGP 8.9.1 o más, y el plugin `jni` pide ese NDK. Además
+  `android/build.gradle.kts` les sube el `compileSdk` a los plugins que quedaron por
+  debajo de 34 (hoy solo `fluttertoast 8.2.14`, que compila contra 33): sin eso el build
+  muere en `:fluttertoast:checkDebugAarMetadata`.
+- **Cientos de líneas de `Could not close incremental caches`, `Storage ... is already
+  registered`, `Permission denied`, o Flutter diciendo "Gradle does not have execution
+  permission": es el DISCO LLENO**, no Kotlin ni los permisos. Buscar `No space left on
+  device` en el log. Un build limpio de Android se come unos 6 GB entre transforms y
+  NDK. Después de liberar espacio hay que matar los daemons (`pkill -f GradleDaemon;
+  pkill -f KotlinCompileDaemon`) y borrar `build/`: quedan cachés a medio escribir y
+  los daemons retienen el espacio de los archivos ya borrados.
 
 ## La misma app en cuatro lados
 
