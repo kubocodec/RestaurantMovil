@@ -62,9 +62,11 @@ class ComandaPrinter {
   /// de [_init] en cada ticket porque ESC @ resetea la página elegida.
   static const _codePage = [0x1B, 0x74, 0x10];
 
-  /// Columnas en fuente normal. Las impresoras del negocio son de 80mm
-  /// (48 columnas); para papel de 58mm cambiar a 32.
-  static const int _cols = 48;
+  /// Columnas en fuente normal según el ancho del papel: 48 en 80 mm (las
+  /// impresoras de cocina y caja, el valor de siempre) y 32 en 58 mm (las
+  /// incorporadas de los POS portátiles). Cada impresión recibe el ancho de
+  /// su impresora; sin dato es 80 mm y el ticket sale idéntico al de antes.
+  static int _columnas(int anchoPapel) => anchoPapel == 58 ? 32 : 48;
 
   /// Agrupa los detalles por impresora y envía una comanda a cada una.
   /// Los detalles sin impresora asignada (sin IP ni Bluetooth) se ignoran
@@ -105,6 +107,7 @@ class ComandaPrinter {
             detalles: entry.value,
             esReimpresion: esReimpresion,
             nota: nota,
+            cols: _columnas(primero.impresoraAnchoPapel),
           ),
         );
         resultados.add(ResultadoImpresion(nombre, true, via: via));
@@ -124,6 +127,7 @@ class ComandaPrinter {
     required List<DetalleOrdenModel> detalles,
     bool esReimpresion = false,
     String? nota,
+    required int cols,
   }) {
     // Si toda la comanda es para llevar se anuncia en grande en la cabecera;
     // si es mixta (mesa + algunos platos para llevar) se marca cada plato.
@@ -143,9 +147,9 @@ class ComandaPrinter {
       // A quién se entrega lo empacado: en negrita bajo la cabecera.
       if (nota != null && nota.isNotEmpty) ..._texto('$nota\n'),
       ..._boldOff, ..._left,
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._texto('Hora: ${_horaActual()}   Mesero: $mesero\n'),
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
     ];
     for (final d in detalles) {
       bytes.addAll(_boldOn);
@@ -159,7 +163,7 @@ class ComandaPrinter {
         bytes.addAll(_texto('   >> $obs\n'));
       }
     }
-    bytes.addAll(_texto('${'-' * _cols}\n'));
+    bytes.addAll(_texto('${'-' * cols}\n'));
     bytes.addAll(_feed);
     bytes.addAll(_cut);
     return bytes;
@@ -171,25 +175,31 @@ class ComandaPrinter {
     String? ip,
     int puerto = 9100,
     String? mac,
+    /// Ancho del papel de la impresora (80 o 58 mm).
+    int anchoPapel = 80,
     required String nombre,
     String? area,
   }) {
+    final cols = _columnas(anchoPapel);
     final bytes = <int>[
       ..._init, ..._codePage,
       ..._center, ..._doubleSize, ..._boldOn,
       ..._texto('PRUEBA DE\nIMPRESION\n'),
       ..._normalSize, ..._boldOff,
       ..._left,
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._texto('Impresora: $nombre\n'),
       if (area != null && area.isNotEmpty) ..._texto('Area: $area\n'),
       if (ip != null && ip.isNotEmpty) ..._texto('Red: $ip:$puerto\n'),
       if (mac != null && mac.isNotEmpty) ..._texto('Bluetooth: $mac\n'),
+      // Solo en 58 mm, para confirmar en el papel que se eligió bien: las
+      // líneas de guiones deben ocupar justo una línea, sin partirse.
+      if (cols < 48) ..._texto('Papel: 58 mm\n'),
       ..._texto('Fecha: ${_fechaHora(DateTime.now())}\n'),
       // Verificación de acentos: si esta línea sale con símbolos raros, la
       // impresora no aceptó la página de códigos de [_codePage].
       ..._texto('Acentos: Bolón Café Piña ñÑ ¿? ¡!\n'),
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._center, ..._boldOn,
       ..._texto('CONEXION OK\n'),
       ..._boldOff, ..._left,
@@ -361,6 +371,8 @@ class ComandaPrinter {
     String? ip,
     int puerto = 9100,
     String? mac,
+    /// Ancho del papel de la impresora (80 o 58 mm).
+    int anchoPapel = 80,
     required FacturaModel factura,
     required List<ReciboItem> items,
     required String metodoPago,
@@ -374,6 +386,7 @@ class ComandaPrinter {
     /// Lo que sobró del adelanto de reserva y se devolvió al cliente.
     double? devueltoAdelanto,
   }) async {
+    final cols = _columnas(anchoPapel);
     {
       final f = factura;
       final esElectronica = f.sriClaveAcceso?.isNotEmpty ?? false;
@@ -392,7 +405,7 @@ class ComandaPrinter {
         if (f.nombreSucursal.isNotEmpty) ..._texto('${f.nombreSucursal}\n'),
         if (f.direccionSucursal?.isNotEmpty ?? false) ..._texto('${f.direccionSucursal}\n'),
         if (f.telefonoSucursal?.isNotEmpty ?? false) ..._texto('Tel: ${f.telefonoSucursal}\n'),
-        ..._texto('${'=' * _cols}\n'),
+        ..._texto('${'=' * cols}\n'),
         // ── Tipo y número de comprobante ──
         ..._boldOn,
         ..._texto('$titulo\n'),
@@ -408,12 +421,12 @@ class ComandaPrinter {
       // parte en líneas de 32 columnas, centrada como en el RIDE) ──
       if (esElectronica) {
         final clave = f.sriClaveAcceso!;
-        bytes.addAll(_texto('${'-' * _cols}\n'));
+        bytes.addAll(_texto('${'-' * cols}\n'));
         bytes.addAll(_center);
         bytes.addAll(_boldOn);
         bytes.addAll(_texto('AUTORIZACION / CLAVE DE ACCESO\n'));
         bytes.addAll(_boldOff);
-        if (clave.length <= _cols) {
+        if (clave.length <= cols) {
           bytes.addAll(_texto('$clave\n'));
         } else {
           // Partida en dos líneas balanceadas (25 + 24 en 49 dígitos)
@@ -425,7 +438,7 @@ class ComandaPrinter {
       }
 
       // ── Quién atendió y a quién se factura ──
-      bytes.addAll(_texto('${'-' * _cols}\n'));
+      bytes.addAll(_texto('${'-' * cols}\n'));
       if (f.cajero?.isNotEmpty ?? false) bytes.addAll(_texto('Cajero: ${f.cajero}\n'));
       bytes.addAll(_texto('${f.lugar?.isNotEmpty ?? false ? '${f.lugar} - ' : ''}Orden #${f.numeroOrden}\n'));
       bytes.addAll(_texto('Cliente: ${f.nombreCliente ?? 'Consumidor Final'}\n'));
@@ -437,66 +450,76 @@ class ComandaPrinter {
       }
 
       // ── Detalle ──
-      bytes.addAll(_texto('${'-' * _cols}\n'));
+      bytes.addAll(_texto('${'-' * cols}\n'));
       for (final it in items) {
-        bytes.addAll(_texto(_lineaMonto(
+        bytes.addAll(_texto(_lineaMonto(cols, 
             '${it.cantidad} x ${it.nombre}${it.cortesia ? ' (cortesia)' : ''}', it.subtotal)));
       }
-      bytes.addAll(_texto('${'-' * _cols}\n'));
-      bytes.addAll(_texto(_lineaMonto('Subtotal', f.subtotal)));
+      bytes.addAll(_texto('${'-' * cols}\n'));
+      bytes.addAll(_texto(_lineaMonto(cols, 'Subtotal', f.subtotal)));
       // Hoy el único descuento que existe es la cortesía: se nombra así para
       // que el cliente vea por qué baja la cuenta.
       if (f.descuento > 0) {
-        bytes.addAll(_texto(_lineaMonto(
+        bytes.addAll(_texto(_lineaMonto(cols, 
             items.any((it) => it.cortesia) ? 'Cortesia' : 'Descuento', -f.descuento)));
       }
       // Con productos gravados y de tarifa 0% en la misma venta, el
       // comprobante debe mostrar las dos bases por separado.
       if (f.tieneTarifasMixtas) {
-        bytes.addAll(_texto(_lineaMonto('Subtotal 0%', f.subtotalSinIva!)));
-        bytes.addAll(_texto(_lineaMonto(
+        bytes.addAll(_texto(_lineaMonto(cols, 'Subtotal 0%', f.subtotalSinIva!)));
+        bytes.addAll(_texto(_lineaMonto(cols, 
             'Subtotal ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.subtotalGravado!)));
       }
-      bytes.addAll(_texto(_lineaMonto('IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva)));
-      if (f.propina > 0) bytes.addAll(_texto(_lineaMonto('Propina', f.propina)));
+      bytes.addAll(_texto(_lineaMonto(cols, 'IVA ${f.ivaPorcentaje.toStringAsFixed(0)}%', f.iva)));
+      if (f.propina > 0) bytes.addAll(_texto(_lineaMonto(cols, 'Propina', f.propina)));
       bytes.addAll(_boldOn);
-      bytes.addAll(_texto(_lineaMonto('TOTAL', f.total)));
+      bytes.addAll(_texto(_lineaMonto(cols, 'TOTAL', f.total)));
       bytes.addAll(_boldOff);
       bytes.addAll(_texto('Son: ${_totalEnLetras(f.total)}\n'));
-      bytes.addAll(_texto(_tituloSeparador('Forma de pago')));
+      bytes.addAll(_texto(_tituloSeparador(cols, 'Forma de pago')));
       if (f.total == 0) {
         bytes.addAll(_texto('Cortesia: sin cobro\n'));
         if (f.motivoCortesia != null) bytes.addAll(_texto('Motivo: ${f.motivoCortesia}\n'));
       } else if (f.pagos.isNotEmpty) {
         for (final p in f.pagos) {
-          bytes.addAll(_texto(_lineaMonto(p.etiqueta, p.monto)));
+          bytes.addAll(_texto(_lineaMonto(cols, p.etiqueta, p.monto)));
         }
         if (devueltoAdelanto != null) {
           bytes.addAll(_boldOn);
-          bytes.addAll(_texto(_lineaMonto('Devuelto del adelanto', devueltoAdelanto)));
+          bytes.addAll(_texto(_lineaMonto(cols, 'Devuelto del adelanto', devueltoAdelanto)));
           bytes.addAll(_boldOff);
         }
       } else {
-        bytes.addAll(_texto(_lineaMonto(metodoPago, f.total)));
+        bytes.addAll(_texto(_lineaMonto(cols, metodoPago, f.total)));
       }
       if (recibido != null && f.total > 0) {
         // En centavos enteros para que el vuelto no salga 6,4899999.
         final vuelto =
             ((recibido * 100).round() - ((montoEfectivo ?? f.total) * 100).round()) / 100;
-        bytes.addAll(_texto(_lineaMonto('Recibido', recibido)));
+        bytes.addAll(_texto(_lineaMonto(cols, 'Recibido', recibido)));
         bytes.addAll(_boldOn);
-        bytes.addAll(_texto(_lineaMonto('Vuelto', vuelto)));
+        bytes.addAll(_texto(_lineaMonto(cols, 'Vuelto', vuelto)));
         bytes.addAll(_boldOff);
       }
-      bytes.addAll(_texto('${'=' * _cols}\n'));
+      bytes.addAll(_texto('${'=' * cols}\n'));
 
       // ── Pie ──
       bytes.addAll(_center);
       bytes.addAll(_texto('¡Gracias por su preferencia!\n'));
-      if (esElectronica) {
+      // En 58 mm (32 columnas) estas líneas se partían a media palabra: se
+      // cortan a mano. En 80 mm quedan tal cual estaban.
+      if (esElectronica && cols < 48) {
+        bytes.addAll(_texto('Su factura electronica fue\n'));
+        bytes.addAll(_texto('enviada al correo registrado.\n'));
+        bytes.addAll(_texto('Verifiquela con la clave de\n'));
+        bytes.addAll(_texto('acceso en www.sri.gob.ec\n'));
+      } else if (esElectronica) {
         bytes.addAll(_texto('Su factura electronica fue enviada\n'));
         bytes.addAll(_texto('al correo registrado. Verifiquela con\n'));
         bytes.addAll(_texto('la clave de acceso en www.sri.gob.ec\n'));
+      } else if (cols < 48) {
+        bytes.addAll(_texto('Documento interno sin\n'));
+        bytes.addAll(_texto('validez tributaria.\n'));
       } else {
         bytes.addAll(_texto('Documento interno sin validez tributaria.\n'));
       }
@@ -510,8 +533,8 @@ class ComandaPrinter {
 
   /// Título centrado entre guiones al ancho del papel:
   /// "---------- Forma de pago ----------".
-  static String _tituloSeparador(String titulo) {
-    final resto = _cols - titulo.length - 2;
+  static String _tituloSeparador(int cols, String titulo) {
+    final resto = cols - titulo.length - 2;
     if (resto < 2) return '$titulo\n';
     final izq = resto ~/ 2;
     return '${'-' * izq} $titulo ${'-' * (resto - izq)}\n';
@@ -571,9 +594,12 @@ class ComandaPrinter {
     String? ip,
     int puerto = 9100,
     String? mac,
+    /// Ancho del papel de la impresora (80 o 58 mm).
+    int anchoPapel = 80,
     required CierreDetalladoModel cierre,
     String? nombreSucursal,
   }) async {
+    final cols = _columnas(anchoPapel);
     {
       final c = cierre;
       final bytes = <int>[
@@ -586,7 +612,7 @@ class ComandaPrinter {
         if (nombreSucursal != null && nombreSucursal.isNotEmpty)
           ..._texto('$nombreSucursal\n'),
         ..._left,
-        ..._texto('${'-' * _cols}\n'),
+        ..._texto('${'-' * cols}\n'),
         ..._texto('Apertura: ${_fechaHora(c.fechaApertura.toLocal())}\n'),
         ..._texto('  por ${c.usuarioApertura}\n'),
         if (c.fechaCierre != null) ...[
@@ -594,34 +620,34 @@ class ComandaPrinter {
           if (c.usuarioCierre?.isNotEmpty ?? false)
             ..._texto('  por ${c.usuarioCierre}\n'),
         ],
-        ..._texto('${'-' * _cols}\n'),
+        ..._texto('${'-' * cols}\n'),
         // ── Total de caja del turno: todo el dinero, con su desglose ──
         ..._boldOn, ..._texto('TOTAL DE CAJA DEL TURNO\n'), ..._boldOff,
-        ..._texto(_lineaMonto('Fondo inicial', c.montoInicial)),
+        ..._texto(_lineaMonto(cols, 'Fondo inicial', c.montoInicial)),
         // Lo pagado con adelantos no se suma: ese dinero entró otro día.
         if (c.ventasPorMetodo.isEmpty && c.totalVentas - c.totalAdelantosAplicados > 0.009)
-          ..._texto(_lineaMonto('+ Ventas', c.totalVentas - c.totalAdelantosAplicados))
+          ..._texto(_lineaMonto(cols, '+ Ventas', c.totalVentas - c.totalAdelantosAplicados))
         else
           for (final m in c.ventasPorMetodo)
-            ..._texto(_lineaMonto('+ Ventas ${m.metodo}', m.total)),
+            ..._texto(_lineaMonto(cols, '+ Ventas ${m.metodo}', m.total)),
         if (c.totalAdelantosOtrosMetodos > 0)
-          ..._texto(_lineaMonto('+ Adelantos transf/tarj', c.totalAdelantosOtrosMetodos)),
-        ..._texto(_lineaMonto('+ Otros ingresos', c.totalIngresos)),
-        ..._texto(_lineaMonto('- Egresos', -c.totalEgresos)),
+          ..._texto(_lineaMonto(cols, '+ Adelantos transf/tarj', c.totalAdelantosOtrosMetodos)),
+        ..._texto(_lineaMonto(cols, '+ Otros ingresos', c.totalIngresos)),
+        ..._texto(_lineaMonto(cols, '- Egresos', -c.totalEgresos)),
         ..._center, ..._doubleSize, ..._boldOn,
         ..._texto('TOTAL: ${c.totalCaja.toStringAsFixed(2)}\n'),
         ..._normalSize, ..._boldOff, ..._left,
         ..._texto('(efectivo + tarjeta + transf.)\n'),
-        ..._texto('${'-' * _cols}\n'),
+        ..._texto('${'-' * cols}\n'),
         // ── Arqueo: solo el efectivo fisico del cajon ──
         ..._boldOn, ..._texto('ARQUEO (SOLO EFECTIVO)\n'), ..._boldOff,
-        ..._texto(_lineaMonto('Monto inicial', c.montoInicial)),
-        ..._texto(_lineaMonto('+ Ventas efectivo', c.totalVentasEfectivo)),
-        ..._texto(_lineaMonto('+ Otros ingresos', c.totalIngresos)),
-        ..._texto(_lineaMonto('- Egresos', -c.totalEgresos)),
-        ..._texto(_lineaMonto('= Esperado', c.montoEsperado)),
+        ..._texto(_lineaMonto(cols, 'Monto inicial', c.montoInicial)),
+        ..._texto(_lineaMonto(cols, '+ Ventas efectivo', c.totalVentasEfectivo)),
+        ..._texto(_lineaMonto(cols, '+ Otros ingresos', c.totalIngresos)),
+        ..._texto(_lineaMonto(cols, '- Egresos', -c.totalEgresos)),
+        ..._texto(_lineaMonto(cols, '= Esperado', c.montoEsperado)),
         if (c.montoContado != null)
-          ..._texto(_lineaMonto('Contado', c.montoContado!)),
+          ..._texto(_lineaMonto(cols, 'Contado', c.montoContado!)),
       ];
       final dif = c.diferencia;
       if (dif != null) {
@@ -629,10 +655,10 @@ class ComandaPrinter {
             ? 'CAJA CUADRADA'
             : dif > 0 ? 'SOBRANTE' : 'FALTANTE';
         bytes.addAll(_boldOn);
-        bytes.addAll(_texto(_lineaMonto(etiqueta, dif)));
+        bytes.addAll(_texto(_lineaMonto(cols, etiqueta, dif)));
         bytes.addAll(_boldOff);
       }
-      bytes.addAll(_texto('${'-' * _cols}\n'));
+      bytes.addAll(_texto('${'-' * cols}\n'));
 
       // ── Ventas por método de pago ──
       bytes.addAll(_boldOn);
@@ -642,21 +668,21 @@ class ComandaPrinter {
         bytes.addAll(_texto('(sin ventas)\n'));
       } else {
         for (final m in c.ventasPorMetodo) {
-          bytes.addAll(_texto(_lineaMonto('${m.metodo} (${m.numPagos})', m.total)));
+          bytes.addAll(_texto(_lineaMonto(cols, '${m.metodo} (${m.numPagos})', m.total)));
         }
         if (c.totalAdelantosAplicados > 0) {
-          bytes.addAll(_texto(_lineaMonto('Con adelantos', c.totalAdelantosAplicados)));
+          bytes.addAll(_texto(_lineaMonto(cols, 'Con adelantos', c.totalAdelantosAplicados)));
         }
         bytes.addAll(_boldOn);
-        bytes.addAll(_texto(_lineaMonto(
+        bytes.addAll(_texto(_lineaMonto(cols, 
             'TOTAL (${c.totalFacturas} fact.)', c.totalVentas)));
         bytes.addAll(_boldOff);
         // Constancia: las propinas ya están dentro de las ventas.
         if (c.totalPropinas > 0) {
-          bytes.addAll(_texto(_lineaMonto('Incluye propinas', c.totalPropinas)));
+          bytes.addAll(_texto(_lineaMonto(cols, 'Incluye propinas', c.totalPropinas)));
         }
       }
-      bytes.addAll(_texto('${'-' * _cols}\n'));
+      bytes.addAll(_texto('${'-' * cols}\n'));
 
       // ── Cortesías: no son venta ni entran a caja, se informan aparte ──
       if (c.unidadesCortesia > 0) {
@@ -664,13 +690,13 @@ class ComandaPrinter {
         bytes.addAll(_texto('CORTESIAS DEL TURNO\n'));
         bytes.addAll(_boldOff);
         for (final x in c.cortesias) {
-          bytes.addAll(_texto(_lineaMonto('${x.cantidad} x ${x.plato}', x.valor)));
+          bytes.addAll(_texto(_lineaMonto(cols, '${x.cantidad} x ${x.plato}', x.valor)));
           if ((x.motivo ?? '').isNotEmpty) bytes.addAll(_texto('  ${x.motivo}\n'));
         }
-        bytes.addAll(_texto(_lineaMonto(
+        bytes.addAll(_texto(_lineaMonto(cols, 
             'Total ${c.unidadesCortesia} a precio carta', c.valorCortesias)));
         bytes.addAll(_texto('(no son venta ni entran a caja)\n'));
-        bytes.addAll(_texto('${'-' * _cols}\n'));
+        bytes.addAll(_texto('${'-' * cols}\n'));
       }
 
       // ── Adelantos de reservas (solo si el negocio los usa) ──
@@ -681,18 +707,18 @@ class ComandaPrinter {
         if (c.adelantosRecibidos.isNotEmpty) {
           bytes.addAll(_texto('Recibidos (no son venta):\n'));
           for (final a in c.adelantosRecibidos) {
-            bytes.addAll(_texto(_lineaMonto('${a.cliente} ${a.metodo}', a.monto)));
+            bytes.addAll(_texto(_lineaMonto(cols, '${a.cliente} ${a.metodo}', a.monto)));
           }
-          bytes.addAll(_texto(_lineaMonto('Total recibido', c.totalAdelantosRecibidos)));
+          bytes.addAll(_texto(_lineaMonto(cols, 'Total recibido', c.totalAdelantosRecibidos)));
         }
         if (c.adelantosAplicados.isNotEmpty) {
           bytes.addAll(_texto('Usados como pago hoy:\n'));
           for (final a in c.adelantosAplicados) {
-            bytes.addAll(_texto(_lineaMonto(a.cliente, a.monto)));
+            bytes.addAll(_texto(_lineaMonto(cols, a.cliente, a.monto)));
           }
-          bytes.addAll(_texto(_lineaMonto('Total usado', c.totalAdelantosAplicados)));
+          bytes.addAll(_texto(_lineaMonto(cols, 'Total usado', c.totalAdelantosAplicados)));
         }
-        bytes.addAll(_texto('${'-' * _cols}\n'));
+        bytes.addAll(_texto('${'-' * cols}\n'));
       }
 
       // ── Ingresos extra ──
@@ -703,12 +729,12 @@ class ComandaPrinter {
         bytes.addAll(_texto('(ninguno)\n'));
       } else {
         for (final m in c.ingresos) {
-          bytes.addAll(_texto(_lineaMonto(
+          bytes.addAll(_texto(_lineaMonto(cols, 
               m.concepto.isEmpty ? 'Sin concepto' : m.concepto, m.monto)));
         }
-        bytes.addAll(_texto(_lineaMonto('Total ingresos', c.totalIngresos)));
+        bytes.addAll(_texto(_lineaMonto(cols, 'Total ingresos', c.totalIngresos)));
       }
-      bytes.addAll(_texto('${'-' * _cols}\n'));
+      bytes.addAll(_texto('${'-' * cols}\n'));
 
       // ── Egresos ──
       bytes.addAll(_boldOn);
@@ -718,12 +744,12 @@ class ComandaPrinter {
         bytes.addAll(_texto('(ninguno)\n'));
       } else {
         for (final m in c.egresos) {
-          bytes.addAll(_texto(_lineaMonto(
+          bytes.addAll(_texto(_lineaMonto(cols, 
               m.concepto.isEmpty ? 'Sin concepto' : m.concepto, m.monto)));
         }
-        bytes.addAll(_texto(_lineaMonto('Total egresos', c.totalEgresos)));
+        bytes.addAll(_texto(_lineaMonto(cols, 'Total egresos', c.totalEgresos)));
       }
-      bytes.addAll(_texto('${'-' * _cols}\n'));
+      bytes.addAll(_texto('${'-' * cols}\n'));
 
       // ── Ventas por plato ──
       if (c.ventasPorPlato.isNotEmpty) {
@@ -731,14 +757,14 @@ class ComandaPrinter {
         bytes.addAll(_texto('VENTAS POR PLATO\n'));
         bytes.addAll(_boldOff);
         for (final v in c.ventasPorPlato) {
-          bytes.addAll(_texto(_lineaMonto('${v.cantidad} x ${v.plato}', v.total)));
+          bytes.addAll(_texto(_lineaMonto(cols, '${v.cantidad} x ${v.plato}', v.total)));
         }
-        bytes.addAll(_texto('${'-' * _cols}\n'));
+        bytes.addAll(_texto('${'-' * cols}\n'));
       }
 
       if ((c.observaciones ?? '').trim().isNotEmpty) {
         bytes.addAll(_texto('Obs: ${c.observaciones}\n'));
-        bytes.addAll(_texto('${'-' * _cols}\n'));
+        bytes.addAll(_texto('${'-' * cols}\n'));
       }
 
       bytes.addAll(_center);
@@ -758,6 +784,8 @@ class ComandaPrinter {
     String? ip,
     int puerto = 9100,
     String? mac,
+    /// Ancho del papel de la impresora (80 o 58 mm).
+    int anchoPapel = 80,
     required String nombreSucursal,
     required String lugar,
     required int numeroOrden,
@@ -767,6 +795,7 @@ class ComandaPrinter {
     required double total,
     required String atendidoPor,
   }) async {
+    final cols = _columnas(anchoPapel);
     String pct(double v) =>
         v == v.truncateToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
     final tarifas = basePorTarifa.keys.toList()..sort();
@@ -779,28 +808,28 @@ class ComandaPrinter {
       ..._normalSize,
       ..._texto('NO ES COMPROBANTE DE VENTA\n'),
       ..._boldOff, ..._left,
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._texto('$lugar - Orden #$numeroOrden\n'),
       ..._texto('Fecha: ${_fechaHora(DateTime.now())}\n'),
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       for (final l in lineas) ...[
-        ..._texto(_lineaMonto('${l.cantidad} x ${l.plato}', l.cortesia ? 0 : l.subtotal)),
+        ..._texto(_lineaMonto(cols, '${l.cantidad} x ${l.plato}', l.cortesia ? 0 : l.subtotal)),
         if (l.cortesia) ..._texto('    CORTESIA\n'),
       ],
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       // Con tarifas mixtas, cada base por separado (como en el comprobante).
       if (tarifas.length > 1)
-        for (final t in tarifas) ..._texto(_lineaMonto('Subtotal ${pct(t)}%', basePorTarifa[t]!))
+        for (final t in tarifas) ..._texto(_lineaMonto(cols, 'Subtotal ${pct(t)}%', basePorTarifa[t]!))
       else
-        ..._texto(_lineaMonto('Subtotal', basePorTarifa.values.fold(0.0, (s, v) => s + v))),
+        ..._texto(_lineaMonto(cols, 'Subtotal', basePorTarifa.values.fold(0.0, (s, v) => s + v))),
       if (iva > 0)
-        ..._texto(_lineaMonto(
+        ..._texto(_lineaMonto(cols, 
             'IVA ${pct(tarifas.where((t) => t > 0).fold(0.0, (m, t) => t > m ? t : m))}%', iva)),
       // En doble tamaño caben 16 columnas: "TOTAL $1234.56" entra.
       ..._center, ..._boldOn, ..._doubleSize,
       ..._texto('TOTAL \$${total.toStringAsFixed(2)}\n'),
       ..._normalSize, ..._boldOff, ..._left,
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._center,
       // Líneas de hasta 32 columnas (rollo de 58 mm).
       ..._texto('Documento informativo, sin\n'),
@@ -819,6 +848,8 @@ class ComandaPrinter {
     String? ip,
     int puerto = 9100,
     String? mac,
+    /// Ancho del papel de la impresora (80 o 58 mm).
+    int anchoPapel = 80,
     required String nombreSucursal,
     required String cliente,
     String? cedula,
@@ -830,6 +861,7 @@ class ComandaPrinter {
     required DateTime fecha,
     required String atendidoPor,
   }) async {
+    final cols = _columnas(anchoPapel);
     String fechaCorta(DateTime d) =>
         '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
     final bytes = <int>[
@@ -841,19 +873,19 @@ class ComandaPrinter {
       ..._boldOff,
       ..._texto('(no es factura)\n'),
       ..._left,
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._texto('Fecha: ${_fechaHora(fecha.toLocal())}\n'),
       ..._texto('Cliente: $cliente\n'),
       if (cedula != null && cedula.isNotEmpty) ..._texto('C.I./RUC: $cedula\n'),
       if (fechaPrevista != null) ..._texto('Reserva para: ${fechaCorta(fechaPrevista)}\n'),
       if (nota != null && nota.isNotEmpty) ..._texto('Nota: $nota\n'),
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       ..._boldOn,
-      ..._texto(_lineaMonto('ADELANTO', monto)),
+      ..._texto(_lineaMonto(cols, 'ADELANTO', monto)),
       ..._boldOff,
       ..._texto('Pago: $metodoPago\n'),
       if (referencia != null && referencia.isNotEmpty) ..._texto('Ref: $referencia\n'),
-      ..._texto('${'-' * _cols}\n'),
+      ..._texto('${'-' * cols}\n'),
       // Líneas de hasta 32 columnas (ancho del rollo de 58 mm).
       ..._texto('Se descuenta del consumo el dia\n'),
       ..._texto('de la reserva. Si cancela, queda\n'),
@@ -864,13 +896,19 @@ class ComandaPrinter {
     return _enviar(ip: ip, puerto: puerto, mac: mac, bytes: bytes);
   }
 
-  /// Concepto a la izquierda y monto alineado a la derecha (32 columnas).
-  static String _lineaMonto(String concepto, double monto) {
+  /// Concepto a la izquierda y monto alineado a la derecha, al ancho [cols].
+  static String _lineaMonto(int cols, String concepto, double monto) {
     final valor = monto.toStringAsFixed(2);
     var nombre = concepto;
-    final ancho = _cols - valor.length - 1;
+    final ancho = cols - valor.length - 1;
+    // En 58 mm cortarlo dejaba "1 x Jugo de naranja (cortes": el nombre va
+    // completo en su línea y el monto, alineado, en la siguiente. En 80 mm
+    // se sigue recortando como siempre (casi nunca hace falta).
+    if (nombre.length > ancho && cols < 48) {
+      return '$nombre\n${' ' * (cols - valor.length)}$valor\n';
+    }
     if (nombre.length > ancho) nombre = nombre.substring(0, ancho);
-    return '$nombre${' ' * (_cols - nombre.length - valor.length)}$valor\n';
+    return '$nombre${' ' * (cols - nombre.length - valor.length)}$valor\n';
   }
 
   static String _fechaHora(DateTime d) =>

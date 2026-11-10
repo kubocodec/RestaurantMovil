@@ -101,6 +101,7 @@ class _CierreDetalleBodyState extends State<_CierreDetalleBody> {
         ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
         mac: elegida.mac,
+        anchoPapel: elegida.anchoPapel,
         cierre: cierre,
       );
       if (mounted) {

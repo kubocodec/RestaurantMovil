@@ -718,6 +718,7 @@ class _DetalleComprobanteSheetState extends State<_DetalleComprobanteSheet> {
         ip: elegida.ip,
         puerto: elegida.puerto ?? 9100,
         mac: elegida.mac,
+        anchoPapel: elegida.anchoPapel,
         factura: f,
         items: f.items
             .map((it) => ReciboItem(

@@ -224,7 +224,15 @@ backend que aún no los envía no debe cambiar nada en pantalla.
   cobro **encima** de la orden (`push`, no `go` ni replace); al volver, con o sin cobrar,
   se sale como siempre y lo no cobrado queda en la lista. El mesero sigue igual. Con el
   interruptor apagado o un backend que no envía el campo, todo se ve como antes.
-- `core/printing/comanda_printer.dart` — comandas y tickets térmicos.
+- `core/printing/comanda_printer.dart` — comandas y tickets térmicos. **Ancho del papel
+  por impresora** (`anchoPapel`, 80 o 58 mm; sin dato = 80): cada impresión recibe las
+  columnas (`cols`: 48 o 32), nunca una constante. En 80 mm el ticket debe salir **byte
+  por byte igual** que antes (se comprobó así al hacerlo); lo propio de 58 mm va siempre
+  detrás de `cols < 48`: pie del recibo cortado a mano y nombres largos con el monto en
+  la línea siguiente en vez de recortados. La comanda toma el ancho de cada ítem
+  (`impresoraAnchoPapel`). Los POS portátiles del evento traen una impresora Bluetooth
+  **virtual** con la misma MAC en todos (`00:AA:11:BB:22:CC`, no se ve desde afuera):
+  una sola impresora registrada en la sucursal sirve a todos y cada uno imprime en la suya.
 
 ## Qué probar antes de sacar un APK
 

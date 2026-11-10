@@ -345,6 +345,8 @@ class ImpresoraModel {
   final String? ip;
   final int? puerto;
   final String? mac;
+  /// Ancho del papel en mm (80 o 58). Un backend viejo no lo envía: 80.
+  final int anchoPapel;
   final bool activo;
   final List<String> categorias;
   final List<String> categoriaIds;
@@ -357,6 +359,7 @@ class ImpresoraModel {
     this.ip,
     this.puerto,
     this.mac,
+    this.anchoPapel = 80,
     required this.activo,
     required this.categorias,
     required this.categoriaIds,
@@ -373,6 +376,7 @@ class ImpresoraModel {
     ip:          j['ip']?.toString(),
     puerto:      (j['puerto'] as num?)?.toInt(),
     mac:         j['mac']?.toString(),
+    anchoPapel:  (j['anchoPapel'] as num?)?.toInt() == 58 ? 58 : 80,
     activo:      j['activo'] ?? true,
     categorias:  ((j['categorias'] as List?) ?? []).map((e) => e.toString()).toList(),
     categoriaIds: ((j['categoriaIds'] as List?) ?? []).map((e) => e.toString()).toList(),
