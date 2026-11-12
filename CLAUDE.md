@@ -13,6 +13,13 @@ repo `BackendRestaurant`, que se despliega aparte.
   `assets/`, `pubspec` o `deploy/`. El APK y el IPA se siguen compilando y repartiendo
   a mano: por eso los clientes andan con una versión más vieja que el servidor, y todo
   cambio de backend debe ser compatible hacia atrás.
+- **La web no tiene archivos con hash en el nombre**: `main.dart.js`,
+  `flutter_bootstrap.js` y `canvaskit/` se llaman siempre igual, y el service worker
+  de Flutter 3.44 ya no avisa de versiones nuevas. Por eso `deploy/nginx.conf` sirve
+  todo con `Cache-Control: no-cache` (el navegador pregunta y recibe 304 si no cambió)
+  y el workflow agrega `?v=<commit>` a los dos scripts de arranque. Hasta el
+  2026-11-12 se cacheaban 30 días y el cajero se quedaba con la versión vieja
+  semanas. **No volver a poner caché larga** sin nombres con hash.
 - **`flutter analyze` antes de cada push.** Hay ~119 avisos `info` preexistentes
   (`withOpacity`, `unnecessary_const`, llaves de `if`); lo que no puede haber es
   `error` ni `warning` nuevos en los archivos tocados.
