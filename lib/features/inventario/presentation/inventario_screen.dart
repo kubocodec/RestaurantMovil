@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/network/api_client.dart';
+import '../../reportes/exportar/datos_exportacion.dart';
+import '../../reportes/exportar/exportar_dialogo.dart';
 import '../data/inventario_repository.dart';
 import 'compras_tab.dart';
 import 'insumos_tab.dart';
@@ -17,7 +19,9 @@ import 'receta_screen.dart';
 /// negocios que no llevan inventario nunca ven esta pantalla.
 class InventarioScreen extends StatefulWidget {
   final String sucursalId;
-  const InventarioScreen({super.key, required this.sucursalId});
+  /// Solo para el nombre del Excel descargado.
+  final String? sucursalNombre;
+  const InventarioScreen({super.key, required this.sucursalId, this.sucursalNombre});
 
   @override
   State<InventarioScreen> createState() => _InventarioScreenState();
@@ -25,6 +29,29 @@ class InventarioScreen extends StatefulWidget {
 
 class _InventarioScreenState extends State<InventarioScreen> {
   final _repo = InventarioRepository();
+
+  /// Stock al momento y compras de los últimos 30 días (lo mismo que muestra
+  /// la pestaña Compras al abrirse).
+  Future<void> _descargarExcel() async {
+    final hoy = DateTime.now();
+    final nombre = (widget.sucursalNombre ?? '').trim();
+    final mensaje = await ExportarExcelDialogo.mostrar(
+      context,
+      ExportarExcelDialogo(
+        restaurantId: '',
+        sucursales: [(id: widget.sucursalId, nombre: nombre.isEmpty ? 'Sucursal' : nombre)],
+        todas: false,
+        alcance: nombre.isEmpty ? 'Inventario' : 'Inventario $nombre',
+        desde: DateTime(hoy.year, hoy.month, hoy.day - 29),
+        hasta: hoy,
+        disponibles: SeccionExcel.deInventario,
+        detalle: 'Stock de hoy · compras de los últimos 30 días',
+      ),
+    );
+    if (mensaje == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensaje), backgroundColor: AppColors.success));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +61,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
         backgroundColor: AppColors.background,
         appBar: AppBar(
           title: const Text('Inventario'),
+          actions: [
+            // Solo en la web y para el administrador (ver ExportarExcelDialogo).
+            if (ExportarExcelDialogo.disponible(context))
+              IconButton(
+                tooltip: 'Descargar Excel',
+                icon: const Icon(Icons.download_rounded),
+                onPressed: _descargarExcel,
+              ),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,

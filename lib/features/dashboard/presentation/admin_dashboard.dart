@@ -260,7 +260,7 @@ class _AdminBodyState extends State<_AdminBody> {
     final sucursalId = user?.sucursalId ?? '';
     if (sucursalId.isEmpty) return;
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => InventarioScreen(sucursalId: sucursalId),
+      builder: (_) => InventarioScreen(sucursalId: sucursalId, sucursalNombre: user?.sucursalNombre),
     ));
     if (mounted) _loadStats();
   }

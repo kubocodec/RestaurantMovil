@@ -34,6 +34,11 @@ abstract final class Capacidades {
   /// esconde los botones de imprimir en vez de dejarlos fallar al tocarlos.
   static bool get puedeImprimir => impresionRed || impresionBluetooth;
 
+  /// Bajar un archivo que arma la app (los reportes en Excel). En el
+  /// navegador se entrega como descarga. En el celular habría que guardarlo
+  /// y compartirlo, que es otro flujo; mientras tanto, el botón no aparece.
+  static bool get descargarArchivos => kIsWeb;
+
   static bool get esWeb => kIsWeb;
 
   static bool get esEscritorio =>

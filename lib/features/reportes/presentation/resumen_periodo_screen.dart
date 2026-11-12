@@ -5,6 +5,8 @@ import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
 import '../data/reportes_repository.dart';
 import '../data/resumen_periodo_model.dart';
+import '../exportar/datos_exportacion.dart';
+import '../exportar/exportar_dialogo.dart';
 import 'cortesias_screen.dart';
 import 'ordenes_anuladas_screen.dart';
 
@@ -124,13 +126,56 @@ class _ResumenPeriodoScreenState extends State<ResumenPeriodoScreen> {
 
   String _m(double v) => '\$${_fmt.format(v)}';
 
+  /// Exporta lo que está elegido en pantalla: el mismo período y la misma
+  /// sucursal (o todas).
+  Future<void> _descargarExcel() async {
+    final todas = _sucursal == _todas;
+    final List<SucursalExcel> sucursales;
+    if (todas) {
+      sucursales = [for (final s in widget.sucursales) (id: s.sucursalId, nombre: s.nombre)];
+    } else {
+      final s = widget.sucursales.where((x) => x.sucursalId == _sucursal).firstOrNull;
+      sucursales = [(id: _sucursal, nombre: s?.nombre ?? _r?.alcance ?? 'Sucursal')];
+    }
+    final alcance = _r?.alcance.isNotEmpty == true
+        ? _r!.alcance
+        : (todas ? 'Todas las sucursales' : sucursales.first.nombre);
+    final mensaje = await ExportarExcelDialogo.mostrar(
+      context,
+      ExportarExcelDialogo(
+        restaurantId: widget.restaurantId,
+        sucursales: sucursales,
+        todas: todas,
+        alcance: alcance,
+        desde: _desde,
+        hasta: _hasta,
+        // Sin la lista de sucursales no hay a quién pedirle el detalle.
+        disponibles: sucursales.isEmpty
+            ? SeccionExcel.values.where((s) => s.delResumen).toSet()
+            : SeccionExcel.deReportes,
+      ),
+    );
+    if (mensaje == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensaje), backgroundColor: AppColors.success));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Resumen del período'),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        actions: [
+          // Solo en la web y para el administrador (ver ExportarExcelDialogo).
+          if (ExportarExcelDialogo.disponible(context))
+            IconButton(
+              tooltip: 'Descargar Excel',
+              icon: const Icon(Icons.download_rounded),
+              onPressed: _loading ? null : _descargarExcel,
+            ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+        ],
       ),
       body: SafeArea(
         child: Column(
