@@ -49,6 +49,13 @@ dependencies:
   # Abrir el RIDE (PDF) de la factura electrónica en el navegador
   url_launcher: ^6.3.1
 
+  # Reportes en Excel desde la web (lib/core/exportar/). Ya venían como
+  # dependencias de otros paquetes; se declaran porque se usan directo.
+  # NO usar el paquete `excel`: pide archive ^3 y flutter_native_splash
+  # arrastra archive ^4, así que `pub get` deja de resolver.
+  archive: ^4.0.0
+  web: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

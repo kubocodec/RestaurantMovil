@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/settings/ajustes_texto.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
+import '../../../core/models/orden_model.dart';
 import '../../../core/models/user_model.dart';
 import '../../../features/adelantos/data/adelantos_repository.dart';
 import '../../../features/adelantos/presentation/adelantos_screen.dart';
@@ -14,9 +15,12 @@ import '../../../features/inventario/presentation/inventario_screen.dart';
 import '../../../features/mesas/data/mesas_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/aviso_pago_banner.dart';
 import '../../../shared/widgets/stat_card.dart';
+import '../../reportes/data/resumen_periodo_model.dart';
+import 'panel_admin_escritorio.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -29,12 +33,13 @@ class AdminDashboard extends StatelessWidget {
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text('Panel Administrador'),
+            title: Text(EscritorioScope.enUso(context) ? 'Panel' : 'Panel Administrador'),
             actions: [
               IconButton(icon: const Icon(Icons.notifications_outlined), onPressed: () {}),
             ],
           ),
-          drawer: user != null ? AppDrawer(user: user) : null,
+          // Con el menú lateral de la web de escritorio, sin hamburguesa.
+          drawer: user != null && !EscritorioScope.enUso(context) ? AppDrawer(user: user) : null,
           body: _AdminBody(user: user),
         );
       },
@@ -71,6 +76,74 @@ class _AdminBodyState extends State<_AdminBody> {
   final _adelantosRepo = AdelantosRepository();
   /// Solo los restaurantes con adelantos de reservas ven ese módulo.
   bool _adelantosHabilitados = false;
+
+  // ── Solo en la web de escritorio (PanelAdminEscritorio) ────────────────
+  // En el celular nada de esto se pide: el panel queda igual que siempre.
+  bool _escritorio = false;
+  List<OrdenModel> _ordenes = const [];
+  int _mesasTotal = 0;
+  List<VentaDia> _semanaPrevia = const [];
+  List<PlatoVentaModel>? _masVendidos;
+  DateTime? _ultimoTop;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final escritorio = EscritorioScope.enUso(context);
+    if (escritorio && !_escritorio) {
+      _escritorio = true;
+      _cargarSemana();
+      _cargarMasVendidos();
+    }
+    _escritorio = escritorio;
+  }
+
+  /// Los 6 días anteriores, una sola vez: lo de días pasados no cambia. Hoy
+  /// sale de las estadísticas de siempre, que se refrescan cada 30 s.
+  Future<void> _cargarSemana() async {
+    final sucursalId = user?.sucursalId ?? '';
+    if (sucursalId.isEmpty) return;
+    final hoy = DateTime.now();
+    final dias = [for (var i = 6; i >= 1; i--) DateTime(hoy.year, hoy.month, hoy.day - i)];
+    try {
+      final r = await Future.wait(dias.map((d) => _reportesRepo.getResumenDiario(sucursalId, fecha: d)));
+      if (!mounted) return;
+      setState(() => _semanaPrevia = [
+            for (var i = 0; i < dias.length; i++) (dia: dias[i], ventas: r[i].totalVentas - r[i].totalPropinas),
+          ]);
+    } catch (_) {
+      // Sin la semana el panel sigue sirviendo: el gráfico muestra solo hoy.
+    }
+  }
+
+  /// Lo más vendido de hoy. Es una consulta agregada: se renueva cada dos
+  /// minutos y no en cada refresco de 30 s.
+  Future<void> _cargarMasVendidos() async {
+    final u = user;
+    if (u == null || u.sucursalId.isEmpty) return;
+    final ahora = DateTime.now();
+    if (_ultimoTop != null && ahora.difference(_ultimoTop!) < const Duration(minutes: 2)) return;
+    _ultimoTop = ahora;
+    try {
+      final r = await _reportesRepo.getResumenPeriodo(
+          sucursalId: u.sucursalId, restaurantId: u.restaurantId, desde: ahora, hasta: ahora);
+      if (!mounted) return;
+      final top = r.platos.where((p) => p.unidades > 0).toList()
+        ..sort((a, b) => b.unidades != a.unidades ? b.unidades.compareTo(a.unidades) : b.ventas.compareTo(a.ventas));
+      setState(() => _masVendidos = top.take(5).toList());
+    } catch (_) {
+      if (mounted && _masVendidos == null) setState(() => _masVendidos = const []);
+    }
+  }
+
+  Future<void> _abrirOrden(OrdenModel o) async {
+    if (o.mesaId.isEmpty) {
+      await context.push('/mesero/para-llevar?ordenId=${o.ordenId}');
+    } else {
+      await context.push('/mesero/orden/${o.mesaId}?nombre=${Uri.encodeComponent(o.numeroMesa)}&libre=false');
+    }
+    if (mounted) _loadStats();
+  }
 
   @override
   void initState() {
@@ -111,7 +184,7 @@ class _AdminBodyState extends State<_AdminBody> {
       if (!mounted) return;
       final resumen = results[0] as ResumenDiarioModel;
       final mesas = results[1] as List;
-      final ordenes = results[2] as List;
+      final ordenes = results[2] as List<OrdenModel>;
       final alertas = results[3] as AlertasInventarioModel;
       final adelantos = results[4] as ListaAdelantos;
       setState(() {
@@ -121,8 +194,11 @@ class _AdminBodyState extends State<_AdminBody> {
         _facturasHoy = resumen.totalFacturas;
         _mesasOcupadas = mesas.where((m) => m.estado == 'OCUPADA').length;
         _ordenesActivas = ordenes.length;
+        _ordenes = ordenes;
+        _mesasTotal = mesas.length;
         _cargandoStats = false;
       });
+      if (_escritorio) _cargarMasVendidos();
     } catch (_) {
       if (mounted) setState(() => _cargandoStats = false);
     }
@@ -130,6 +206,23 @@ class _AdminBodyState extends State<_AdminBody> {
 
   @override
   Widget build(BuildContext context) {
+    if (EscritorioScope.enUso(context)) {
+      return PanelAdminEscritorio(
+        cargando: _cargandoStats,
+        ventasHoy: _ventasHoy,
+        facturasHoy: _facturasHoy,
+        mesasOcupadas: _mesasOcupadas,
+        mesasTotal: _mesasTotal,
+        ordenes: _ordenes,
+        semanaPrevia: _semanaPrevia,
+        masVendidos: _masVendidos,
+        avisoPago: const AvisoPagoBanner(),
+        avisoInventario: _buildAvisoInventario(context),
+        onAbrirOrden: _abrirOrden,
+        onVerMesas: () => _irA('/mesero/mesas'),
+        onVerReportes: () => _irA('/admin/reportes'),
+      );
+    }
     return SafeArea(
       child: RefreshIndicator(
       onRefresh: _loadStats,
@@ -260,7 +353,7 @@ class _AdminBodyState extends State<_AdminBody> {
     final sucursalId = user?.sucursalId ?? '';
     if (sucursalId.isEmpty) return;
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => InventarioScreen(sucursalId: sucursalId),
+      builder: (_) => InventarioScreen(sucursalId: sucursalId, sucursalNombre: user?.sucursalNombre),
     ));
     if (mounted) _loadStats();
   }

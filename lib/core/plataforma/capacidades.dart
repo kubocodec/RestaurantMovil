@@ -34,6 +34,11 @@ abstract final class Capacidades {
   /// esconde los botones de imprimir en vez de dejarlos fallar al tocarlos.
   static bool get puedeImprimir => impresionRed || impresionBluetooth;
 
+  /// Bajar un archivo que arma la app (los reportes en Excel). En el
+  /// navegador se entrega como descarga. En el celular habría que guardarlo
+  /// y compartirlo, que es otro flujo; mientras tanto, el botón no aparece.
+  static bool get descargarArchivos => kIsWeb;
+
   static bool get esWeb => kIsWeb;
 
   static bool get esEscritorio =>
@@ -46,6 +51,12 @@ abstract final class Capacidades {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+
+  /// Menú lateral fijo, barra clara y demás estructura de escritorio
+  /// (lib/core/escritorio/). Solo en la web por ahora: Windows es donde se
+  /// cobra en el mostrador y no se pudo probar allí, y las tablets usan el
+  /// APK. Para activarlo en Windows basta con cambiar este getter.
+  static bool get estructuraEscritorio => kIsWeb;
 
   /// Pantalla grande con teclado y mouse: web y escritorio. La usa el layout
   /// para no estirar a lo ancho una interfaz pensada para el celular.

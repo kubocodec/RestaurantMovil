@@ -93,6 +93,20 @@ jobs:
       - name: Compilar para el navegador
         run: flutter build web --release --no-web-resources-cdn
 
+      # index.html nunca se cachea, así que cambiarle la dirección a los dos
+      # scripts en cada despliegue obliga al navegador a bajarlos de nuevo,
+      # aunque los tenga guardados con la caché de 30 días que había antes
+      # (ver deploy/nginx.conf). Los grep hacen fallar el despliegue si
+      # Flutter cambia el formato y el sed deja de encontrar el texto.
+      - name: Versionar los scripts de arranque
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i "s|src=\"flutter_bootstrap.js\"|src=\"flutter_bootstrap.js?v=${V}\"|" build/web/index.html
+          sed -i "s|\"mainJsPath\":\"main.dart.js\"|\"mainJsPath\":\"main.dart.js?v=${V}\"|" build/web/flutter_bootstrap.js
+          grep -q "flutter_bootstrap.js?v=${V}" build/web/index.html
+          grep -q "main.dart.js?v=${V}" build/web/flutter_bootstrap.js
+          echo "Arranque versionado con ${V}"
+
       # El contexto de Docker es solo el resultado, no el repositorio entero:
       # mandar 1 GB de código y assets al daemon para copiar una carpeta es
       # tiempo de build tirado.

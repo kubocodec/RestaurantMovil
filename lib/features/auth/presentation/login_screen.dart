@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
@@ -62,6 +63,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         },
         builder: (context, state) {
           final isLoading = state is AuthLoading;
+          // En la web, con lugar, la pantalla se parte en dos (maqueta del
+          // 2026-11-12). El formulario es el mismo; en el celular, nada cambia.
+          if (kIsWeb && MediaQuery.sizeOf(context).width >= 900) {
+            return _buildPartida(isLoading);
+          }
           return SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -84,6 +90,100 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           );
         },
       ),
+    );
+  }
+
+  Widget _buildPartida(bool isLoading) {
+    const blanco = Colors.white;
+    const tenue = Color(0xBFFFFFFF);
+    Widget ventaja(IconData icono, String texto) => Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: const Color(0x1AFFFFFF), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icono, size: 19, color: blanco),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(texto, style: const TextStyle(fontFamily: 'Poppins', fontSize: 14, color: Color(0xE6FFFFFF))),
+              ),
+            ],
+          ),
+        );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          flex: 21,
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primaryDark, AppColors.primary, AppColors.earth2],
+                stops: [0, 0.7, 1],
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 56),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(color: AppColors.surfaceVariant, borderRadius: BorderRadius.circular(14)),
+                  child: const Icon(Icons.restaurant, size: 28, color: AppColors.primaryDark),
+                ),
+                const SizedBox(height: 26),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: const Text('Tu restaurante, desde cualquier pantalla',
+                      style: TextStyle(
+                          fontFamily: 'Poppins', fontSize: 34, height: 1.15, fontWeight: FontWeight.w700, color: blanco)),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: const Text(
+                      'Pedidos, cobro, inventario y reportes de todas tus sucursales. '
+                      'Lo que el mesero anota en el celular lo ves aquí al instante.',
+                      style: TextStyle(fontFamily: 'Poppins', fontSize: 15, height: 1.6, color: tenue)),
+                ),
+                const Spacer(),
+                ventaja(Icons.soup_kitchen_outlined, 'Pedidos y cocina en tiempo real'),
+                ventaja(Icons.receipt_long_outlined, 'Facturación electrónica con el SRI'),
+                ventaja(Icons.table_view_outlined, 'Reportes en Excel para tu contador'),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 20,
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(40),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: Column(
+                    children: [
+                      _buildForm(isLoading),
+                      const SizedBox(height: 28),
+                      _buildLoginButton(isLoading),
+                      const SizedBox(height: 24),
+                      _buildFooter(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

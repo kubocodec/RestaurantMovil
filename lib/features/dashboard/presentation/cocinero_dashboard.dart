@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/user_model.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../shared/widgets/app_drawer.dart';
 
 class CocineroDashboard extends StatelessWidget {
@@ -21,7 +22,8 @@ class CocineroDashboard extends StatelessWidget {
             title: const Text('Panel Cocina'),
             backgroundColor: AppColors.cocineroColor,
           ),
-          drawer: user != null ? AppDrawer(user: user) : null,
+          // Con el menú lateral de la web de escritorio, sin hamburguesa.
+          drawer: user != null && !EscritorioScope.enUso(context) ? AppDrawer(user: user) : null,
           body: _CocinaBody(user: user),
           floatingActionButton: FloatingActionButton.extended(
             backgroundColor: AppColors.cocineroColor,

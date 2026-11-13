@@ -12,6 +12,7 @@ import '../../../features/adelantos/presentation/adelantos_screen.dart';
 import '../../../core/caja/caja_actual.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/aviso_pago_banner.dart';
 import '../../../shared/widgets/stat_card.dart';
@@ -29,7 +30,8 @@ class CajeroDashboard extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Panel Cajero'),
           ),
-          drawer: user != null ? AppDrawer(user: user) : null,
+          // Con el menú lateral de la web de escritorio, sin hamburguesa.
+          drawer: user != null && !EscritorioScope.enUso(context) ? AppDrawer(user: user) : null,
           body: _CajeroBody(user: user),
         );
       },

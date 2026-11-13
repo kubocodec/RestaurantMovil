@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/escritorio/escritorio.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/models/mesa_model.dart';
 import '../../../core/models/orden_model.dart';
 import '../../../core/models/salon_model.dart';
@@ -10,7 +12,9 @@ import '../../../core/network/api_client.dart';
 import '../../../features/auth/bloc/auth_bloc.dart';
 import '../../../features/auth/bloc/auth_state.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../shared/widgets/precuenta_screen.dart';
 import '../data/mesas_repository.dart';
+import 'panel_orden_mesa.dart';
 
 class MesasScreen extends StatefulWidget {
   const MesasScreen({super.key});
@@ -24,6 +28,11 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
   List<SalonModel> _salones = [];
   List<MesaModel> _todasMesas = [];
   List<OrdenModel> _paraLlevar = [];
+  /// Todas las órdenes abiertas, para el resumen de la web de escritorio.
+  List<OrdenModel> _ordenes = [];
+  /// Orden elegida en el escritorio (null = ninguna). En el celular no se usa:
+  /// tocar una mesa la abre, como siempre.
+  String? _ordenElegida;
   // Local sin mesas (interruptor de la sucursal): solo pedidos para llevar.
   bool _soloParaLlevar = false;
   bool _loading = true;
@@ -93,6 +102,9 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
       // Órdenes sin mesa: pedidos para llevar aún abiertos (ver/cobrar)
       _paraLlevar = ordenes.where((o) => o.mesaId.isEmpty).toList();
       _soloParaLlevar = soloParaLlevar;
+      _ordenes = ordenes;
+      // La orden elegida se cobró o se anuló desde otro equipo: se suelta.
+      if (_ordenElegida != null && !ordenes.any((o) => o.ordenId == _ordenElegida)) _ordenElegida = null;
     });
   }
 
@@ -117,9 +129,8 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
         bottom: _salones.isEmpty || _soloParaLlevar ? null : TabBar(
           controller: _tabCtrl,
           isScrollable: true,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.white,
+          // Colores del tema: blancos sobre la barra marrón del celular y
+          // oscuros sobre la barra clara de la web de escritorio.
           labelStyle: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13),
           tabs: [
             const Tab(text: 'Todas'),
@@ -132,7 +143,7 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
             ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
             : _error != null
                 ? _ErrorView(error: _error!, onRetry: _load)
-                : _buildContent(),
+                : _conPanel ? _buildConPanel() : _buildContent(),
       ),
       // El cliente que no ocupa mesa pide desde aquí su orden para llevar
       floatingActionButton: FloatingActionButton.extended(
@@ -145,6 +156,75 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
         label: Text(_soloParaLlevar ? 'Nuevo pedido' : 'Para llevar'),
       ),
     );
+  }
+
+  /// Web de escritorio con mesas: la orden elegida se ve al lado. Un local
+  /// sin mesas sigue con su lista de pedidos.
+  bool get _conPanel => EscritorioScope.enUso(context) && !_soloParaLlevar && _todasMesas.isNotEmpty;
+
+  OrdenModel? get _orden {
+    final id = _ordenElegida;
+    if (id == null) return null;
+    for (final o in _ordenes) {
+      if (o.ordenId == id) return o;
+    }
+    return null;
+  }
+
+  OrdenModel? _ordenDeMesa(MesaModel m) {
+    for (final o in _ordenes) {
+      if (o.mesaId == m.mesaId) return o;
+    }
+    return null;
+  }
+
+  bool get _puedeCobrar {
+    final s = context.read<AuthBloc>().state;
+    if (s is! AuthAuthenticated) return false;
+    final rol = s.user.rol;
+    return rol == UserRole.cajero || rol == UserRole.admin || rol == UserRole.superadmin;
+  }
+
+  Widget _buildConPanel() {
+    final o = _orden;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: _buildContent()),
+        SizedBox(
+          width: 380,
+          child: PanelOrdenMesa(
+            orden: o,
+            puedeCobrar: _puedeCobrar,
+            onAbrir: () => o == null ? null : _abrirOrden(o),
+            onPrecuenta: () async {
+              if (o == null) return;
+              await Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => PrecuentaScreen(ordenId: o.ordenId, sucursalId: _sucursalId),
+              ));
+              if (mounted) _load();
+            },
+            onCobrar: () async {
+              if (o == null) return;
+              await context.push('/cajero/factura/${o.ordenId}');
+              if (mounted) _load();
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Abre la orden en su pantalla de siempre (agregar platos, anular…).
+  Future<void> _abrirOrden(OrdenModel o) async {
+    if (o.mesaId.isEmpty) {
+      await context.push('/mesero/para-llevar?ordenId=${o.ordenId}');
+    } else {
+      final mesa = _todasMesas.where((m) => m.mesaId == o.mesaId).firstOrNull;
+      final nombre = mesa?.numeroMesa ?? o.numeroMesa;
+      await context.push('/mesero/orden/${o.mesaId}?nombre=${Uri.encodeComponent(nombre)}&libre=false');
+    }
+    if (mounted) _load();
   }
 
   Widget _buildContent() {
@@ -161,6 +241,7 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
         _salones.isEmpty ? 1 : _salones.length + 1,
         (i) => _MesasGrid(
           mesas: _mesasDelTab(i),
+          mesaElegida: _orden?.mesaId,
           paraLlevar: _paraLlevar,
           onTap: _onMesaTap,
           onLlevarTap: _onLlevarTap,
@@ -173,6 +254,10 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
   /// Abre una orden para llevar existente: ver el pedido, agregar
   /// platos o cobrarla (cajero/admin), igual que al tocar una mesa.
   Future<void> _onLlevarTap(OrdenModel o) async {
+    if (_conPanel && _ordenElegida != o.ordenId) {
+      setState(() => _ordenElegida = o.ordenId);
+      return;
+    }
     await context.push('/mesero/para-llevar?ordenId=${o.ordenId}');
     if (mounted) _load();
   }
@@ -184,6 +269,11 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
       );
       return;
     }
+    final orden = mesa.isOcupada ? _ordenDeMesa(mesa) : null;
+    if (_conPanel && orden != null && _ordenElegida != orden.ordenId) {
+      setState(() => _ordenElegida = orden.ordenId);
+      return;
+    }
     await context.push('/mesero/orden/${mesa.mesaId}?nombre=${Uri.encodeComponent(mesa.numeroMesa)}&libre=${mesa.isLibre}');
     if (mounted) _load(); // refleja el nuevo estado de la mesa al volver
   }
@@ -192,6 +282,8 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
 // ── Grid de mesas ────────────────────────────────────────────────────────────
 class _MesasGrid extends StatelessWidget {
   final List<MesaModel> mesas;
+  /// Solo en escritorio: la mesa cuya orden se ve al lado.
+  final String? mesaElegida;
   final List<OrdenModel> paraLlevar;
   final Future<void> Function(MesaModel) onTap;
   final Future<void> Function(OrdenModel) onLlevarTap;
@@ -199,6 +291,7 @@ class _MesasGrid extends StatelessWidget {
 
   const _MesasGrid({
     required this.mesas,
+    this.mesaElegida,
     required this.paraLlevar,
     required this.onTap,
     required this.onLlevarTap,
@@ -267,7 +360,10 @@ class _MesasGrid extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + MediaQuery.of(context).padding.bottom),
             sliver: SliverGrid(
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _MesaCard(mesa: mesas[i], onTap: () => onTap(mesas[i])),
+                (_, i) => _MesaCard(
+                    mesa: mesas[i],
+                    elegida: mesaElegida != null && mesas[i].mesaId == mesaElegida,
+                    onTap: () => onTap(mesas[i])),
                 childCount: mesas.length,
               ),
               // Columnas según el ancho disponible (responsive)
@@ -288,7 +384,8 @@ class _MesasGrid extends StatelessWidget {
 class _MesaCard extends StatelessWidget {
   final MesaModel mesa;
   final VoidCallback onTap;
-  const _MesaCard({required this.mesa, required this.onTap});
+  final bool elegida;
+  const _MesaCard({required this.mesa, required this.onTap, this.elegida = false});
 
   Color get _color {
     switch (mesa.estado) {
@@ -317,7 +414,7 @@ class _MesaCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: _color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _color, width: 1.5),
+          border: Border.all(color: elegida ? AppColors.primaryDark : _color, width: elegida ? 3 : 1.5),
           boxShadow: [BoxShadow(color: _color.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2))],
         ),
         child: Column(

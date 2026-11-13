@@ -1,0 +1,772 @@
+<title>Maqueta web de Wasi</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..40,300..500,0..1,0&display=block">
+<style>
+/* Maqueta de la Fase 1 (docs/plan-web-y-excel/PLAN.md).
+   Disposición: franja de controles arriba; debajo, la "ventana" de la app a
+   1100 px o más (con desplazamiento lateral propio en pantallas chicas), con
+   menú lateral fijo de 248 px, barra de 64 px y contenido de hasta 1240 px.
+   La franja y el fondo siguen el tema del visor; la app es siempre clara,
+   porque es una vista previa de la app real, que hoy no tiene modo oscuro. */
+:root{
+  --fondo:#ECE6DF; --franja:#FBF8F4; --texto:#2B201C; --suave:#6D5D55;
+  --linea:#D9CCC0; --acento:#5D4037; --acento-texto:#FFFFFF;
+  --ui:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --fondo:#1A1513; --franja:#241D1A; --texto:#EFE6DF; --suave:#B9A99F;
+    --linea:#3B312C; --acento:#D7B8A6; --acento-texto:#2B201C; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --fondo:#1A1513; --franja:#241D1A; --texto:#EFE6DF; --suave:#B9A99F;
+  --linea:#3B312C; --acento:#D7B8A6; --acento-texto:#2B201C; color-scheme:dark;
+}
+*{box-sizing:border-box}
+/* Sin esto, un display propio (.velo es grid) le gana al hidden del HTML y
+   el diálogo quedaba abierto al cargar. */
+[hidden]{display:none !important}
+body{background:var(--fondo);color:var(--texto);font-family:var(--ui);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.ms{font-family:"Material Symbols Outlined";font-weight:normal;font-style:normal;
+  font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;
+  white-space:nowrap;direction:ltr;-webkit-font-smoothing:antialiased;
+  font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;vertical-align:middle}
+
+/* ── Franja de controles (fuera de la app) ───────────────────────────── */
+.cabeza{max-width:1440px;margin:0 auto 14px;display:flex;flex-direction:column;gap:6px}
+.cabeza h1{font-size:20px;margin:0;font-weight:700;text-wrap:balance}
+.cabeza p{margin:0;color:var(--suave);font-size:13.5px;max-width:78ch;line-height:1.5}
+.controles{max-width:1440px;margin:0 auto 14px;background:var(--franja);border:1px solid var(--linea);
+  border-radius:12px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+.grupo{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grupo>span{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--suave)}
+.seg{display:inline-flex;border:1px solid var(--linea);border-radius:9px;overflow:hidden;flex-wrap:wrap}
+.seg button{font:500 13px var(--ui);color:var(--texto);background:transparent;border:0;padding:6px 11px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--linea)}
+.seg button[aria-pressed="true"]{background:var(--acento);color:var(--acento-texto)}
+.seg button:focus-visible,.boton:focus-visible,.lat a:focus-visible{outline:2px solid #1565C0;outline-offset:2px}
+.fase{margin-left:auto;font-size:12.5px;color:var(--suave);display:flex;align-items:center;gap:6px}
+.fase b{color:var(--texto)}
+
+.escena{max-width:1440px;margin:0 auto;overflow-x:auto;border-radius:14px;border:1px solid var(--linea);
+  box-shadow:0 10px 30px rgba(40,25,20,.12)}
+.notas{max-width:1440px;margin:14px auto 0;color:var(--suave);font-size:13px;line-height:1.55;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px 24px}
+.notas p{margin:0}
+.notas b{color:var(--texto)}
+
+/* ── La app (siempre clara: paleta de app_colors.dart) ───────────────── */
+.app{
+  --cafe:#5D4037; --cafe-osc:#3E2723; --cafe-med:#6D4C41; --tierra:#A1887F;
+  --crema:#FAF7F2; --superficie:#F5EFE6; --variante:#EDE0D4; --blanco:#FFFFFF;
+  --t1:#3E2723; --t2:#6D4C41; --t3:#A1887F; --borde:#EDE0D4; --divisor:#D7CCC8;
+  --ok:#388E3C; --ok-f:#E8F5E9; --aviso:#E65100; --aviso-f:#FFF3E0;
+  --error:#C62828; --error-f:#FFEBEE; --info:#1565C0; --info-f:#E3F2FD;
+  --libre:#43A047; --ocupada:#E53935; --reservada:#1E88E5;
+  --fuente:"Poppins","Roboto",sans-serif;
+  /* Estilo A · Café (por defecto) */
+  --lat-fondo:#3E2723; --lat-texto:rgba(255,255,255,.72); --lat-titulo:rgba(255,255,255,.45);
+  --lat-activo-f:rgba(255,255,255,.10); --lat-activo-t:#FFFFFF; --lat-barra:#EDE0D4;
+  --lat-borde:transparent; --lat-hover:rgba(255,255,255,.06); --lat-marca:#FFFFFF; --lat-sub:rgba(255,255,255,.55);
+  --barra-f:#FFFFFF; --barra-borde:#EDE0D4; --titulo-tam:20px; --titulo-peso:600;
+  min-width:1100px;height:820px;display:grid;grid-template-columns:248px minmax(0,1fr);
+  background:var(--crema);color:var(--t1);font-family:var(--fuente);font-size:13px;position:relative;overflow:hidden;
+  color-scheme:light;
+}
+.app[data-estilo="B"]{
+  --lat-fondo:#FFFFFF; --lat-texto:#6D4C41; --lat-titulo:#A1887F; --lat-activo-f:#F5EFE6;
+  --lat-activo-t:#3E2723; --lat-barra:#5D4037; --lat-borde:#EDE0D4; --lat-hover:#FAF7F2;
+  --lat-marca:#3E2723; --lat-sub:#A1887F;
+  --barra-f:#FAF7F2; --barra-borde:transparent; --titulo-tam:22px; --titulo-peso:700;
+}
+.app[data-fuente="roboto"]{--fuente:"Roboto",sans-serif}
+.app[data-pantalla="login"]{grid-template-columns:minmax(0,1fr)}
+.app[data-pantalla="login"] .lat,.app[data-pantalla="login"] .principal{display:none}
+
+/* Menú lateral */
+.lat{background:var(--lat-fondo);border-right:1px solid var(--lat-borde);display:flex;flex-direction:column;min-height:0}
+.marca{display:flex;align-items:center;gap:10px;padding:18px 18px 14px}
+.logo{width:36px;height:36px;border-radius:10px;background:#5D4037;color:#fff;display:grid;place-items:center;flex:none}
+.app[data-estilo="A"] .logo{background:#EDE0D4;color:#3E2723}
+.marca b{display:block;color:var(--lat-marca);font-size:16px;font-weight:700;line-height:1.1}
+.marca small{display:block;color:var(--lat-sub);font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lat nav{flex:1;overflow:auto;padding:4px 10px 10px;display:flex;flex-direction:column;gap:2px}
+.lat h6{margin:14px 10px 6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--lat-titulo);font-weight:600}
+.lat a{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;color:var(--lat-texto);
+  text-decoration:none;font-size:13.5px;font-weight:500;position:relative;cursor:pointer;white-space:nowrap}
+.lat a:hover{background:var(--lat-hover)}
+.lat a[aria-current="page"]{background:var(--lat-activo-f);color:var(--lat-activo-t);font-weight:600}
+.lat a[aria-current="page"]::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--lat-barra)}
+.lat a .etq{margin-left:auto;font-size:10px;font-weight:600;padding:1px 6px;border-radius:6px;border:1px dashed currentColor;opacity:.7}
+.pie{border-top:1px solid color-mix(in srgb,var(--lat-texto) 25%,transparent);padding:12px 10px 14px;display:flex;flex-direction:column;gap:2px}
+.usuario{display:flex;align-items:center;gap:10px;padding:6px 10px 10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:#8D6E63;color:#fff;display:grid;place-items:center;font-weight:600;flex:none}
+.usuario b{display:block;color:var(--lat-marca);font-size:13px}
+.usuario small{color:var(--lat-sub);font-size:11px}
+
+/* Barra y contenido */
+.principal{display:flex;flex-direction:column;min-width:0;min-height:0}
+.barra{height:64px;flex:none;background:var(--barra-f);border-bottom:1px solid var(--barra-borde);
+  display:flex;align-items:center;gap:12px;padding:0 28px}
+.barra h2{margin:0;font-size:var(--titulo-tam);font-weight:var(--titulo-peso);color:var(--t1);white-space:nowrap}
+.barra .sub{color:var(--t2);font-size:12.5px;white-space:nowrap}
+.barra .acciones{margin-left:auto;display:flex;gap:8px;align-items:center}
+.contenido{flex:1;overflow:auto;min-height:0}
+.lienzo{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:flex;flex-direction:column;gap:18px}
+
+.boton{font:600 13px var(--fuente);border-radius:10px;padding:8px 14px;display:inline-flex;align-items:center;gap:7px;
+  cursor:pointer;border:1.5px solid var(--cafe);background:var(--cafe);color:#fff;white-space:nowrap}
+.boton.sec{background:transparent;color:var(--cafe)}
+.boton.ok{background:var(--ok);border-color:var(--ok)}
+.boton .ms{font-size:18px}
+.icono{width:36px;height:36px;border-radius:10px;border:1px solid var(--borde);background:var(--blanco);
+  display:grid;place-items:center;color:var(--t2);cursor:pointer;position:relative}
+.punto{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--error)}
+
+.tarjeta{background:var(--blanco);border:1px solid var(--borde);border-radius:14px;padding:18px;min-width:0}
+.tarjeta h3{margin:0 0 2px;font-size:14px;font-weight:600}
+.tarjeta .det{color:var(--t2);font-size:11.5px;margin:0 0 14px}
+.cab{display:flex;align-items:baseline;gap:10px;justify-content:space-between}
+.cab a{color:var(--cafe);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
+
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.kpi{background:var(--blanco);border:1px solid var(--borde);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.kpi .rot{display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px;font-weight:500}
+.kpi .rot .ms{font-size:18px;width:30px;height:30px;border-radius:8px;display:grid;place-items:center}
+.kpi .val{font-size:26px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.kpi .var{font-size:11.5px;color:var(--t2)}
+.sube{color:var(--ok);font-weight:600}.baja{color:var(--error);font-weight:600}
+
+.dos{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px;align-items:start}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+.pares{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--t3);font-weight:600;
+  padding:8px 10px;border-bottom:1px solid var(--borde);white-space:nowrap}
+td{padding:10px;border-bottom:1px solid var(--superficie);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tfoot td{font-weight:700;border-top:1px solid var(--borde);background:var(--superficie)}
+.sec-t{color:var(--t2);font-size:11.5px}
+
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.p-ok{background:var(--ok-f);color:#2E7D32}.p-aviso{background:var(--aviso-f);color:var(--aviso)}
+.p-error{background:var(--error-f);color:var(--error)}.p-info{background:var(--info-f);color:var(--info)}
+.p-neutro{background:var(--superficie);color:var(--t2)}
+
+.alerta{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--superficie)}
+.alerta:last-child{border-bottom:0}
+.alerta .ms{font-size:20px;margin-top:1px}
+.alerta b{display:block;font-size:13px}
+.alerta small{color:var(--t2);font-size:11.5px}
+.ranking{display:flex;flex-direction:column;gap:10px}
+.rk{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center}
+.rk i{font-style:normal;color:var(--t3);font-weight:600;font-variant-numeric:tabular-nums}
+.rk .barra-h{height:6px;border-radius:3px;background:var(--superficie);margin-top:5px;overflow:hidden}
+.rk .barra-h span{display:block;height:100%;background:var(--cafe);border-radius:3px}
+.rk em{font-style:normal;font-variant-numeric:tabular-nums;font-weight:600}
+
+.filtros{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.chip{font:600 12.5px var(--fuente);padding:6px 12px;border-radius:999px;border:1px solid var(--divisor);background:var(--blanco);color:var(--t1);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--cafe);border-color:var(--cafe);color:#fff}
+.selector{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--divisor);background:var(--blanco);
+  border-radius:10px;padding:6px 10px;font-weight:500;font-size:12.5px;color:var(--t1)}
+.selector .ms{font-size:18px;color:var(--t2)}
+.periodo{color:var(--t2);font-size:12px;margin-left:auto}
+
+.medidor{display:flex;flex-direction:column;gap:9px}
+.medidor div{display:grid;grid-template-columns:110px minmax(0,1fr) 92px;gap:10px;align-items:center;font-size:12.5px}
+.medidor .pista{height:8px;background:var(--superficie);border-radius:4px;overflow:hidden}
+.medidor .pista span{display:block;height:100%;background:var(--cafe-med);border-radius:4px}
+.medidor em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums;color:var(--t2)}
+.medidor em b{color:var(--t1)}
+
+svg text{font-family:var(--fuente)}
+
+/* Inventario */
+.pestanas{display:flex;gap:4px;border-bottom:1px solid var(--borde)}
+.pestanas button{font:600 13px var(--fuente);background:none;border:0;padding:10px 14px;color:var(--t2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.pestanas button[aria-selected="true"]{color:var(--t1);border-bottom-color:var(--cafe)}
+.buscar{display:flex;align-items:center;gap:8px;border:1px solid var(--divisor);background:var(--blanco);border-radius:10px;padding:7px 12px;width:280px;color:var(--t3)}
+.buscar input{border:0;outline:0;font:13px var(--fuente);background:transparent;color:var(--t1);width:100%}
+.check{display:inline-flex;align-items:center;gap:8px;font-weight:500;font-size:12.5px;color:var(--t1)}
+.check input{accent-color:#5D4037;width:16px;height:16px}
+
+/* Mesas */
+.mesas-vista{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+.leyenda{display:flex;gap:14px;flex-wrap:wrap;color:var(--t2);font-size:12px}
+.leyenda span{display:inline-flex;align-items:center;gap:6px}
+.leyenda i{width:9px;height:9px;border-radius:50%}
+.rejilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px}
+.mesa{border-radius:12px;border:1.5px solid var(--borde);background:var(--blanco);padding:12px;display:flex;flex-direction:column;gap:4px;cursor:pointer;text-align:left;font-family:var(--fuente);color:var(--t1)}
+.mesa b{font-size:15px}
+.mesa small{color:var(--t2);font-size:11px}
+.mesa .est{font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px}
+.mesa .est::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.mesa.libre .est{color:var(--libre)}.mesa.ocupada .est{color:var(--ocupada)}.mesa.reservada .est{color:var(--reservada)}
+.mesa.ocupada{background:#FFF8F7}
+.mesa[aria-pressed="true"]{border-color:var(--cafe);box-shadow:0 0 0 3px rgba(93,64,55,.15)}
+.orden{position:sticky;top:0}
+.orden ul{list-style:none;margin:0;padding:0}
+.orden li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;padding:10px 0;border-bottom:1px solid var(--superficie);align-items:start}
+.orden li i{font-style:normal;font-weight:700;color:var(--t2)}
+.orden li small{display:block;margin-top:3px}
+.totales{display:flex;flex-direction:column;gap:5px;margin:14px 0;font-variant-numeric:tabular-nums}
+.totales div{display:flex;justify-content:space-between;color:var(--t2);font-size:12.5px}
+.totales div.total{color:var(--t1);font-size:18px;font-weight:700;padding-top:6px;border-top:1px solid var(--borde)}
+.acciones-orden{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.acciones-orden .boton{justify-content:center}
+.acciones-orden .ancho{grid-column:1/-1}
+
+/* Comprobantes "sin rediseñar": la pantalla del celular estirada */
+.aviso-viejo{display:flex;gap:10px;align-items:flex-start;background:var(--info-f);color:#0D47A1;border-radius:12px;padding:12px 14px;font-size:12.5px;line-height:1.5}
+.movil-chips{display:flex;gap:8px;flex-wrap:wrap}
+.movil-chips span{background:var(--variante);border-radius:8px;padding:6px 10px;font-weight:600;font-size:12px}
+.movil-chips span.on{background:var(--cafe);color:#fff}
+.movil-lista{display:flex;flex-direction:column;gap:10px}
+.movil-card{background:var(--blanco);border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.08);padding:14px 16px;display:flex;align-items:center;gap:14px}
+.movil-card .ms{width:40px;height:40px;border-radius:50%;background:var(--info-f);color:var(--info);display:grid;place-items:center}
+.movil-card b{display:block;font-size:14px}
+.movil-card small{color:var(--t2);font-size:11.5px}
+.movil-card em{margin-left:auto;font-style:normal;font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+
+/* Login partido */
+.login{display:none;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);height:100%}
+.app[data-pantalla="login"] .login{display:grid}
+.login .marca-panel{background:linear-gradient(150deg,#3E2723 0%,#5D4037 70%,#6D4C41 100%);color:#fff;padding:56px 64px;display:flex;flex-direction:column;justify-content:space-between}
+.login .marca-panel .logo{width:52px;height:52px;border-radius:14px;background:#EDE0D4;color:#3E2723}
+.login .marca-panel .logo .ms{font-size:28px}
+.login h2{font-size:38px;line-height:1.15;margin:26px 0 12px;font-weight:700;max-width:16ch;text-wrap:balance}
+.login .marca-panel p{color:rgba(255,255,255,.75);font-size:15px;line-height:1.6;max-width:44ch;margin:0}
+.ventajas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.ventajas li{display:flex;gap:12px;align-items:center;font-size:14px;color:rgba(255,255,255,.9)}
+.ventajas .ms{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:grid;place-items:center;font-size:19px}
+.login .formulario{display:grid;place-items:center;padding:40px;background:var(--crema)}
+.login form{width:min(380px,100%);display:flex;flex-direction:column;gap:14px}
+.login form h3{margin:0;font-size:24px;font-weight:700}
+.login form p{margin:0 0 8px;color:var(--t2);font-size:13px}
+.campo{display:flex;flex-direction:column;gap:6px}
+.campo label{font-size:12px;font-weight:600;color:var(--t2)}
+.campo div{display:flex;align-items:center;gap:10px;background:var(--superficie);border:1px solid #BCAAA4;border-radius:12px;padding:12px 14px}
+.campo input{border:0;background:transparent;outline:0;font:14px var(--fuente);color:var(--t1);width:100%}
+.campo div:focus-within{border-color:var(--cafe);box-shadow:0 0 0 1px var(--cafe)}
+.login form .boton{justify-content:center;padding:13px;font-size:14px;margin-top:6px}
+.login .legal{margin-top:18px;text-align:center;color:var(--t3);font-size:11.5px}
+
+/* Diálogo de exportación */
+.velo{position:absolute;inset:0;background:rgba(30,18,14,.45);display:grid;place-items:center;z-index:20}
+.dialogo{width:560px;max-height:92%;overflow:auto;background:#fff;border-radius:20px;padding:24px 26px;box-shadow:0 20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:14px}
+.dialogo h3{margin:0;font-size:18px;font-weight:700}
+.dialogo .det{margin:-8px 0 0;color:var(--t2);font-size:12.5px}
+.bloques{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px}
+.bloque h4{margin:0 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);font-weight:600}
+.bloque label{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0}
+.bloque label input{accent-color:#5D4037}
+.bloque .nota{font-size:11px;color:var(--aviso);margin-top:4px}
+.progreso{background:var(--superficie);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.progreso .pista{height:8px;background:#fff;border-radius:4px;overflow:hidden}
+.progreso .pista span{display:block;height:100%;background:var(--cafe);border-radius:4px;transition:width .4s}
+.progreso b{font-size:13px}
+.progreso small{color:var(--t2);font-size:12px}
+.dialogo .pie-d{display:flex;justify-content:flex-end;gap:8px}
+
+.aviso-toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);background:#3E2723;color:#fff;
+  padding:10px 16px;border-radius:12px;font-size:12.5px;z-index:30;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+@media (prefers-reduced-motion:reduce){.progreso .pista span{transition:none}}
+</style>
+
+<header class="cabeza">
+  <h1>Maqueta de la web de Wasi</h1>
+  <p>Así se vería Wasi en el navegador de la PC con el menú lateral fijo, en lugar de la pantalla del celular centrada. Elige un estilo y una tipografía, recorre las pantallas y dime qué cambiar. Los datos son de ejemplo.</p>
+</header>
+
+<div class="controles" role="toolbar" aria-label="Controles de la maqueta">
+  <div class="grupo"><span>Estilo</span>
+    <div class="seg" id="ctl-estilo">
+      <button type="button" data-v="A" aria-pressed="true">A · Café</button>
+      <button type="button" data-v="B" aria-pressed="false">B · Claro</button>
+    </div>
+  </div>
+  <div class="grupo"><span>Tipografía</span>
+    <div class="seg" id="ctl-fuente">
+      <button type="button" data-v="poppins" aria-pressed="true">Poppins</button>
+      <button type="button" data-v="roboto" aria-pressed="false">Roboto (la de hoy)</button>
+    </div>
+  </div>
+  <div class="grupo"><span>Pantalla</span>
+    <div class="seg" id="ctl-pantalla">
+      <button type="button" data-v="login" aria-pressed="false">Inicio de sesión</button>
+      <button type="button" data-v="panel" aria-pressed="true">Panel</button>
+      <button type="button" data-v="reportes" aria-pressed="false">Reportes</button>
+      <button type="button" data-v="inventario" aria-pressed="false">Inventario</button>
+      <button type="button" data-v="mesas" aria-pressed="false">Mesas</button>
+      <button type="button" data-v="comprobantes" aria-pressed="false">Sin rediseñar</button>
+    </div>
+  </div>
+  <div class="fase"><span class="ms" style="font-size:17px">schedule</span><span id="fase-texto"></span></div>
+</div>
+
+<div class="escena">
+<div class="app" id="app" data-estilo="A" data-fuente="poppins" data-pantalla="panel">
+
+  <!-- Inicio de sesión (sin menú lateral) -->
+  <section class="login" aria-label="Inicio de sesión">
+    <div class="marca-panel">
+      <div>
+        <div class="logo"><span class="ms">restaurant</span></div>
+        <h2>Tu restaurante, desde cualquier pantalla</h2>
+        <p>Pedidos, cobro, inventario y reportes de todas tus sucursales. Lo que el mesero anota en el celular lo ves aquí al instante.</p>
+      </div>
+      <ul class="ventajas">
+        <li><span class="ms">soup_kitchen</span>Pedidos y cocina en tiempo real</li>
+        <li><span class="ms">receipt_long</span>Facturación electrónica con el SRI</li>
+        <li><span class="ms">table_view</span>Reportes en Excel para tu contador</li>
+      </ul>
+    </div>
+    <div class="formulario">
+      <form id="form-login" autocomplete="off">
+        <h3>Iniciar sesión</h3>
+        <p>Ingresa con el usuario que te dio el administrador.</p>
+        <div class="campo"><label for="usuario">Usuario</label>
+          <div><span class="ms" style="color:#6D4C41">person</span><input id="usuario" value="prueba"></div></div>
+        <div class="campo"><label for="clave">Contraseña</label>
+          <div><span class="ms" style="color:#6D4C41">lock</span><input id="clave" type="password" value="xxxxxxxx"><span class="ms" style="color:#A1887F">visibility_off</span></div></div>
+        <button class="boton" type="submit">Ingresar</button>
+        <div class="legal">© 2026 Wasi · Todos los derechos reservados</div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Menú lateral -->
+  <aside class="lat" aria-label="Menú">
+    <div class="marca">
+      <div class="logo"><span class="ms">restaurant</span></div>
+      <div style="min-width:0"><b>Wasi</b><small>Restaurante de Prueba · Centro</small></div>
+    </div>
+    <nav>
+      <a data-ir="panel"><span class="ms">space_dashboard</span>Panel</a>
+      <h6>Operación</h6>
+      <a data-ir="mesas"><span class="ms">table_restaurant</span>Mesas</a>
+      <a data-ir="-"><span class="ms">receipt</span>Por cobrar</a>
+      <a data-ir="-"><span class="ms">skillet</span>Cocina</a>
+      <h6>Caja</h6>
+      <a data-ir="-"><span class="ms">point_of_sale</span>Caja</a>
+      <a data-ir="comprobantes"><span class="ms">history</span>Comprobantes</a>
+      <a data-ir="-"><span class="ms">event_available</span>Adelantos<span class="etq">módulo</span></a>
+      <h6>Gestión</h6>
+      <a data-ir="reportes"><span class="ms">bar_chart</span>Reportes</a>
+      <a data-ir="inventario"><span class="ms">inventory_2</span>Inventario<span class="etq">módulo</span></a>
+      <a data-ir="-"><span class="ms">settings</span>Configuración</a>
+    </nav>
+    <div class="pie">
+      <div class="usuario"><div class="avatar">P</div><div><b>prueba</b><small>Administrador</small></div></div>
+      <a data-ir="-"><span class="ms">tune</span>Preferencias</a>
+      <a data-ir="login"><span class="ms">logout</span>Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <div class="principal">
+    <header class="barra">
+      <h2 id="titulo">Panel</h2><span class="sub" id="subtitulo"></span>
+      <div class="acciones" id="acciones"></div>
+    </header>
+    <div class="contenido">
+
+      <!-- Panel -->
+      <div class="lienzo" data-pant="panel">
+        <div class="kpis">
+          <div class="kpi"><div class="rot"><span class="ms" style="background:#E8F5E9;color:#388E3C">payments</span>Ventas de hoy</div>
+            <div class="val">$1,284.50</div><div class="var"><span class="sube">▲ 16%</span> contra ayer ($1,105.00)</div></div>
+          <div class="kpi"><div class="rot"><span class="ms" style="background:#EDE0D4;color:#5D4037">table_restaurant</span>Mesas ocupadas</div>
+            <div class="val">7 <span style="font-size:15px;color:#6D4C41;font-weight:500">de 18</span></div><div class="var">2 reservadas para la noche</div></div>
+          <div class="kpi"><div class="rot"><span class="ms" style="background:#FFF3E0;color:#E65100">skillet</span>Órdenes en curso</div>
+            <div class="val">9</div><div class="var">3 para llevar · 1 lista para servir</div></div>
+          <div class="kpi"><div class="rot"><span class="ms" style="background:#E3F2FD;color:#1565C0">receipt_long</span>Comprobantes emitidos</div>
+            <div class="val">46</div><div class="var">31 facturas · 15 notas de venta</div></div>
+        </div>
+        <div class="dos">
+          <div class="col">
+            <div class="tarjeta">
+              <div class="cab"><h3>Ventas de los últimos 7 días</h3><a data-ir="reportes">Ver reportes</a></div>
+              <p class="det">Con IVA, sin propinas. Hoy, hasta las 16:45.</p>
+              <svg id="graf-semana" viewBox="0 0 640 230" width="100%" role="img" aria-label="Ventas de los últimos siete días"></svg>
+            </div>
+            <div class="tarjeta">
+              <div class="cab"><h3>Órdenes en curso</h3><a data-ir="mesas">Ver mesas</a></div>
+              <p class="det">Se actualiza sola cada 30 segundos.</p>
+              <table>
+                <thead><tr><th>Lugar</th><th>Mesero</th><th>Desde</th><th>Estado</th><th class="n">Total</th></tr></thead>
+                <tbody>
+                  <tr><td><b>Mesa 4</b> <span class="sec-t">· Salón</span></td><td>Carlos</td><td>13:42</td><td><span class="pill p-info">En cocina</span></td><td class="n">$22.00</td></tr>
+                  <tr><td><b>Mesa 9</b> <span class="sec-t">· Terraza</span></td><td>Andrea</td><td>14:05</td><td><span class="pill p-ok">Lista</span></td><td class="n">$41.75</td></tr>
+                  <tr><td><b>Para llevar</b> <span class="sec-t">· Juan, retira 17:00</span></td><td>Caja 1</td><td>16:20</td><td><span class="pill p-aviso">Pendiente</span></td><td class="n">$12.50</td></tr>
+                  <tr><td><b>Mesa 12</b> <span class="sec-t">· Salón</span></td><td>Carlos</td><td>16:31</td><td><span class="pill p-info">En cocina</span></td><td class="n">$33.40</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col">
+            <div class="tarjeta">
+              <div class="cab"><h3>Alertas de inventario</h3><a data-ir="inventario">Reponer</a></div>
+              <p class="det">Solo se ve si el local lleva inventario.</p>
+              <div class="alerta"><span class="ms" style="color:#C62828">error</span><div><b>Sin stock: Mediana de pollo</b><small>Sigue en el menú; el mesero ve el aviso al pedirla.</small></div></div>
+              <div class="alerta"><span class="ms" style="color:#E65100">warning</span><div><b>2 platos por agotarse</b><small>Bolón mixto (quedan 3) · Tres leches (quedan 2)</small></div></div>
+              <div class="alerta"><span class="ms" style="color:#E65100">inventory</span><div><b>5 insumos por reponer</b><small>Pechuga de pollo, queso fresco, limón y 2 más</small></div></div>
+            </div>
+            <div class="tarjeta">
+              <h3>Más vendidos hoy</h3>
+              <p class="det">Por unidades.</p>
+              <div class="ranking" id="ranking-hoy"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reportes -->
+      <div class="lienzo" data-pant="reportes" hidden>
+        <div class="filtros">
+          <button class="chip" type="button" aria-pressed="false">Hoy</button>
+          <button class="chip" type="button" aria-pressed="false">7 días</button>
+          <button class="chip" type="button" aria-pressed="true">Este mes</button>
+          <button class="chip" type="button" aria-pressed="false">Mes anterior</button>
+          <button class="chip" type="button" aria-pressed="false">Rango…</button>
+          <span class="selector"><span class="ms">storefront</span>Sucursal Centro<span class="ms">expand_more</span></span>
+          <span class="periodo">01/11/2026 al 12/11/2026 · comparado con 20/10 al 31/10</span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="rot">Ventas</div><div class="val">$14,208.15</div><div class="var"><span class="sube">▲ 8.4%</span> · antes $13,107.20</div></div>
+          <div class="kpi"><div class="rot">Comprobantes</div><div class="val">526</div><div class="var"><span class="sube">▲ 3.1%</span> · antes 510</div></div>
+          <div class="kpi"><div class="rot">Ticket promedio por mesa</div><div class="val">$27.01</div><div class="var"><span class="sube">▲ 5.1%</span> · antes $25.70</div></div>
+          <div class="kpi"><div class="rot">Ganancia estimada</div><div class="val">$5,960.20</div><div class="var"><span class="baja">▼ 1.2%</span> · antes $6,032.60</div></div>
+        </div>
+        <div class="dos">
+          <div class="tarjeta">
+            <div class="cab"><h3>Platos más vendidos</h3><span class="sec-t">por unidades · <a href="#reportes" style="color:#5D4037;font-weight:600;text-decoration:none">por dinero</a></span></div>
+            <p class="det">Precio de carta con IVA. Las cortesías van aparte.</p>
+            <table>
+              <thead><tr><th>Plato</th><th>Categoría</th><th class="n">Unidades</th><th class="n">Ventas</th><th class="n">Margen</th></tr></thead>
+              <tbody>
+                <tr><td><b>Encebollado</b></td><td class="sec-t">Sopas</td><td class="n">212</td><td class="n">$742.00</td><td class="n">61%</td></tr>
+                <tr><td><b>Seco de pollo</b></td><td class="sec-t">Platos fuertes</td><td class="n">168</td><td class="n">$756.00</td><td class="n">58%</td></tr>
+                <tr><td><b>Jugo de naranja</b></td><td class="sec-t">Bebidas</td><td class="n">151</td><td class="n">$226.50</td><td class="n">76%</td></tr>
+                <tr><td><b>Churrasco</b></td><td class="sec-t">Platos fuertes</td><td class="n">97</td><td class="n">$824.50</td><td class="n">52%</td></tr>
+                <tr><td><b>Bolón mixto</b></td><td class="sec-t">Desayunos</td><td class="n">88</td><td class="n">$308.00</td><td class="n">64%</td></tr>
+                <tr><td><b>Cóctel de la casa</b></td><td class="sec-t">Bar</td><td class="n">63</td><td class="n">$378.00</td><td class="n">79%</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="col">
+            <div class="tarjeta"><h3>Métodos de pago</h3><p class="det">Lo pagado con adelantos va aparte.</p>
+              <div class="medidor">
+                <div><span>Efectivo</span><span class="pista"><span style="width:54%"></span></span><em><b>$7,672.40</b> 54%</em></div>
+                <div><span>Tarjeta</span><span class="pista"><span style="width:31%"></span></span><em><b>$4,404.53</b> 31%</em></div>
+                <div><span>Transferencia</span><span class="pista"><span style="width:13%"></span></span><em><b>$1,847.06</b> 13%</em></div>
+                <div><span>Adelantos</span><span class="pista"><span style="width:2%"></span></span><em><b>$284.16</b> 2%</em></div>
+              </div>
+            </div>
+            <div class="tarjeta"><h3>Personal</h3><p class="det">Quien tomó la orden.</p>
+              <table><thead><tr><th>Mesero</th><th class="n">Órdenes</th><th class="n">Ventas</th><th class="n">Propinas</th></tr></thead>
+                <tbody><tr><td>Carlos</td><td class="n">201</td><td class="n">$5,812.30</td><td class="n">$412.00</td></tr>
+                <tr><td>Andrea</td><td class="n">187</td><td class="n">$5,240.85</td><td class="n">$389.50</td></tr>
+                <tr><td>Caja 1</td><td class="n">138</td><td class="n">$3,155.00</td><td class="n">$0.00</td></tr></tbody></table>
+            </div>
+          </div>
+        </div>
+        <div class="tarjeta">
+          <h3>Ventas por hora</h3><p class="det">Promedio por día, según la hora en que se tomó la orden.</p>
+          <svg id="graf-horas" viewBox="0 0 1100 200" width="100%" role="img" aria-label="Ventas promedio por hora del día"></svg>
+        </div>
+      </div>
+
+      <!-- Inventario -->
+      <div class="lienzo" data-pant="inventario" hidden>
+        <div class="pestanas" role="tablist">
+          <button role="tab" aria-selected="true" type="button">Insumos</button>
+          <button role="tab" aria-selected="false" type="button">Platos</button>
+          <button role="tab" aria-selected="false" type="button">Compras</button>
+          <button role="tab" aria-selected="false" type="button">Proveedores</button>
+        </div>
+        <div class="filtros">
+          <label class="buscar" for="buscar-insumo"><span class="ms">search</span><input id="buscar-insumo" placeholder="Buscar insumo"></label>
+          <label class="check" for="solo-reponer"><input id="solo-reponer" type="checkbox">Solo por reponer</label>
+          <span class="periodo">9 insumos · valor del stock <b style="color:#3E2723">$1,142.85</b></span>
+        </div>
+        <div class="tarjeta" style="padding:6px 8px">
+          <table id="tabla-insumos">
+            <thead><tr><th>Insumo</th><th>Categoría</th><th class="n">Stock</th><th class="n">Mínimo</th><th class="n">Costo promedio</th><th class="n">Valor</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr data-r="0"><td><b>Ron añejo</b><div class="sec-t">Botella de 750 ml</div></td><td>Licores</td><td class="n">11 botellas + 190 ml</td><td class="n">6 botellas</td><td class="n">$14.20 / botella</td><td class="n">$159.80</td><td><span class="pill p-ok">Bien</span></td></tr>
+              <tr data-r="1"><td><b>Pechuga de pollo</b></td><td>Carnes</td><td class="n">8.4 kg</td><td class="n">10 kg</td><td class="n">$5.80 / kg</td><td class="n">$48.72</td><td><span class="pill p-aviso">Por reponer</span></td></tr>
+              <tr data-r="0"><td><b>Arroz</b></td><td>Granos</td><td class="n">22 kg</td><td class="n">10 kg</td><td class="n">$1.10 / kg</td><td class="n">$24.20</td><td><span class="pill p-ok">Bien</span></td></tr>
+              <tr data-r="1"><td><b>Queso fresco</b></td><td>Lácteos</td><td class="n">−0.6 kg</td><td class="n">2 kg</td><td class="n">$6.40 / kg</td><td class="n">$0.00</td><td><span class="pill p-error">Negativo</span></td></tr>
+              <tr data-r="1"><td><b>Limón</b></td><td>Frutas</td><td class="n">40 u</td><td class="n">80 u</td><td class="n">$0.08 / u</td><td class="n">$3.20</td><td><span class="pill p-aviso">Por reponer</span></td></tr>
+              <tr data-r="0"><td><b>Cerveza nacional 600 ml</b></td><td>Bebidas</td><td class="n">96 u</td><td class="n">48 u</td><td class="n">$1.35 / u</td><td class="n">$129.60</td><td><span class="pill p-ok">Bien</span></td></tr>
+              <tr data-r="0"><td><b>Aceite vegetal</b></td><td>Abarrotes</td><td class="n">14 L</td><td class="n">5 L</td><td class="n">$2.45 / L</td><td class="n">$34.30</td><td><span class="pill p-ok">Bien</span></td></tr>
+              <tr data-r="1"><td><b>Cebolla paiteña</b></td><td>Verduras</td><td class="n">3.2 kg</td><td class="n">5 kg</td><td class="n">$0.95 / kg</td><td class="n">$3.04</td><td><span class="pill p-aviso">Por reponer</span></td></tr>
+              <tr data-r="1"><td><b>Albacora</b></td><td>Mariscos</td><td class="n">6.0 kg</td><td class="n">8 kg</td><td class="n">$7.90 / kg</td><td class="n">$47.40</td><td><span class="pill p-aviso">Por reponer</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Mesas con la orden al lado -->
+      <div class="lienzo" data-pant="mesas" hidden>
+        <div class="filtros">
+          <button class="chip" type="button" aria-pressed="true">Salón principal</button>
+          <button class="chip" type="button" aria-pressed="false">Terraza</button>
+          <div class="leyenda" style="margin-left:auto">
+            <span><i style="background:#43A047"></i>Libre</span><span><i style="background:#E53935"></i>Ocupada</span><span><i style="background:#1E88E5"></i>Reservada</span>
+          </div>
+        </div>
+        <div class="mesas-vista">
+          <div class="rejilla" id="rejilla-mesas"></div>
+          <div class="tarjeta orden">
+            <div class="cab"><h3 style="font-size:16px">Mesa 4 · Salón principal</h3><span class="pill p-info">En cocina</span></div>
+            <p class="det" style="margin-top:4px">Carlos · desde 13:42 · 4 personas</p>
+            <ul>
+              <li><i>2</i><div><b>Encebollado</b><small><span class="pill p-ok">Servido</span></small></div><span class="n">$7.00</span></li>
+              <li><i>1</i><div><b>Churrasco</b><small><span class="pill p-info">En cocina</span></small></div><span class="n">$8.50</span></li>
+              <li><i>2</i><div><b>Jugo de naranja</b><small><span class="pill p-ok">Servido</span></small></div><span class="n">$3.00</span></li>
+              <li><i>1</i><div><b>Bolón mixto</b><small><span class="pill p-aviso">Pendiente</span></small></div><span class="n">$3.50</span></li>
+            </ul>
+            <div class="totales">
+              <div><span>Base</span><span>$19.13</span></div>
+              <div><span>IVA 15%</span><span>$2.87</span></div>
+              <div class="total"><span>Total</span><span>$22.00</span></div>
+            </div>
+            <div class="acciones-orden">
+              <button class="boton sec" type="button"><span class="ms">add</span>Agregar platos</button>
+              <button class="boton sec" type="button"><span class="ms">receipt</span>Precuenta</button>
+              <button class="boton ok ancho" type="button"><span class="ms">point_of_sale</span>Cobrar $22.00</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comprobantes: pantalla todavía sin rediseñar -->
+      <div class="lienzo" data-pant="comprobantes" hidden>
+        <div class="aviso-viejo"><span class="ms">info</span><div>Así queda una pantalla que todavía no se rediseñó: con la fase 3 cambian el menú y la barra; el contenido es el mismo del celular, estirado a lo ancho. Las pantallas de trabajo se pasan a tablas, una por una, en la fase 4.</div></div>
+        <div class="movil-chips"><span class="on">Hoy, 12 nov</span><span>Todos</span><span>Facturas</span><span>Notas de venta</span><span>Cajero: todos</span></div>
+        <div class="movil-lista" id="lista-vieja"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="velo" id="velo" hidden>
+    <div class="dialogo" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+      <h3 id="dlg-t">Descargar Excel</h3>
+      <p class="det">Este mes · Sucursal Centro · 01/11 al 12/11/2026. Cada sección marcada sale en su propia hoja.</p>
+      <div id="dlg-elegir">
+        <div class="bloques">
+          <div class="bloque"><h4>Ventas</h4>
+            <label><input type="checkbox" checked>Resumen</label><label><input type="checkbox" checked>Platos vendidos</label>
+            <label><input type="checkbox" checked>Categorías</label><label><input type="checkbox" checked>Platos sin ventas</label>
+            <label><input type="checkbox" checked>Día y hora</label><label><input type="checkbox" checked>Métodos de pago</label>
+            <label><input type="checkbox" checked>Personal y propinas</label></div>
+          <div class="bloque"><h4>Detalle día por día</h4>
+            <label><input type="checkbox" checked>Ventas por día</label><label><input type="checkbox" checked>Comprobantes</label>
+            <label><input type="checkbox" checked>Detalle de lo vendido</label><label><input type="checkbox" checked>Cierres y movimientos de caja</label>
+            <p class="nota">Solo para períodos de hasta 31 días.</p>
+            <h4 style="margin-top:12px">Pérdidas</h4>
+            <label><input type="checkbox" checked>Cortesías</label><label><input type="checkbox" checked>Órdenes anuladas</label></div>
+          <div class="bloque"><h4>Inventario</h4>
+            <label><input type="checkbox" checked>Stock de insumos</label><label><input type="checkbox" checked>Stock de platos</label>
+            <label><input type="checkbox" checked>Compras del período</label><label><input type="checkbox">Proveedores</label></div>
+        </div>
+      </div>
+      <div class="progreso" id="dlg-progreso" hidden>
+        <b id="prog-paso">Cargando comprobantes · día 1 de 12</b>
+        <div class="pista"><span id="prog-barra" style="width:0%"></span></div>
+        <small>Puedes seguir usando Wasi en otra pestaña. El archivo baja solo al terminar.</small>
+      </div>
+      <div class="pie-d">
+        <button class="boton sec" type="button" id="dlg-cancelar">Cancelar</button>
+        <button class="boton" type="button" id="dlg-descargar"><span class="ms">download</span>Descargar</button>
+      </div>
+    </div>
+  </div>
+  <div class="aviso-toast" id="toast" hidden></div>
+</div>
+</div>
+
+<div class="notas">
+  <p><b>Los dos estilos</b> tienen la misma estructura y solo cambian los colores, así que construir uno u otro en Flutter cuesta lo mismo. A lleva el menú en café oscuro; B lo lleva en blanco, con la barra superior integrada al fondo.</p>
+  <p><b>Tipografía.</b> La app pide Poppins pero hoy no la incluye, así que en la práctica se ve Roboto. Si eliges Poppins, en la fase 3 se carga solo en la web para no cambiar el celular.</p>
+  <p><b>Inventario y Adelantos</b> (marcados como «módulo») solo aparecen en el menú de los locales que los tienen activados, igual que hoy en el panel.</p>
+  <p><b>Nada de esto necesita datos nuevos del servidor.</b> El panel usa el resumen diario de los últimos 7 días, las órdenes activas, las alertas y el resumen del período de hoy.</p>
+</div>
+
+<script>
+(function(){
+  var app=document.getElementById('app');
+  var FASES={
+    login:'Llega en la <b>fase 3</b>',
+    panel:'Llega en la <b>fase 4</b> (el menú lateral, en la 3)',
+    reportes:'Excel en la <b>fase 2</b> · disposición en la <b>4</b>',
+    inventario:'Llega en la <b>fase 4</b>',
+    mesas:'<b>Fase 4</b> o posterior',
+    comprobantes:'Así queda tras la <b>fase 3</b> sola'
+  };
+  var TITULOS={
+    panel:['Panel','Jueves 12 de noviembre'],
+    reportes:['Resumen del período','Sucursal Centro'],
+    inventario:['Inventario','Sucursal Centro'],
+    mesas:['Mesas','7 ocupadas de 18'],
+    comprobantes:['Comprobantes','46 de hoy']
+  };
+  var ACCIONES={
+    panel:'<button class="icono" type="button" aria-label="Avisos"><span class="ms">notifications</span><i class="punto"></i></button><button class="boton" type="button"><span class="ms">add</span>Nuevo pedido</button>',
+    reportes:'<button class="boton sec" type="button"><span class="ms">compare_arrows</span>Comparar sucursales</button><button class="boton" type="button" id="abrir-excel"><span class="ms">download</span>Descargar Excel</button>',
+    inventario:'<button class="boton sec" type="button" id="abrir-excel-inv"><span class="ms">download</span>Descargar Excel</button><button class="boton" type="button"><span class="ms">add_shopping_cart</span>Nueva compra</button>',
+    mesas:'<button class="boton sec" type="button"><span class="ms">takeout_dining</span>Para llevar</button>',
+    comprobantes:'<button class="icono" type="button" aria-label="Buscar"><span class="ms">search</span></button>'
+  };
+  function leer(k,d){try{return localStorage.getItem(k)||d}catch(e){return d}}
+  function guardar(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function marcar(id,v){document.querySelectorAll('#'+id+' button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===v))})}
+
+  function pantalla(p){
+    if(!FASES[p])p='panel';
+    app.dataset.pantalla=p;
+    marcar('ctl-pantalla',p);
+    document.getElementById('fase-texto').innerHTML=FASES[p];
+    document.querySelectorAll('[data-pant]').forEach(function(el){el.hidden=el.dataset.pant!==p});
+    document.querySelectorAll('.lat nav a').forEach(function(a){
+      if(a.dataset.ir===p)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');
+    });
+    if(TITULOS[p]){
+      document.getElementById('titulo').textContent=TITULOS[p][0];
+      document.getElementById('subtitulo').textContent=TITULOS[p][1];
+      document.getElementById('acciones').innerHTML=ACCIONES[p]||'';
+    }
+    var b=document.getElementById('abrir-excel')||document.getElementById('abrir-excel-inv');
+    if(b)b.addEventListener('click',abrirDialogo);
+    document.querySelector('.contenido').scrollTop=0;
+    if(location.hash.slice(1)!==p)history.replaceState(null,'','#'+p);
+  }
+  function estilo(v){app.dataset.estilo=v;marcar('ctl-estilo',v);guardar('wasi-maqueta-estilo',v)}
+  function fuente(v){app.dataset.fuente=v;marcar('ctl-fuente',v);guardar('wasi-maqueta-fuente',v)}
+
+  document.getElementById('ctl-estilo').addEventListener('click',function(e){var b=e.target.closest('button');if(b)estilo(b.dataset.v)});
+  document.getElementById('ctl-fuente').addEventListener('click',function(e){var b=e.target.closest('button');if(b)fuente(b.dataset.v)});
+  document.getElementById('ctl-pantalla').addEventListener('click',function(e){var b=e.target.closest('button');if(b)pantalla(b.dataset.v)});
+  app.addEventListener('click',function(e){
+    var a=e.target.closest('[data-ir]');if(!a)return;
+    e.preventDefault();
+    if(a.dataset.ir==='-'){aviso('Esa pantalla no está en la maqueta: se vería con el mismo menú y la misma barra.');return}
+    pantalla(a.dataset.ir);
+  });
+  document.getElementById('form-login').addEventListener('submit',function(e){e.preventDefault();pantalla('panel')});
+  window.addEventListener('hashchange',function(){pantalla(location.hash.slice(1))});
+
+  var tiempoAviso;
+  function aviso(t){var el=document.getElementById('toast');el.textContent=t;el.hidden=false;clearTimeout(tiempoAviso);tiempoAviso=setTimeout(function(){el.hidden=true},2600)}
+
+  // Diálogo de exportación: primero se eligen las hojas, después se ve el avance.
+  var velo=document.getElementById('velo'),reloj=null;
+  function abrirDialogo(){
+    document.getElementById('dlg-elegir').hidden=false;
+    document.getElementById('dlg-progreso').hidden=true;
+    document.getElementById('dlg-descargar').hidden=false;
+    document.getElementById('dlg-cancelar').textContent='Cancelar';
+    velo.hidden=false;
+  }
+  function cerrarDialogo(){clearInterval(reloj);velo.hidden=true}
+  document.getElementById('dlg-cancelar').addEventListener('click',cerrarDialogo);
+  velo.addEventListener('click',function(e){if(e.target===velo)cerrarDialogo()});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!velo.hidden)cerrarDialogo()});
+  document.getElementById('dlg-descargar').addEventListener('click',function(){
+    document.getElementById('dlg-elegir').hidden=true;
+    document.getElementById('dlg-progreso').hidden=false;
+    this.hidden=true;
+    var dia=1,paso=document.getElementById('prog-paso'),barra=document.getElementById('prog-barra');
+    var reducido=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function pintar(){paso.textContent='Cargando comprobantes · día '+dia+' de 12';barra.style.width=Math.round(dia/12*100)+'%'}
+    if(reducido){dia=7;pintar();return}
+    pintar();
+    clearInterval(reloj);
+    reloj=setInterval(function(){
+      dia++;
+      if(dia>12){clearInterval(reloj);paso.textContent='Listo: «Wasi - Sucursal Centro - 2026-11-01 a 2026-11-12.xlsx»';barra.style.width='100%';document.getElementById('dlg-cancelar').textContent='Cerrar';return}
+      pintar();
+    },450);
+  });
+
+  // Gráficos a escala (SVG).
+  var NS='http://www.w3.org/2000/svg';
+  function el(n,a,t){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);if(t!=null)e.textContent=t;return e}
+  function barras(svg,datos,o){
+    var W=+svg.viewBox.baseVal.width,H=+svg.viewBox.baseVal.height;
+    var izq=o.izq,abajo=28,arriba=18,der=8,alto=H-abajo-arriba,ancho=W-izq-der;
+    var max=o.max,paso=ancho/datos.length,bw=Math.min(o.anchoBarra,paso*0.62);
+    for(var i=0;i<=o.marcas;i++){
+      var v=max*i/o.marcas,y=arriba+alto-alto*v/max;
+      svg.appendChild(el('line',{x1:izq,x2:W-der,y1:y,y2:y,stroke:'#EDE0D4','stroke-width':1}));
+      svg.appendChild(el('text',{x:izq-8,y:y+4,'text-anchor':'end','font-size':11,fill:'#A1887F'},o.fmt(v)));
+    }
+    datos.forEach(function(d,i){
+      var h=alto*d.v/max,x=izq+paso*i+(paso-bw)/2,y=arriba+alto-h;
+      svg.appendChild(el('rect',{x:x,y:y,width:bw,height:h,rx:5,fill:d.hoy?'#5D4037':'#BCAAA4'}));
+      if(o.valores)svg.appendChild(el('text',{x:x+bw/2,y:y-6,'text-anchor':'middle','font-size':11,'font-weight':d.hoy?700:500,fill:d.hoy?'#3E2723':'#6D4C41'},o.fmtValor(d.v)));
+      svg.appendChild(el('text',{x:x+bw/2,y:H-8,'text-anchor':'middle','font-size':11.5,'font-weight':d.hoy?700:400,fill:d.hoy?'#3E2723':'#6D4C41'},d.e));
+    });
+  }
+  barras(document.getElementById('graf-semana'),[
+    {e:'Vie 6',v:980},{e:'Sáb 7',v:1420},{e:'Dom 8',v:1650},{e:'Lun 9',v:760},
+    {e:'Mar 10',v:890},{e:'Mié 11',v:1105},{e:'Hoy',v:1284.5,hoy:true}
+  ],{izq:52,max:1800,marcas:3,anchoBarra:48,valores:true,
+     fmt:function(v){return '$'+v.toLocaleString('en-US')},
+     fmtValor:function(v){return '$'+v.toLocaleString('en-US',{maximumFractionDigits:0})}});
+  barras(document.getElementById('graf-horas'),[
+    {e:'8h',v:42},{e:'9h',v:68},{e:'10h',v:51},{e:'11h',v:63},{e:'12h',v:148},{e:'13h',v:212,hoy:true},
+    {e:'14h',v:176},{e:'15h',v:84},{e:'16h',v:57},{e:'17h',v:66},{e:'18h',v:98},{e:'19h',v:131},{e:'20h',v:122},{e:'21h',v:74}
+  ],{izq:46,max:240,marcas:4,anchoBarra:40,valores:false,fmt:function(v){return '$'+v}});
+
+  // Más vendidos de hoy.
+  var top=[['Encebollado',24],['Seco de pollo',19],['Jugo de naranja',17],['Churrasco',11],['Bolón mixto',9]];
+  document.getElementById('ranking-hoy').innerHTML=top.map(function(t,i){
+    return '<div class="rk"><i>'+(i+1)+'</i><div><b style="font-size:13px">'+t[0]+'</b><div class="barra-h"><span style="width:'+Math.round(t[1]/24*100)+'%"></span></div></div><em>'+t[1]+'</em></div>';
+  }).join('');
+
+  // Mesas.
+  var mesas=[['1','libre'],['2','ocupada','$18.25 · 2 pers.'],['3','libre'],['4','ocupada','$22.00 · 4 pers.'],['5','reservada','20:00 · Familia Mora'],
+    ['6','libre'],['7','ocupada','$9.50 · 1 pers.'],['8','libre'],['9','ocupada','$41.75 · 6 pers.'],['10','libre'],['11','reservada','21:00 · Cumpleaños'],['12','ocupada','$33.40 · 3 pers.']];
+  var etiquetas={libre:'Libre',ocupada:'Ocupada',reservada:'Reservada'};
+  var rej=document.getElementById('rejilla-mesas');
+  rej.innerHTML=mesas.map(function(m){
+    return '<button type="button" class="mesa '+m[1]+'" aria-pressed="'+(m[0]==='4')+'"><b>Mesa '+m[0]+'</b><span class="est">'+etiquetas[m[1]]+'</span><small>'+(m[2]||'4 sillas')+'</small></button>';
+  }).join('');
+  rej.addEventListener('click',function(e){
+    var b=e.target.closest('.mesa');if(!b)return;
+    if(!b.classList.contains('ocupada')){aviso('En la app, tocar una mesa libre abre el pedido nuevo.');return}
+    rej.querySelectorAll('.mesa').forEach(function(x){x.setAttribute('aria-pressed',String(x===b))});
+  });
+
+  // Comprobantes como en el celular.
+  var compr=[['Factura 001-001-000384','Mesa 9 · Andrea · 16:12','$41.75'],['Nota de venta 000712','Para llevar · Caja 1 · 16:05','$12.50'],
+    ['Factura 001-001-000383','Mesa 2 · Carlos · 15:48','$27.30'],['Factura 001-001-000382','Mesa 6 · Andrea · 15:31','$18.90'],
+    ['Nota de venta 000711','Mesa 1 · Carlos · 15:02','$9.75']];
+  document.getElementById('lista-vieja').innerHTML=compr.map(function(c){
+    return '<div class="movil-card"><span class="ms">receipt_long</span><div><b>'+c[0]+'</b><small>'+c[1]+'</small></div><em>'+c[2]+'</em></div>';
+  }).join('');
+
+  // Filtro "Solo por reponer" de inventario.
+  document.getElementById('solo-reponer').addEventListener('change',function(){
+    var solo=this.checked;
+    document.querySelectorAll('#tabla-insumos tbody tr').forEach(function(tr){tr.hidden=solo&&tr.dataset.r!=='1'});
+  });
+
+  estilo(leer('wasi-maqueta-estilo','A'));
+  fuente(leer('wasi-maqueta-fuente','poppins'));
+  pantalla(location.hash.slice(1)||'panel');
+})();
+</script>
