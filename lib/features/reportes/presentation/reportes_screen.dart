@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../core/models/caja_model.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
@@ -263,6 +264,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
   Widget _buildBody() {
     final r = _resumen;
     if (r == null) return const SizedBox.shrink();
+    if (EscritorioScope.enUso(context)) return _buildEscritorio(r);
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -285,6 +287,43 @@ class _ReportesScreenState extends State<ReportesScreen> {
             const SizedBox(height: 16),
             _buildCierresCard(_cajas!),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Web de escritorio: ventas arriba; a la izquierda el detalle de lo
+  /// vendido, a la derecha la caja. Mismas tarjetas y condiciones que en el
+  /// celular.
+  Widget _buildEscritorio(ResumenDiarioModel r) {
+    List<Widget> separar(List<Widget> w) => [
+          for (var i = 0; i < w.length; i++) ...[if (i > 0) const SizedBox(height: 16), w[i]],
+        ];
+    final cajas = _cajas;
+    final izquierda = [
+      _buildDetalleCard(r),
+      if ((_cortesias?.items ?? const []).isNotEmpty) _buildCortesiasCard(_cortesias!),
+      if (cajas != null) _buildCierresCard(cajas),
+    ];
+    final derecha = [
+      _buildGananciaCard(r),
+      if (cajas != null) ...[_buildTotalCajaDiaCard(cajas), _buildArqueoDiaCard(cajas)],
+    ];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildVentasCard(r),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: separar(izquierda))),
+              const SizedBox(width: 16),
+              Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: separar(derecha))),
+            ],
+          ),
         ],
       ),
     );

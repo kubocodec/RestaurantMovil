@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/network/api_client.dart';
 import '../data/reportes_repository.dart';
@@ -285,6 +286,7 @@ class _ResumenPeriodoScreenState extends State<ResumenPeriodoScreen> {
     if (r == null) return const SizedBox.shrink();
     final sinDatos = r.actual.comprobantes == 0 && r.actual.unidadesCortesia == 0;
     final unaSucursal = _sucursal != _todas;
+    if (EscritorioScope.enUso(context)) return _buildEscritorio(r, sinDatos, unaSucursal);
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -326,6 +328,55 @@ class _ResumenPeriodoScreenState extends State<ResumenPeriodoScreen> {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Web de escritorio: los resultados arriba y el resto en dos columnas, con
+  /// las mismas tarjetas y las mismas condiciones que la versión del celular.
+  Widget _buildEscritorio(ResumenPeriodoModel r, bool sinDatos, bool unaSucursal) {
+    List<Widget> separar(List<Widget> w) => [
+          for (var i = 0; i < w.length; i++) ...[if (i > 0) const SizedBox(height: 14), w[i]],
+        ];
+    final izquierda = [
+      _buildPlatos(r),
+      if (!sinDatos) _buildCuando(r),
+    ];
+    final derecha = [
+      if (!sinDatos) ...[
+        _buildCategorias(r),
+        _buildComo(r),
+        if (r.meseros.isNotEmpty) _buildMeseros(r),
+      ],
+      _buildPerdidas(r, unaSucursal),
+    ];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildResultados(r),
+          const SizedBox(height: 14),
+          if (sinDatos) ...[
+            _tarjeta(
+              titulo: 'Sin ventas en este período',
+              icono: Icons.info_outline,
+              children: const [
+                Text('Elige otro período o sucursal para ver platos, horarios y meseros.',
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: AppColors.textSecondary)),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: separar(izquierda))),
+              const SizedBox(width: 14),
+              Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: separar(derecha))),
+            ],
           ),
         ],
       ),

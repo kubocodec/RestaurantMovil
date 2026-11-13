@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/escritorio/escritorio.dart';
+import '../../../core/escritorio/tabla.dart';
 import '../../../core/network/api_client.dart';
 import '../data/inventario_repository.dart';
 import '../data/unidades.dart';
@@ -176,6 +178,47 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
     final negativos = _insumos.where((i) => i.activo && i.negativo).length;
     final bajos = _insumos.where((i) => i.activo && !i.negativo && i.bajoMinimo).length;
     final valor = _insumos.where((i) => i.activo).fold(0.0, (s, i) => s + i.valorStock);
+    if (EscritorioScope.enUso(context)) {
+      return _buildTabla(
+        lista,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 360,
+              child: TextField(
+                controller: _buscar,
+                decoration: const InputDecoration(
+                    hintText: 'Buscar insumo...', prefixIcon: Icon(Icons.search), isDense: true),
+                onChanged: (v) => setState(() => _filtro = v.trim().toLowerCase()),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _Resumen(texto: 'Inventario: \$${valor.toStringAsFixed(2)}', color: AppColors.primary),
+                if (negativos > 0) _Resumen(texto: '$negativos en negativo', color: AppColors.error),
+                if (bajos > 0) _Resumen(texto: '$bajos por reponer', color: AppColors.warning),
+                FilterChip(
+                  label: const Text('Ver desactivados'),
+                  selected: _verInactivos,
+                  labelStyle: const TextStyle(
+                      fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary),
+                  onSelected: (v) {
+                    setState(() => _verInactivos = v);
+                    _load();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
     return RefreshIndicator(
       color: AppColors.primary,
       onRefresh: _load,
@@ -227,6 +270,85 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
             ...lista.map(_buildItem),
         ],
       ),
+    );
+  }
+
+  /// Conteo, merma, historial, editar y activar/desactivar.
+  Widget _acciones(InsumoModel i) => PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert, color: AppColors.textSecondary),
+        onSelected: (v) {
+          switch (v) {
+            case 'conteo':    _conteo(i); break;
+            case 'merma':     _merma(i); break;
+            case 'historial': _historial(i); break;
+            case 'editar':    _editar(i); break;
+            case 'estado':    _cambiarEstado(i); break;
+          }
+        },
+        itemBuilder: (_) => [
+          if (i.activo) ...[
+            const PopupMenuItem(value: 'conteo', child: Text('Conteo físico')),
+            const PopupMenuItem(value: 'merma', child: Text('Registrar merma')),
+          ],
+          const PopupMenuItem(value: 'historial', child: Text('Historial')),
+          const PopupMenuItem(value: 'editar', child: Text('Editar')),
+          PopupMenuItem(
+              value: 'estado', child: Text(i.activo ? 'Desactivar' : 'Activar')),
+        ],
+      );
+
+  (String, Color) _estado(InsumoModel i) => !i.activo
+      ? ('Desactivado', AppColors.textHint)
+      : i.negativo
+          ? ('Negativo', AppColors.error)
+          : i.bajoMinimo
+              ? ('Por reponer', AppColors.warning)
+              : ('Bien', AppColors.success);
+
+  /// Web de escritorio: los mismos controles de arriba y los insumos en una
+  /// tabla. Al tocar una fila se abre el historial, como la tarjeta.
+  Widget _buildTabla(List<InsumoModel> lista, Widget controles) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 0), child: controles),
+        Expanded(
+          child: TablaEscritorio(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            columnas: const [
+              ColumnaTabla('Insumo', flex: 4),
+              ColumnaTabla('Categoría', flex: 2),
+              ColumnaTabla('Stock', flex: 3, derecha: true),
+              ColumnaTabla('Mínimo', flex: 2, derecha: true),
+              ColumnaTabla('Costo promedio', flex: 2, derecha: true),
+              ColumnaTabla('Valor', flex: 2, derecha: true),
+              ColumnaTabla('Estado', flex: 2),
+              ColumnaTabla('', ancho: 48),
+            ],
+            vacio: Text(_insumos.isEmpty ? 'Todavía no hay insumos.' : 'Ningún insumo coincide con la búsqueda.',
+                style: TablaEscritorio.estiloSecundario),
+            filas: [
+              for (final i in lista)
+                FilaTabla(
+                  [
+                    TablaEscritorio.texto(i.nombre, negrita: true),
+                    TablaEscritorio.texto(i.categoria ?? ''),
+                    TablaEscritorio.numero(Unidades.formato(i.stock, i.unidad, p: i.presentacion),
+                        color: _estado(i).$2 == AppColors.success ? null : _estado(i).$2, negrita: true),
+                    TablaEscritorio.numero(
+                        i.stockMinimo == null ? '' : Unidades.formato(i.stockMinimo, i.unidad, p: i.presentacion)),
+                    TablaEscritorio.numero(Unidades.costo(i.costoPromedio, i.unidad, p: i.presentacion)),
+                    TablaEscritorio.numero(i.valorStock > 0 ? '\$${i.valorStock.toStringAsFixed(2)}' : ''),
+                    TablaEscritorio.pildora(_estado(i).$1, _estado(i).$2),
+                    _acciones(i),
+                  ],
+                  apagada: !i.activo,
+                  onTap: () => _historial(i),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -288,28 +410,7 @@ class _InsumosTabState extends State<InsumosTab> with AutomaticKeepAliveClientMi
                             color: AppColors.textSecondary)),
                 ],
               ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: AppColors.textSecondary),
-                onSelected: (v) {
-                  switch (v) {
-                    case 'conteo':    _conteo(i); break;
-                    case 'merma':     _merma(i); break;
-                    case 'historial': _historial(i); break;
-                    case 'editar':    _editar(i); break;
-                    case 'estado':    _cambiarEstado(i); break;
-                  }
-                },
-                itemBuilder: (_) => [
-                  if (i.activo) ...[
-                    const PopupMenuItem(value: 'conteo', child: Text('Conteo físico')),
-                    const PopupMenuItem(value: 'merma', child: Text('Registrar merma')),
-                  ],
-                  const PopupMenuItem(value: 'historial', child: Text('Historial')),
-                  const PopupMenuItem(value: 'editar', child: Text('Editar')),
-                  PopupMenuItem(
-                      value: 'estado', child: Text(i.activo ? 'Desactivar' : 'Activar')),
-                ],
-              ),
+              _acciones(i),
             ],
           ),
         ),

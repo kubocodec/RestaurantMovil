@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/escritorio/escritorio.dart';
+import '../../../core/escritorio/tabla.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/factura_model.dart';
 import '../../../core/network/api_client.dart';
@@ -34,6 +36,16 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
 
   /// Clasificación: TODOS | FACTURA | NOTA_VENTA | ANULADA
   String _filtro = 'TODOS';
+
+  /// Buscador de la tabla de escritorio (número, cliente, lugar, cajero).
+  final _buscarCtrl = TextEditingController();
+  String _busqueda = '';
+
+  @override
+  void dispose() {
+    _buscarCtrl.dispose();
+    super.dispose();
+  }
 
   /// Cajero elegido (null = todos). Con varias cajas cada cajero cobra en la
   /// suya, así que esto también separa lo emitido por cada caja.
@@ -262,7 +274,9 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
           ),
         ),
         Expanded(
-          child: visibles.isEmpty
+          child: EscritorioScope.enUso(context)
+              ? _buildTabla(visibles)
+              : visibles.isEmpty
               ? const Center(
                   child: Text('Sin comprobantes de este tipo',
                       style: TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary)))
@@ -279,6 +293,108 @@ class _ComprobantesScreenState extends State<ComprobantesScreen> {
                     ),
                   ),
                 ),
+        ),
+      ],
+    );
+  }
+
+  /// Web de escritorio: los comprobantes del día en una tabla, con buscador.
+  /// Los filtros de arriba y el detalle al tocar son los mismos del celular.
+  Widget _buildTabla(List<FacturaModel> visibles) {
+    final q = _busqueda;
+    final lista = q.isEmpty
+        ? visibles
+        : visibles.where((f) => [
+              f.numeroFactura,
+              f.nombreCliente ?? '',
+              f.cedulaRucCliente ?? '',
+              f.lugar ?? '',
+              f.cajero ?? '',
+              '#${f.numeroOrden}',
+            ].any((t) => t.toLowerCase().contains(q))).toList();
+    String hora(DateTime d) {
+      final l = d.toLocal();
+      return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+    }
+
+    Widget sri(FacturaModel f) {
+      if (!f.tieneSri) return const SizedBox.shrink();
+      return switch (f.sriEstado) {
+        'AUTORIZADA' => TablaEscritorio.pildora('Autorizada', AppColors.success),
+        'PROCESANDO' => TablaEscritorio.pildora('Procesando', AppColors.warning),
+        _ => TablaEscritorio.pildora('Rechazada', AppColors.error),
+      };
+    }
+
+    Widget estado(FacturaModel f) => f.isAnulada
+        ? TablaEscritorio.pildora('Anulada', AppColors.error)
+        : f.cortesia
+            ? TablaEscritorio.pildora('Cortesía', AppColors.info)
+            : f.estado == 'PENDIENTE'
+                ? TablaEscritorio.pildora('Pendiente', AppColors.warning)
+                : TablaEscritorio.pildora('Pagada', AppColors.success);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 360,
+              child: TextField(
+                controller: _buscarCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'Buscar por número, cliente, lugar o cajero',
+                  prefixIcon: Icon(Icons.search),
+                  isDense: true,
+                ),
+                onChanged: (v) => setState(() => _busqueda = v.trim().toLowerCase()),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: TablaEscritorio(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            columnas: const [
+              ColumnaTabla('Hora', flex: 1),
+              ColumnaTabla('Comprobante', flex: 4),
+              ColumnaTabla('Lugar', flex: 2),
+              ColumnaTabla('Cliente', flex: 3),
+              ColumnaTabla('Cajero', flex: 2),
+              ColumnaTabla('Pago', flex: 3),
+              ColumnaTabla('SRI', flex: 2),
+              ColumnaTabla('Estado', flex: 2),
+              ColumnaTabla('Total', flex: 2, derecha: true),
+            ],
+            vacio: Text(q.isEmpty ? 'Sin comprobantes de este tipo' : 'Ningún comprobante coincide con la búsqueda',
+                style: TablaEscritorio.estiloSecundario),
+            filas: [
+              for (final f in lista)
+                FilaTabla(
+                  [
+                    TablaEscritorio.texto(hora(f.fecha)),
+                    TablaEscritorio.texto('${f.esFactura ? 'Factura' : 'Nota de venta'} ${f.numeroFactura}', negrita: true),
+                    TablaEscritorio.texto([
+                      if ((f.lugar ?? '').isNotEmpty) f.lugar!,
+                      if (f.numeroOrden > 0) '#${f.numeroOrden}',
+                    ].join(' · ')),
+                    TablaEscritorio.texto(f.nombreCliente ?? 'Consumidor final'),
+                    TablaEscritorio.texto(f.cajero ?? ''),
+                    TablaEscritorio.texto(
+                      f.pagos.map((p) => p.nombreMetodoPago).toSet().join(' + '),
+                      estilo: TablaEscritorio.estiloSecundario,
+                    ),
+                    sri(f),
+                    estado(f),
+                    TablaEscritorio.numero('\$${_fmt.format(f.total)}', negrita: true),
+                  ],
+                  apagada: f.isAnulada,
+                  onTap: () => _verDetalle(f),
+                ),
+            ],
+          ),
         ),
       ],
     );

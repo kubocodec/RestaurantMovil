@@ -704,8 +704,54 @@ Quien ejecuta una fase la marca aquí y anota lo que el siguiente necesita saber
   persona $13.20, ganancia $907.94 y Cafe 17 u / $51.00 / 1 regalado, igual que la
   pantalla. Además cuadran entre hojas: Ventas por día y Cierres suman $1,230.80. El
   archivo real pasó `tool/validar_xlsx.sh`. *¿Abrió bien en Excel?:* —
-- [ ] Fase 3 — estructura de escritorio.
-- [ ] Fase 4 — panel y pantallas.
+- [x] Fase 3 — estructura de escritorio. Rama `web/escritorio` (2026-11-12). El usuario
+  la revisó con sesión en su navegador: "se ve bien".
+  Hecha menos el paso 17 (Poppins, no se eligió). Cambios respecto de la guía: la
+  estructura vive en `lib/core/escritorio/estructura.dart` y recibe el usuario por
+  parámetro, para poder probarla sin sesión; el contenido tiene tope de 1440 px;
+  `EscritorioScope.enUso(context)` en vez de `.activo` (Dart no deja un campo y un
+  método estático con el mismo nombre). 12 pruebas en `test/escritorio/` pasan (árbol
+  fijo al cruzar 1000 px, diálogo bloquea el lateral, push se cierra al cambiar de
+  sección, texto "Muy grande", rutas por rol). `test/widget_test.dart` ya fallaba antes
+  (sin plugins en la prueba). Web y APK compilan. *Falta:* revisarla con sesión iniciada
+  (el usuario, en su navegador) y Windows no se probó.
+- [x] Fase 4 — panel y pantallas. En `web/escritorio`, sin commit (las cinco aprobadas el 2026-11-13).
+  - [x] 4.1 Panel del administrador (2026-11-12): `panel_admin_escritorio.dart`, solo
+    con `EscritorioScope.enUso`. Indicadores con ▲/▼ contra ayer, ventas de 7 días en
+    barras (6 `resumen-diario` una sola vez; hoy, del refresco de siempre), órdenes en
+    curso (tabla; al tocar abre la orden), más vendidos de hoy (`resumen-periodo` de hoy,
+    cada 2 min como mucho). El aviso de inventario se reusa arriba. En el celular no se
+    pide nada nuevo. 6 pruebas en `test/escritorio/panel_admin_test.dart` (3 anchos,
+    "Muy grande", vacío, variación). El usuario lo revisó con datos reales el 2026-11-13: "se ve bien".
+  - [x] 4.2 Reportes del día y Resumen del período en dos columnas (2026-11-13), solo con
+    `EscritorioScope.enUso`: arriba los resultados; a la izquierda lo vendido (detalle,
+    cortesías y cierres / platos y horarios), a la derecha la caja o categorías, métodos
+    de pago, personal y pérdidas. Mismas tarjetas y condiciones que el celular. Sin
+    prueba propia (las pantallas cargan del servidor). Revisado por el usuario con datos
+    reales el 2026-11-13: "se ven bien".
+  - [x] 4.3 Comprobantes e Insumos como tablas (2026-11-13), solo con `EscritorioScope.enUso`.
+    Componente nuevo `lib/core/escritorio/tabla.dart` (lista con columnas por flex, no
+    DataTable: arma solo las filas visibles). Comprobantes: hora, comprobante, lugar,
+    cliente, cajero, pago, SRI, estado y total, con buscador; los filtros y el detalle al
+    tocar son los de siempre. Insumos: stock, mínimo, costo, valor y estado, con el mismo
+    menú de acciones (extraído a `_acciones`, que también usa la tarjeta del celular).
+    La pestaña Platos queda como está. 5 pruebas en `test/escritorio/tabla_test.dart`.
+    Revisado por el usuario con datos reales el 2026-11-13: "todo bien".
+  - [x] 4.4 Menú → "Platos en sucursal" como tabla (2026-11-13), solo con
+    `EscritorioScope.enUso`: plato, categoría, precio, IVA, stock, botón de stock (si hay
+    inventario) y disponible. Tocar la fila edita el precio con el mismo `PrecioDialog`. El
+    precio se muestra igual que en el celular (el guardado). El interruptor de disponible
+    se extrajo a `_interruptorDisponible`, que usan la tarjeta y la fila. La pestaña
+    "Categorías y Platos" (árbol desplegable) queda como está. Revisado por el usuario el 2026-11-13: "se ve bien".
+  - [x] 4.5 Mesas con la orden al lado (2026-11-13), solo con `EscritorioScope.enUso` y
+    con mesas (un local "solo para llevar" sigue con su lista). Tocar una mesa ocupada o un
+    pedido para llevar la ELIGE y su orden se ve a la derecha (`panel_orden_mesa.dart`);
+    tocarla otra vez la abre. Las libres y reservadas se abren directo, como siempre. El
+    panel solo muestra: "Abrir orden", "Precuenta" y "Cobrar" (cajero y admin, si hay algo
+    por cobrar) llevan a las pantallas de siempre, así el cobro y las anulaciones no tienen
+    un camino nuevo. "Por cobrar" es la misma suma que la franja de la orden (sin IVA; el
+    total con IVA lo da el cobro). En el celular el toque abre como antes. 5 pruebas en
+    `test/escritorio/panel_orden_test.dart`. Revisado por el usuario el 2026-11-13, sin cobrar: "se ve bien".
 
 **Notas y descubrimientos**
 

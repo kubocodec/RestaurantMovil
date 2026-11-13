@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/escritorio/escritorio.dart';
+import '../../../core/escritorio/tabla.dart';
 import '../../../core/models/config_models.dart';
 import '../../../core/models/plato_model.dart';
 import '../../../core/network/api_client.dart';
@@ -1096,6 +1098,94 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
     }
   }
 
+  Widget _interruptorDisponible(BuildContext context, PlatoModel p) => Switch(
+        value: p.disponible,
+        onChanged: (v) async {
+          try {
+            // El PUT exige el cuerpo completo: se reenvía el
+            // precio actual junto con la nueva disponibilidad.
+            await repo.actualizarPrecioPlato(
+              sucursalPlatoId: p.sucursalPlatoId,
+              sucursalId:      sucursalId,
+              platoId:         p.platoId,
+              precio:          p.precio,
+              disponible:      v,
+            );
+            onChanged();
+          } catch (e) {
+            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
+            );
+          }
+        },
+        activeColor: AppColors.success,
+      );
+
+  /// Web de escritorio: los platos de la sucursal en una tabla. Tocar la fila
+  /// edita el precio, como la tarjeta; el stock y la disponibilidad, igual.
+  Widget _buildTabla(BuildContext context, List<PlatoModel> visibles) {
+    String stock(PlatoModel p) {
+      if (p.usaReceta) return 'Por receta';
+      if (!p.controlaStock) return '';
+      if (p.agotado) return 'AGOTADO';
+      final u = p.unidad?.trim() ?? '';
+      return '${p.unidadesDisponibles}${u.isNotEmpty ? ' $u' : ''}';
+    }
+
+    String iva(PlatoModel p) {
+      final t = p.ivaPorcentaje;
+      if (t == null) return 'Predeterminada';
+      return '${t == t.roundToDouble() ? t.toStringAsFixed(0) : t.toStringAsFixed(2)}%';
+    }
+
+    return TablaEscritorio(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      columnas: [
+        const ColumnaTabla('Plato', flex: 4),
+        const ColumnaTabla('Categoría', flex: 3),
+        const ColumnaTabla('Precio', flex: 2, derecha: true),
+        const ColumnaTabla('IVA', flex: 2),
+        const ColumnaTabla('Stock', flex: 2),
+        if (_inventarioActivo) const ColumnaTabla('', ancho: 48),
+        const ColumnaTabla('Disponible', ancho: 96),
+      ],
+      vacio: Text('Sin resultados para "$_busqueda"', style: TablaEscritorio.estiloSecundario),
+      filas: [
+        for (final p in visibles)
+          FilaTabla(
+            [
+              TablaEscritorio.texto(p.nombrePlato, negrita: true),
+              TablaEscritorio.texto(
+                  [p.categoria, p.subcategoria].where((x) => x.isNotEmpty).toSet().join(' · '),
+                  estilo: TablaEscritorio.estiloSecundario),
+              TablaEscritorio.numero('\$${p.precio.toStringAsFixed(2)}', negrita: true),
+              TablaEscritorio.texto(iva(p), estilo: TablaEscritorio.estiloSecundario),
+              TablaEscritorio.texto(stock(p),
+                  estilo: TablaEscritorio.estiloCelda.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: p.agotado
+                        ? AppColors.error
+                        : p.bajoMinimo
+                            ? AppColors.warning
+                            : AppColors.textSecondary,
+                  )),
+              if (_inventarioActivo)
+                IconButton(
+                  tooltip: 'Control de stock',
+                  icon: Icon(Icons.inventory_2_outlined,
+                      size: 20,
+                      color: p.controlaStock || p.usaReceta ? AppColors.earth2 : AppColors.textHint),
+                  onPressed: () => _dialogoStock(context, p),
+                ),
+              Center(child: _interruptorDisponible(context, p)),
+            ],
+            apagada: !p.disponible,
+            onTap: () => _showEditarPrecioDialog(context, p),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.loading) return const Center(child: CircularProgressIndicator());
@@ -1129,7 +1219,9 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
           onChanged: (v) => setState(() => _busqueda = v.trim().toLowerCase()),
         ),
         Expanded(
-          child: visibles.isEmpty
+          child: EscritorioScope.enUso(context)
+              ? _buildTabla(context, visibles)
+              : visibles.isEmpty
               ? Center(
                   child: Text('Sin resultados para "$_busqueda"',
                     style: const TextStyle(fontFamily: 'Poppins', color: AppColors.textSecondary, fontSize: 13)),
@@ -1210,28 +1302,7 @@ class _PlatosSucursalTabState extends State<_PlatosSucursalTab> {
                             : AppColors.textHint),
                     onPressed: () => _dialogoStock(context, p),
                   ),
-                Switch(
-                  value: p.disponible,
-                  onChanged: (v) async {
-                    try {
-                      // El PUT exige el cuerpo completo: se reenvía el
-                      // precio actual junto con la nueva disponibilidad.
-                      await repo.actualizarPrecioPlato(
-                        sucursalPlatoId: p.sucursalPlatoId,
-                        sucursalId:      sucursalId,
-                        platoId:         p.platoId,
-                        precio:          p.precio,
-                        disponible:      v,
-                      );
-                      onChanged();
-                    } catch (e) {
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(ApiClient.parseError(e)), backgroundColor: AppColors.error),
-                      );
-                    }
-                  },
-                  activeColor: AppColors.success,
-                ),
+                _interruptorDisponible(context, p),
               ],
             ),
             ),
