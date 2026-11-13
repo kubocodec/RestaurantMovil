@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/bloc/auth_bloc.dart';
@@ -19,6 +20,7 @@ import '../../features/configuracion/presentation/configuracion_screen.dart';
 import '../../features/reportes/presentation/reportes_screen.dart';
 import '../../features/adelantos/presentation/adelantos_screen.dart';
 import '../../features/inventario/presentation/inventario_screen.dart';
+import '../escritorio/menu_escritorio.dart';
 import '../models/user_model.dart';
 
 class AppRouter {
@@ -42,6 +44,12 @@ class AppRouter {
         }
         if (authState is AuthAuthenticated) {
           if (isLoginRoute) return _homeForRole(authState.user.rol);
+          // Solo en la web, que tiene barra de direcciones: un mesero que
+          // escribe /#/admin vuelve a su inicio en vez de ver pantallas que
+          // fallarían al cargar. En el celular no se puede escribir una ruta.
+          if (kIsWeb && !rutaPermitida(authState.user.rol, state.matchedLocation)) {
+            return _homeForRole(authState.user.rol);
+          }
         }
         return null;
       },
