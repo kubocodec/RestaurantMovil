@@ -17,15 +17,20 @@ import '../../features/facturacion/presentation/ordenes_para_facturar_screen.dar
 import '../../features/superadmin/presentation/superadmin_dashboard.dart';
 import '../../features/configuracion/presentation/configuracion_screen.dart';
 import '../../features/reportes/presentation/reportes_screen.dart';
+import '../../features/adelantos/presentation/adelantos_screen.dart';
+import '../../features/inventario/presentation/inventario_screen.dart';
 import '../models/user_model.dart';
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
-  static GoRouter router(AuthBloc authBloc) {
+  /// [observers]: el ObservadorRutas de la web de escritorio, para que el
+  /// menú lateral sepa cuándo hay un diálogo abierto.
+  static GoRouter router(AuthBloc authBloc, {List<NavigatorObserver>? observers}) {
     return GoRouter(
       navigatorKey: _rootNavigatorKey,
       initialLocation: '/login',
+      observers: observers,
       refreshListenable: _AuthListenable(authBloc),
       redirect: (context, state) {
         final authState = authBloc.state;
@@ -53,6 +58,19 @@ class AppRouter {
           routes: [
             GoRoute(path: 'configuracion', builder: (_, __) => const ConfiguracionScreen()),
             GoRoute(path: 'reportes', builder: (_, __) => const ReportesScreen()),
+            // Con dirección propia para el menú lateral de la web. El panel
+            // las sigue abriendo con Navigator.push, como siempre.
+            GoRoute(
+              path: 'inventario',
+              builder: (_, __) => InventarioScreen(
+                sucursalId: _usuario(authBloc)?.sucursalId ?? '',
+                sucursalNombre: _usuario(authBloc)?.sucursalNombre,
+              ),
+            ),
+            GoRoute(
+              path: 'adelantos',
+              builder: (_, __) => AdelantosScreen(sucursalId: _usuario(authBloc)?.sucursalId ?? ''),
+            ),
           ],
         ),
 
@@ -64,6 +82,10 @@ class AppRouter {
             GoRoute(path: 'caja',    builder: (_, __) => const CajaScreen()),
             GoRoute(path: 'ordenes', builder: (_, __) => const OrdenesParaFacturarScreen()),
             GoRoute(path: 'comprobantes', builder: (_, __) => const ComprobantesScreen()),
+            GoRoute(
+              path: 'adelantos',
+              builder: (_, __) => AdelantosScreen(sucursalId: _usuario(authBloc)?.sucursalId ?? ''),
+            ),
             GoRoute(
               path: 'factura/:ordenId',
               builder: (_, state) => FacturacionScreen(
@@ -103,6 +125,11 @@ class AppRouter {
         GoRoute(path: '/cocina',   builder: (_, __) => const CocinaScreen()),
       ],
     );
+  }
+
+  static UserModel? _usuario(AuthBloc bloc) {
+    final s = bloc.state;
+    return s is AuthAuthenticated ? s.user : null;
   }
 
   static String _homeForRole(UserRole role) {

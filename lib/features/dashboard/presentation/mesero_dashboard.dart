@@ -8,6 +8,7 @@ import '../../../features/auth/bloc/auth_state.dart';
 import '../../../core/models/orden_model.dart';
 import '../../../core/models/user_model.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../shared/widgets/app_drawer.dart';
 
 class MeseroDashboard extends StatelessWidget {
@@ -29,7 +30,8 @@ class MeseroDashboard extends StatelessWidget {
               ),
             ],
           ),
-          drawer: user != null ? AppDrawer(user: user) : null,
+          // Con el menú lateral de la web de escritorio, sin hamburguesa.
+          drawer: user != null && !EscritorioScope.enUso(context) ? AppDrawer(user: user) : null,
           body: _MeseroBody(user: user),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => context.go('/mesero/mesas'),

@@ -71,6 +71,38 @@ UI pregunta: nada de `if (Platform.isAndroid)` desparramado.
   creería tener el monitor entero mientras se dibuja en 1200.
 - El build de Windows no se puede hacer desde el Mac; sale por GitHub Actions.
 
+## Web de escritorio (menú lateral)
+
+En la web, con 1000 px o más y sesión iniciada, la app lleva menú lateral fijo, barra
+superior blanca y pantallas sin animación (`lib/core/escritorio/`, estilo A · Café con
+Roboto, elegido el 2026-11-12 sobre `docs/maqueta-web/`). Por debajo de 1000 px, en el
+celular y en Windows, todo es como antes: `Capacidades.estructuraEscritorio` lo
+limita a la web.
+
+- **El lateral va al lado del Navigator, no dentro de un `ShellRoute`.** Con un
+  Navigator anidado cambiaría a dónde van los `Navigator.push`, los diálogos y los
+  `context.pop()` de la orden, también en el celular. Así la navegación es la misma
+  en todas las plataformas.
+- **Por eso el lateral no tiene `Overlay`:** ahí dentro no se puede usar `Tooltip`,
+  `PopupMenuButton` ni `DropdownButton` (revientan), ni `Navigator.of(context)` o
+  `GoRouterState.of(context)`. Sus diálogos se abren con el contexto del Navigator
+  (`router.routerDelegate.navigatorKey`).
+- **El árbol alrededor del Navigator no cambia de forma nunca** (`EstructuraEscritorio`):
+  la `Row` está siempre y el lateral mide 0 cuando no corresponde. Si el Navigator
+  cambiara de lugar al cruzar los 1000 px o al iniciar sesión, se perdería lo abierto.
+  Hay una prueba que lo vigila (`test/escritorio/`).
+- Los diálogos solo oscurecen el contenido; `ObservadorRutas` le avisa al lateral para
+  que se oscurezca y no responda.
+- Una pantalla que quiera verse distinta en escritorio pregunta
+  `EscritorioScope.enUso(context)`. Los paneles lo usan para quitar la hamburguesa.
+- El menú lateral (`menu_escritorio.dart`) y el del celular (`AppDrawer`) son listas
+  distintas: al agregar una pantalla, revisar las dos.
+- En la web, el router filtra por rol (`rutaPermitida`): la barra de direcciones permite
+  escribir rutas ajenas. Y no arranca hasta saber si hay sesión: al recargar en
+  `/#/admin` el panel se armaba sin usuario y mostraba ceros.
+- Barras con color escrito a mano (`Colors.white` en un `AppBar` o `TabBar`) se ven
+  blanco sobre blanco en escritorio: usar los colores del tema.
+
 ## Convenciones
 
 - Commits y comentarios **en español**; mensajes largos con `git commit -F -`.

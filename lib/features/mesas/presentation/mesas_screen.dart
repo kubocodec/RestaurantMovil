@@ -117,9 +117,8 @@ class _MesasScreenState extends State<MesasScreen> with TickerProviderStateMixin
         bottom: _salones.isEmpty || _soloParaLlevar ? null : TabBar(
           controller: _tabCtrl,
           isScrollable: true,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: Colors.white,
+          // Colores del tema: blancos sobre la barra marrón del celular y
+          // oscuros sobre la barra clara de la web de escritorio.
           labelStyle: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 13),
           tabs: [
             const Tab(text: 'Todas'),

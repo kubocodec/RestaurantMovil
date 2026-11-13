@@ -52,6 +52,12 @@ abstract final class Capacidades {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  /// Menú lateral fijo, barra clara y demás estructura de escritorio
+  /// (lib/core/escritorio/). Solo en la web por ahora: Windows es donde se
+  /// cobra en el mostrador y no se pudo probar allí, y las tablets usan el
+  /// APK. Para activarlo en Windows basta con cambiar este getter.
+  static bool get estructuraEscritorio => kIsWeb;
+
   /// Pantalla grande con teclado y mouse: web y escritorio. La usa el layout
   /// para no estirar a lo ancho una interfaz pensada para el celular.
   static bool get esPantallaGrande => kIsWeb || esEscritorio;

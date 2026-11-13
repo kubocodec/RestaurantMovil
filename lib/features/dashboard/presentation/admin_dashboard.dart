@@ -14,6 +14,7 @@ import '../../../features/inventario/presentation/inventario_screen.dart';
 import '../../../features/mesas/data/mesas_repository.dart';
 import '../../../features/ordenes/data/ordenes_repository.dart';
 import '../../../features/reportes/data/reportes_repository.dart';
+import '../../../core/escritorio/escritorio.dart';
 import '../../../shared/widgets/app_drawer.dart';
 import '../../../shared/widgets/aviso_pago_banner.dart';
 import '../../../shared/widgets/stat_card.dart';
@@ -34,7 +35,8 @@ class AdminDashboard extends StatelessWidget {
               IconButton(icon: const Icon(Icons.notifications_outlined), onPressed: () {}),
             ],
           ),
-          drawer: user != null ? AppDrawer(user: user) : null,
+          // Con el menú lateral de la web de escritorio, sin hamburguesa.
+          drawer: user != null && !EscritorioScope.enUso(context) ? AppDrawer(user: user) : null,
           body: _AdminBody(user: user),
         );
       },
