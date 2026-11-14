@@ -274,7 +274,7 @@ class _CajeroBodyState extends State<_CajeroBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Resumen del día', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        Text('Mi resumen del día', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
         GridView(
           shrinkWrap: true,
@@ -290,15 +290,15 @@ class _CajeroBodyState extends State<_CajeroBody> {
           ),
           children: [
             StatCard(
-              title: 'Ventas del día',
+              title: 'Mis ventas del día',
               value: _cargandoStats ? '...' : '\$${_ventasHoy.toStringAsFixed(2)}',
               icon: Icons.attach_money, color: AppColors.success),
             StatCard(
-              title: 'Facturas emitidas',
+              title: 'Mis comprobantes',
               value: _cargandoStats ? '...' : '$_facturasHoy',
               icon: Icons.receipt_outlined, color: AppColors.primary),
             StatCard(
-              title: 'Órdenes del día',
+              title: 'Órdenes que cobré',
               value: _cargandoStats ? '...' : '$_ordenesHoy',
               icon: Icons.check_circle_outline, color: AppColors.cajeroColor),
             StatCard(
