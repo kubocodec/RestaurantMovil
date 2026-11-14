@@ -447,7 +447,7 @@ class _FacturacionScreenState extends State<FacturacionScreen> {
 
     // Se conserva lo ya escrito si el cajero vuelve a abrir el diálogo
     // después de cambiar el método de pago.
-    // Pregunta de propina: preferencia de cada cajero (activada por defecto).
+    // Pregunta de propina: preferencia de cada cajero (apagada por defecto).
     final pedirPropina = AjustesCobro.instancia.pedirPropina(_usuarioId);
     double propina = pedirPropina ? _propina : 0;
     _propinaCtrl.text = propina > 0 ? propina.toStringAsFixed(2) : '';

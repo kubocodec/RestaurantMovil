@@ -420,7 +420,7 @@ class _PreferenciasDialogo extends StatelessWidget {
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Preguntar propina al cobrar', style: titulo),
-                        subtitle: const Text('Apágala si tu local no recibe propinas', style: detalle),
+                        subtitle: const Text('Actívala si tu local recibe propinas', style: detalle),
                         value: AjustesCobro.instancia.pedirPropina(usuarioId),
                         activeThumbColor: AppColors.success,
                         onChanged: (v) => AjustesCobro.instancia.cambiarPedirPropina(usuarioId, v),

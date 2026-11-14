@@ -33,10 +33,10 @@ class AjustesCobro {
 
   String _clavePropina(String usuarioId) => 'pedir_propina_$usuarioId';
 
-  /// Preguntar por la propina al cobrar. Activada por defecto, que es como
-  /// funcionaba siempre; la apaga el cajero de un local que no recibe propinas.
+  /// Preguntar por la propina al cobrar. Apagada por defecto; la activa el
+  /// cajero de un local que recibe propinas (queda guardado por usuario).
   bool pedirPropina(String usuarioId) =>
-      usuarioId.isEmpty || (_prefs?.getBool(_clavePropina(usuarioId)) ?? true);
+      usuarioId.isNotEmpty && (_prefs?.getBool(_clavePropina(usuarioId)) ?? false);
 
   Future<void> cambiarPedirPropina(String usuarioId, bool activo) async {
     if (usuarioId.isEmpty) return;

@@ -136,7 +136,7 @@ class AppDrawer extends StatelessWidget {
               dense: true,
               secondary: const Icon(Icons.volunteer_activism_outlined, color: AppColors.textSecondary),
               title: const Text('Preguntar propina al cobrar', style: titulo),
-              subtitle: const Text('Apágala si tu local no recibe propinas', style: detalle),
+              subtitle: const Text('Actívala si tu local recibe propinas', style: detalle),
               value: AjustesCobro.instancia.pedirPropina(user.id),
               activeColor: AppColors.success,
               onChanged: (v) => AjustesCobro.instancia.cambiarPedirPropina(user.id, v),
